@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "example": true,
+  "documentId": "FILE-STORAGE-SIGNOFF-20260530-EXAMPLE",
+  "environment": "production",
+  "signedAt": "2026-05-30T12:00:00.000Z",
+  "storage": {
+    "storageType": "backed-persistent-volume",
+    "provider": "Example Cloud Block Storage",
+    "location": "pv-oa-file-storage-example",
+    "region": "cn-east-example",
+    "backupOwner": "Example Infrastructure Team",
+    "encryptionAtRest": true,
+    "privateAccess": true,
+    "independentBackup": true,
+    "bucketVersioning": false
+  },
+  "runtime": {
+    "fileStorageDriver": "local",
+    "fileStorageDir": "/app/storage/files",
+    "objectStorageConfigured": false,
+    "backedByPersistentVolume": true,
+    "noEphemeralContainerStorage": true
+  },
+  "backupPolicy": {
+    "schedule": "Nightly file-storage snapshot plus manual backup before migrations, imports, or attachment repair.",
+    "retention": "Keep at least 7 daily, 4 weekly, and 3 monthly off-host copies.",
+    "rpoHours": 24,
+    "rtoHours": 4,
+    "offHostCopy": true,
+    "restoreRunbook": "docs/DEPLOYMENT.md file storage backup and restore runbook."
+  },
+  "restoreDrill": {
+    "drillId": "FILE-DRILL-20260530-EXAMPLE",
+    "completedAt": "2026-05-30T13:00:00.000Z",
+    "restoredTo": "staging",
+    "restoreMethod": "npm run restore:files -- backup.tar.gz --yes or equivalent platform restore tooling",
+    "evidencePath": "reports/commercial-evidence/file-storage-drill-example.json",
+    "backupArtifact": {
+      "path": "backups/files/file-storage-production-example.tar.gz",
+      "metadataPath": "backups/files/file-storage-production-example.tar.gz.meta",
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "sizeBytes": 2048,
+      "fileCount": 1
+    },
+    "downloadedAttachmentSmoke": {
+      "passed": true,
+      "fileId": "file-example-0001",
+      "downloadedAt": "2026-05-30T13:15:00.000Z",
+      "expectedChecksum": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "actualChecksum": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+    },
+    "auditEventIds": [
+      "audit-backup-example-0001",
+      "audit-restore-example-0001"
+    ]
+  },
+  "approvals": [
+    {
+      "role": "Infrastructure owner",
+      "name": "Example Infra Owner",
+      "email": "infra-owner@example.com",
+      "decision": "approved",
+      "approvedAt": "2026-05-30T13:30:00.000Z"
+    },
+    {
+      "role": "Security reviewer",
+      "name": "Example Security Reviewer",
+      "email": "security-reviewer@example.com",
+      "decision": "approved",
+      "approvedAt": "2026-05-30T13:35:00.000Z"
+    }
+  ],
+  "openExceptions": []
+}

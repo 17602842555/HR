@@ -1,0 +1,85 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: deep-oa-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: oa_commercial
+      POSTGRES_USER: oa
+      POSTGRES_PASSWORD: oa_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oa -d oa_commercial"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: deep-oa-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://oa:oa_dev_password@postgres:5432/oa_commercial?schema=public
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8787
+      JWT_SECRET: ${JWT_SECRET:-replace-with-a-long-random-secret-before-deployment}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      COOKIE_NAME: ${COOKIE_NAME:-oa_session}
+      AUTH_FAILED_LOGIN_LIMIT: ${AUTH_FAILED_LOGIN_LIMIT:-5}
+      AUTH_FAILED_LOGIN_WINDOW_MS: ${AUTH_FAILED_LOGIN_WINDOW_MS:-600000}
+      AUTH_FAILED_LOGIN_MAX_KEYS: ${AUTH_FAILED_LOGIN_MAX_KEYS:-10000}
+      FILE_STORAGE_DRIVER: ${FILE_STORAGE_DRIVER:-local}
+      FILE_STORAGE_DIR: ${FILE_STORAGE_DIR:-/app/storage/files}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-}
+      OBJECT_STORAGE_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:-}
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:-}
+      OBJECT_STORAGE_PREFIX: ${OBJECT_STORAGE_PREFIX:-}
+      OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-1}
+      FILE_MAX_UPLOAD_BYTES: ${FILE_MAX_UPLOAD_BYTES:-5242880}
+      IMPORT_MAX_HTML_BYTES: ${IMPORT_MAX_HTML_BYTES:-10485760}
+      API_BODY_LIMIT_BYTES: ${API_BODY_LIMIT_BYTES:-10551296}
+      DEFAULT_TENANT_CODE: ${DEFAULT_TENANT_CODE:-default}
+      DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-admin@oa.local}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-admin123456}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://127.0.0.1:8080,http://localhost:8080}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+      RUN_DB_SEED: ${RUN_DB_SEED:-1}
+    ports:
+      - "8787:8787"
+    volumes:
+      - file-storage:/app/storage/files
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8787/ready >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        VITE_REQUIRE_API: "1"
+        VITE_DEMO_FALLBACK: "0"
+    container_name: deep-oa-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+
+volumes:
+  postgres-data:
+  file-storage:

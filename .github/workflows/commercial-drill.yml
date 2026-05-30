@@ -1,0 +1,100 @@
+name: commercial-drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_release_evidence:
+        description: "Also generate a diagnostic commercial evidence package after the drill"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+jobs:
+  docker-backup-restore-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+
+    env:
+      APP_ENV: ci
+      NODE_ENV: development
+      POSTGRES_SERVICE: postgres
+      POSTGRES_DB: oa_commercial
+      POSTGRES_USER: oa
+      POSTGRES_PASSWORD: oa_dev_password
+      API_BASE_URL: http://127.0.0.1:8787
+      DEFAULT_TENANT_CODE: default
+      DEFAULT_ADMIN_EMAIL: admin@oa.local
+      DEFAULT_ADMIN_PASSWORD: admin123456
+      JWT_SECRET: local-commercial-demo-secret-change-before-production-20260530
+      COOKIE_MAX_AGE_SECONDS: 28800
+      AUTH_FAILED_LOGIN_LIMIT: 5
+      AUTH_FAILED_LOGIN_WINDOW_MS: 600000
+      AUTH_FAILED_LOGIN_MAX_KEYS: 10000
+      FILE_STORAGE_DRIVER: local
+      FILE_STORAGE_DIR: .local-files
+      FILE_BACKUP_USE_LOCAL: "1"
+      FILE_MAX_UPLOAD_BYTES: 5242880
+      IMPORT_MAX_HTML_BYTES: 10485760
+      API_BODY_LIMIT_BYTES: 10551296
+      WEB_ORIGIN: http://127.0.0.1:8080,http://localhost:8080
+      TRUST_PROXY: "0"
+      VITE_REQUIRE_API: "1"
+      VITE_DEMO_FALLBACK: "0"
+      RUN_DB_SEED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare local commercial env
+        run: |
+          cp .env.example .env
+          {
+            echo 'FILE_STORAGE_DIR="/app/storage/files"'
+            echo 'FILE_BACKUP_USE_LOCAL="0"'
+          } >> .env
+
+      - name: Run Docker backup and restore drill
+        run: npm run drill:commercial
+
+      - name: Validate drill evidence
+        run: npm run validate:drill-evidence -- commercial-evidence/latest-drill-summary.json --json
+
+      - name: Generate diagnostic release evidence
+        if: ${{ inputs.run_release_evidence == 'true' }}
+        env:
+          EVIDENCE_RUN_E2E: "0"
+        run: npm run evidence:commercial -- --full
+
+      - name: Show compose status on failure
+        if: failure()
+        run: docker compose ps && docker compose logs --tail=160
+
+      - name: Stop compose stack
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+      - name: Upload commercial drill evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: commercial-drill-evidence
+          path: |
+            commercial-evidence
+            backups
+            reports/commercial-evidence
+          if-no-files-found: ignore

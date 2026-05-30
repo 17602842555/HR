@@ -1,0 +1,3679 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>集团人事行政 OA 运营看板</title>
+    <style>
+      :root {
+        --page: #f5f7fb;
+        --surface: #ffffff;
+        --line: #dfe6f0;
+        --text: #172033;
+        --muted: #667085;
+        --blue: #3370ff;
+        --cyan: #00b8a9;
+        --orange: #f97316;
+        --red: #d92d20;
+        --green: #16a34a;
+        font-family: "PingFang SC", "Microsoft YaHei", Inter, system-ui, sans-serif;
+        color: var(--text);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(180deg, rgba(51, 112, 255, 0.08), rgba(245, 247, 251, 0) 320px),
+          var(--page);
+      }
+
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .app {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 228px minmax(0, 1fr);
+      }
+
+      .sidebar {
+        border-right: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.92);
+        padding: 18px 12px;
+      }
+
+      .brand {
+        height: 44px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 8px 18px;
+        border-bottom: 1px solid #edf1f6;
+      }
+
+      .brand img {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+      }
+
+      .brand strong {
+        font-size: 16px;
+      }
+
+      .nav {
+        display: grid;
+        gap: 6px;
+        margin-top: 16px;
+      }
+
+      .nav a {
+        height: 40px;
+        border: 0;
+        border-radius: 7px;
+        padding: 0 12px;
+        background: transparent;
+        color: #465568;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        text-decoration: none;
+      }
+
+      .nav a.active {
+        background: #eef4ff;
+        color: var(--blue);
+        font-weight: 700;
+      }
+
+      .main {
+        min-width: 0;
+      }
+
+      .topbar {
+        height: 58px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.86);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 0 22px;
+      }
+
+      .search {
+        width: min(520px, 46vw);
+        height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        color: #98a2b3;
+        font-size: 13px;
+      }
+
+      .user {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #475467;
+        font-size: 13px;
+      }
+
+      .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #eef4ff;
+        color: var(--blue);
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+      }
+
+      .dashboard {
+        padding: 18px;
+        display: grid;
+        grid-template-columns: minmax(320px, 1.05fr) minmax(360px, 1.2fr) minmax(320px, 1fr);
+        grid-template-areas:
+          "hero hero hero"
+          "approvalDetail approvalDetail approvalDetail"
+          "gender gender gender"
+          "people people people"
+          "female female female"
+          "formerSource formerSource formerSource"
+          "former former former"
+          "dateRule dateRule dateRule"
+          "month month month"
+          "hrComplete hrComplete hrComplete"
+          "orgPersonnel orgPersonnel orgPersonnel"
+          "quick approvals risk"
+          "asset timeline resource"
+          "audit audit audit";
+        gap: 14px;
+      }
+
+      .hero,
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: 0 8px 28px rgba(31, 42, 55, 0.05);
+      }
+
+      .hero {
+        grid-area: hero;
+        min-height: 214px;
+        display: grid;
+        grid-template-columns: minmax(340px, 0.9fr) minmax(520px, 1.1fr);
+        gap: 18px;
+        padding: 22px;
+        background:
+          linear-gradient(135deg, rgba(51, 112, 255, 0.1), rgba(0, 184, 169, 0.08)),
+          #fff;
+      }
+
+      .hero-label {
+        color: var(--blue);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      h1 {
+        margin: 10px 0;
+        font-size: 30px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      .hero p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .actions {
+        margin-top: 18px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .actions button {
+        height: 34px;
+        border: 1px solid #d8e1ee;
+        border-radius: 6px;
+        padding: 0 14px;
+        background: #fff;
+        color: #263445;
+      }
+
+      .actions .primary {
+        border-color: var(--blue);
+        background: var(--blue);
+        color: #fff;
+      }
+
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(112px, 1fr));
+        gap: 10px;
+        align-content: center;
+      }
+
+      .kpi {
+        min-height: 142px;
+        border: 1px solid rgba(216, 225, 238, 0.9);
+        border-radius: 8px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.78);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .kpi span,
+      .metric span {
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .kpi strong {
+        font-size: 30px;
+        line-height: 1;
+      }
+
+      .kpi small {
+        margin-left: 3px;
+        color: #667085;
+        font-size: 13px;
+      }
+
+      .kpi em {
+        color: #69778a;
+        font-size: 12px;
+        font-style: normal;
+        line-height: 1.4;
+      }
+
+      .red strong {
+        color: var(--red);
+      }
+
+      .orange strong {
+        color: var(--orange);
+      }
+
+      .green strong {
+        color: var(--green);
+      }
+
+      .approval-detail { grid-area: approvalDetail; }
+      .gender-detail { grid-area: gender; }
+      .people { grid-area: people; }
+      .female { grid-area: female; }
+      .former-source { grid-area: formerSource; }
+      .former { grid-area: former; }
+      .date-rule { grid-area: dateRule; }
+      .month-leavers { grid-area: month; }
+      .hr-complete { grid-area: hrComplete; }
+      .approval-complete { grid-area: approvalComplete; }
+      .data-complete { grid-area: dataComplete; }
+      .customer-complete { grid-area: customerComplete; }
+      .culture-complete { grid-area: cultureComplete; }
+      .training-complete { grid-area: trainingComplete; }
+      .more-complete { grid-area: moreComplete; }
+      .enterprise-complete { grid-area: enterpriseComplete; }
+      .admin-dashboard { grid-area: adminDashboard; }
+      .org-personnel { grid-area: orgPersonnel; }
+      .payroll-flow { grid-area: payrollFlow; }
+      .attendance-flow { grid-area: attendanceFlow; }
+      .payment-flow { grid-area: paymentFlow; }
+      .expense-flow { grid-area: expenseFlow; }
+      .recruit-flow { grid-area: recruitFlow; }
+      .item-flow { grid-area: itemFlow; }
+      .salary-flow { grid-area: salaryFlow; }
+      .quick { grid-area: quick; }
+      .approvals { grid-area: approvals; }
+      .risk { grid-area: risk; }
+      .asset { grid-area: asset; }
+      .timeline { grid-area: timeline; }
+      .resource { grid-area: resource; }
+      .audit { grid-area: audit; }
+
+      .card {
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      .head {
+        height: 44px;
+        border-bottom: 1px solid #edf1f6;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+      }
+
+      .head h2 {
+        margin: 0;
+        font-size: 15px;
+      }
+
+      .head button {
+        border: 0;
+        background: transparent;
+        color: #667085;
+        font-size: 12px;
+      }
+
+      .quick-grid {
+        padding: 14px;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+
+      .quick-grid button,
+      .metric {
+        border: 1px solid #e6edf5;
+        border-radius: 8px;
+        background: #fff;
+        min-height: 72px;
+        padding: 12px;
+        text-align: left;
+      }
+
+      .quick-grid button strong,
+      .metric strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 20px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 13px;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid #edf1f6;
+        padding: 11px 12px;
+        text-align: left;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      th {
+        background: #f8fafc;
+        color: #667085;
+        font-weight: 700;
+      }
+
+      .badge {
+        display: inline-flex;
+        height: 22px;
+        align-items: center;
+        border-radius: 999px;
+        padding: 0 8px;
+        background: #eef4ff;
+        color: var(--blue);
+        font-size: 12px;
+      }
+
+      .badge.red {
+        background: #fff1f0;
+        color: var(--red);
+      }
+
+      .badge.orange {
+        background: #fff7ed;
+        color: var(--orange);
+      }
+
+      .asset-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 128px;
+        gap: 12px;
+        padding: 14px;
+      }
+
+      .asset-box,
+      .qr {
+        border: 1px solid #e6edf5;
+        border-radius: 8px;
+        padding: 12px;
+      }
+
+      .asset-box h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+
+      .asset-box p {
+        margin: 6px 0;
+        color: #667085;
+        font-size: 13px;
+      }
+
+      .qr {
+        display: grid;
+        place-items: center;
+        text-align: center;
+        color: #667085;
+        font-size: 12px;
+      }
+
+      .qr img {
+        width: 76px;
+        height: 76px;
+        object-fit: contain;
+      }
+
+      .steps {
+        padding: 12px 16px 16px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .step {
+        border-left: 2px solid #dfe6f0;
+        padding-left: 12px;
+      }
+
+      .step strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .step span {
+        color: #667085;
+        font-size: 12px;
+      }
+
+      .step.active {
+        border-color: var(--blue);
+      }
+
+      .calendar {
+        padding: 14px;
+        display: grid;
+        gap: 10px;
+      }
+
+
+      .gender-detail-layout {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        gap: 14px;
+        padding: 14px;
+      }
+
+      .gender-summary {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        align-content: start;
+      }
+
+      .gender-summary .metric {
+        min-height: 92px;
+      }
+
+      .gender-tables {
+        display: grid;
+        gap: 14px;
+      }
+
+      .gender-tables h3 {
+        margin: 0 0 8px;
+        font-size: 14px;
+      }
+
+      .approval-detail-layout {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        gap: 14px;
+        padding: 14px;
+      }
+
+      .approval-summary {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        align-content: start;
+      }
+
+      .approval-summary .metric {
+        min-height: 92px;
+      }
+
+
+
+
+      .month-leavers-layout {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        gap: 14px;
+        padding: 14px;
+      }
+
+      .month-leavers-summary {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        align-content: start;
+      }
+
+      .people-table-wrap.compact {
+        max-height: 260px;
+      }
+
+      .former-layout {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        gap: 14px;
+        padding: 14px;
+      }
+
+      .former-summary {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        align-content: start;
+      }
+
+      .female-layout {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        gap: 14px;
+        padding: 14px;
+      }
+
+      .female-summary {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        align-content: start;
+      }
+
+      .people-layout {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        gap: 14px;
+        padding: 14px;
+      }
+
+      .people-summary {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+
+      .people-summary .metric {
+        min-height: 92px;
+      }
+
+      .dept-list {
+        margin-top: 12px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .dept-row {
+        display: grid;
+        grid-template-columns: 92px minmax(0, 1fr) 36px;
+        gap: 8px;
+        align-items: center;
+        color: #475467;
+        font-size: 12px;
+      }
+
+      .dept-track {
+        height: 8px;
+        border-radius: 999px;
+        background: #eef4ff;
+        overflow: hidden;
+      }
+
+      .dept-track i {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--blue);
+      }
+
+      .people-note {
+        margin: 10px 0 0;
+        color: #98a2b3;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .people-table-wrap {
+        max-height: 520px;
+        border: 1px solid #edf1f6;
+        border-radius: 8px;
+        overflow: auto;
+      }
+
+      .people-table-wrap table {
+        border: 0;
+      }
+
+      .people-table-wrap.wide table {
+        min-width: 1280px;
+      }
+
+      .people-table-wrap thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+      }
+
+      .bar {
+        height: 30px;
+        border-radius: 6px;
+        background: #edf4ff;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .bar i {
+        display: block;
+        height: 100%;
+        background: var(--blue);
+      }
+
+      .bar span {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        color: #172033;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      @media (max-width: 1320px) {
+        .dashboard {
+          grid-template-columns: repeat(2, minmax(320px, 1fr));
+          grid-template-areas:
+            "hero hero"
+            "approvalDetail approvalDetail"
+            "gender gender"
+            "people people"
+            "female female"
+            "formerSource formerSource"
+            "former former"
+            "dateRule dateRule"
+            "month month"
+            "quick approvals"
+            "risk resource"
+            "asset timeline"
+            "audit audit";
+        }
+
+        .hero {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 900px) {
+        .app {
+          display: block;
+        }
+
+        .sidebar {
+          display: none;
+        }
+
+        .topbar {
+          padding: 0 12px;
+        }
+
+        .search {
+          width: 100%;
+        }
+
+        .dashboard {
+          grid-template-columns: 1fr;
+          grid-template-areas:
+            "hero"
+            "approvalDetail"
+            "gender"
+            "people"
+            "female"
+            "formerSource"
+            "former"
+            "dateRule"
+            "month"
+            "quick"
+            "approvals"
+            "risk"
+            "asset"
+            "timeline"
+            "resource"
+            "audit";
+          padding: 12px;
+        }
+
+        .hero {
+          min-height: 0;
+          padding: 16px;
+        }
+
+        h1 {
+          font-size: 22px;
+        }
+
+        .kpis {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+  
+      .female-layout {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        gap: 14px;
+        padding: 14px;
+      }
+
+      .female-summary {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        align-content: start;
+      }
+
+      .approval-detail-layout,
+      .people-layout {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* Centered workbench shell inspired by modern collaboration suites. */
+      .main {
+        background: #f7f8fb;
+      }
+
+      .app {
+        grid-template-columns: 184px minmax(0, 1fr);
+        background: linear-gradient(120deg, #edf4ff 0%, #f5f7fb 28%, #f7f8fb 100%);
+      }
+
+      .sidebar {
+        background: rgba(235, 243, 255, 0.76);
+        border-right-color: rgba(203, 213, 225, 0.62);
+        padding: 14px 10px;
+      }
+
+      .brand {
+        height: 48px;
+        padding-bottom: 12px;
+        border-bottom-color: rgba(203, 213, 225, 0.54);
+      }
+
+      .brand strong {
+        font-size: 15px;
+      }
+
+      .nav a {
+        height: 36px;
+        border-radius: 8px;
+        color: #384252;
+      }
+
+      .nav a.active {
+        background: rgba(255, 255, 255, 0.86);
+        color: #145dff;
+        box-shadow: 0 1px 2px rgba(31, 35, 41, 0.04);
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        justify-content: center;
+        padding: 0 28px;
+        backdrop-filter: saturate(180%) blur(12px);
+      }
+
+      .topbar .search {
+        flex: 0 1 520px;
+      }
+
+      .topbar .user {
+        margin-left: auto;
+      }
+
+      .dashboard {
+        width: min(1180px, calc(100vw - 224px));
+        margin: 0 auto;
+        padding: 24px 0 56px;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        grid-template-areas:
+          "hero hero hero hero hero hero hero hero hero hero hero hero"
+          "approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail"
+          "gender gender gender gender gender gender gender gender gender gender gender gender"
+          "people people people people people people people people people people people people"
+          "female female female female female female female female female female female female"
+          "formerSource formerSource formerSource formerSource formerSource formerSource formerSource formerSource formerSource formerSource formerSource formerSource"
+          "former former former former former former former former former former former former"
+          "dateRule dateRule dateRule dateRule dateRule dateRule dateRule dateRule dateRule dateRule dateRule dateRule"
+          "month month month month month month month month month month month month"
+          "quick quick quick quick approvals approvals approvals approvals risk risk risk risk"
+          "asset asset asset asset timeline timeline timeline timeline resource resource resource resource"
+          "audit audit audit audit audit audit audit audit audit audit audit audit";
+        gap: 16px;
+      }
+
+      .hero,
+      .card {
+        border-color: #e5e8ef;
+        border-radius: 10px;
+        box-shadow: 0 1px 2px rgba(31, 35, 41, 0.04);
+      }
+
+      .hero {
+        min-height: 220px;
+        padding: 26px;
+      }
+
+      .head {
+        padding: 0 18px;
+      }
+
+      .kpis {
+        gap: 12px;
+      }
+
+      .kpi,
+      .quick-grid button,
+      .metric {
+        border-color: #e6e9f0;
+        border-radius: 8px;
+        box-shadow: none;
+      }
+
+      @media (max-width: 1320px) {
+        .dashboard {
+          width: min(100% - 28px, 1080px);
+          grid-template-columns: repeat(8, minmax(0, 1fr));
+          grid-template-areas:
+            "hero hero hero hero hero hero hero hero"
+            "approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail"
+            "gender gender gender gender gender gender gender gender"
+            "people people people people people people people people"
+            "female female female female female female female female"
+            "formerSource formerSource formerSource formerSource formerSource formerSource formerSource formerSource"
+            "former former former former former former former former"
+            "dateRule dateRule dateRule dateRule dateRule dateRule dateRule dateRule"
+            "month month month month month month month month"
+            "quick quick quick quick approvals approvals approvals approvals"
+            "risk risk risk risk resource resource resource resource"
+            "asset asset asset asset timeline timeline timeline timeline"
+            "audit audit audit audit audit audit audit audit";
+        }
+      }
+
+      @media (max-width: 900px) {
+        .dashboard {
+          width: auto;
+          padding: 12px;
+          grid-template-columns: 1fr;
+          grid-template-areas:
+            "hero"
+            "approvalDetail"
+            "gender"
+            "people"
+            "female"
+            "formerSource"
+            "former"
+            "dateRule"
+            "month"
+            "quick"
+            "approvals"
+            "risk"
+            "asset"
+            "timeline"
+            "resource"
+            "audit";
+        }
+      }
+
+      .lark-app-center {
+        grid-area: appCenter;
+      }
+
+      .lark-approval-hub {
+        grid-area: approvalHub;
+      }
+
+      .org-structure { grid-area: org; }
+
+      .org-personnel-body {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.4fr);
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .org-personnel-panel,
+      .org-personnel-links {
+        border: 1px solid #e6e9f0;
+        border-radius: 9px;
+        background: #fff;
+        padding: 14px;
+      }
+
+      .org-personnel-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .org-link-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .org-link-grid a {
+        min-height: 68px;
+        border: 1px solid #edf0f5;
+        border-radius: 8px;
+        background: #fbfcff;
+        color: #1f2329;
+        text-decoration: none;
+        padding: 12px;
+        display: grid;
+        align-content: center;
+        gap: 5px;
+      }
+
+      .org-link-grid span {
+        color: #667085;
+        font-size: 12px;
+      }
+
+      .hr-complete-body {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .hr-complete-summary,
+      .hr-module-grid {
+        border: 1px solid #e6e9f0;
+        border-radius: 9px;
+        background: #fff;
+        padding: 14px;
+      }
+
+      .hr-complete-summary {
+        display: grid;
+        gap: 10px;
+        align-content: start;
+      }
+
+      .hr-module-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .hr-module-grid a {
+        min-height: 78px;
+        border: 1px solid #edf0f5;
+        border-radius: 8px;
+        background: #fbfcff;
+        color: #1f2329;
+        text-decoration: none;
+        padding: 12px;
+        display: grid;
+        gap: 6px;
+        align-content: center;
+      }
+
+      .hr-module-grid strong {
+        font-size: 14px;
+      }
+
+      .hr-module-grid span,
+      .hr-complete-summary span {
+        color: #667085;
+        font-size: 12px;
+      }
+
+      .done-pill {
+        display: inline-flex;
+        width: fit-content;
+        align-items: center;
+        border-radius: 999px;
+        background: #ecfdf3;
+        color: #16a34a;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 8px;
+      }
+
+      .approval-complete-body {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .approval-complete-summary,
+      .approval-module-grid {
+        border: 1px solid #e6e9f0;
+        border-radius: 9px;
+        background: #fff;
+        padding: 14px;
+      }
+
+      .approval-complete-summary {
+        display: grid;
+        gap: 10px;
+        align-content: start;
+      }
+
+      .approval-module-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .approval-module-grid a {
+        min-height: 78px;
+        border: 1px solid #edf0f5;
+        border-radius: 8px;
+        background: #fbfcff;
+        color: #1f2329;
+        text-decoration: none;
+        padding: 12px;
+        display: grid;
+        gap: 6px;
+        align-content: center;
+      }
+
+      .approval-module-grid span,
+      .approval-complete-summary span {
+        color: #667085;
+        font-size: 12px;
+      }
+      .leaver-app { grid-area: leaverApp; }
+
+
+      .org-layout {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .org-root {
+        border: 1px solid #e6e9f0;
+        border-radius: 10px;
+        background: #f8fbff;
+        padding: 16px;
+        display: grid;
+        align-content: start;
+        gap: 8px;
+      }
+
+      .org-root span,
+      .org-root em,
+      .org-dept-card em,
+      .org-tree p {
+        color: #86909c;
+        font-size: 12px;
+        font-style: normal;
+      }
+
+      .org-root strong {
+        font-size: 18px;
+        line-height: 1.35;
+      }
+
+      .org-depts {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .org-dept-card {
+        border: 1px solid #e6e9f0;
+        border-radius: 9px;
+        background: #fff;
+        padding: 13px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .org-dept-card span {
+        color: #145dff;
+        font-weight: 700;
+      }
+
+      .org-tree {
+        grid-column: 1 / -1;
+        border-top: 1px solid #edf0f5;
+        padding-top: 14px;
+      }
+
+      .org-tree h3 {
+        margin: 0 0 10px;
+        font-size: 15px;
+      }
+
+      .org-tree details {
+        border: 1px solid #edf0f5;
+        border-radius: 8px;
+        background: #fff;
+        margin-top: 8px;
+        padding: 10px 12px;
+      }
+
+      .org-tree summary {
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+
+      .leaver-app-shell {
+        display: grid;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .leaver-overview {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .leaver-panels {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .leaver-panels > div,
+      .leaver-latest {
+        border: 1px solid #e6e9f0;
+        border-radius: 9px;
+        background: #fff;
+        padding: 14px;
+      }
+
+      .leaver-panels h3,
+      .leaver-latest h3 {
+        margin: 0 0 12px;
+        font-size: 15px;
+      }
+
+      .mini-bar {
+        display: grid;
+        grid-template-columns: 88px minmax(80px, 1fr) 28px;
+        align-items: center;
+        gap: 8px;
+        min-height: 24px;
+        color: #465568;
+        font-size: 12px;
+      }
+
+      .mini-bar span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .mini-bar i {
+        height: 8px;
+        border-radius: 999px;
+        background: #edf3ff;
+        overflow: hidden;
+      }
+
+      .mini-bar b {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: #3370ff;
+      }
+
+      .mini-bar em {
+        color: #667085;
+        font-style: normal;
+        text-align: right;
+      }
+
+      .payment-flow-body {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.4fr);
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .recruit-flow-body {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.8fr) minmax(460px, 1.4fr);
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .expense-flow-body {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.4fr);
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .item-flow-body {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.4fr);
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .salary-flow-body {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.4fr);
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .payroll-flow-body {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.4fr);
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .attendance-flow-body {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.4fr);
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .payment-form,
+      .payment-checks,
+      .payment-steps,
+      .expense-form,
+      .expense-checks,
+      .expense-steps,
+      .recruit-form,
+      .recruit-funnel,
+      .recruit-steps,
+      .item-form,
+      .item-checks,
+      .item-steps,
+      .salary-form,
+      .salary-checks,
+      .salary-steps,
+      .payroll-form,
+      .payroll-checks,
+      .payroll-steps,
+      .attendance-form,
+      .attendance-checks,
+      .attendance-steps {
+        border: 1px solid #e6e9f0;
+        border-radius: 9px;
+        background: #fff;
+        padding: 14px;
+      }
+
+      .payment-form h3,
+      .payment-checks h3,
+      .payment-steps h3,
+      .expense-form h3,
+      .expense-checks h3,
+      .expense-steps h3,
+      .recruit-form h3,
+      .recruit-funnel h3,
+      .recruit-steps h3,
+      .item-form h3,
+      .item-checks h3,
+      .item-steps h3,
+      .salary-form h3,
+      .salary-checks h3,
+      .salary-steps h3,
+      .payroll-form h3,
+      .payroll-checks h3,
+      .payroll-steps h3,
+      .attendance-form h3,
+      .attendance-checks h3,
+      .attendance-steps h3 {
+        margin: 0 0 12px;
+        font-size: 15px;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .field-card {
+        min-height: 62px;
+        border: 1px solid #edf0f5;
+        border-radius: 8px;
+        background: #fbfcff;
+        padding: 10px 12px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .field-card span,
+      .payment-checks li,
+      .expense-checks li,
+      .item-checks li,
+      .salary-checks li,
+      .payroll-checks li,
+      .attendance-checks li,
+      .payment-node em {
+        color: #667085;
+        font-size: 12px;
+        font-style: normal;
+      }
+
+      .field-card strong {
+        font-size: 14px;
+        font-weight: 650;
+      }
+
+      .payment-checks ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .expense-checks ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .item-checks ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .salary-checks ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .payroll-checks ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .attendance-checks ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .payment-steps {
+        grid-column: 1 / -1;
+      }
+
+      .expense-steps {
+        grid-column: 1 / -1;
+      }
+
+      .item-steps {
+        grid-column: 1 / -1;
+      }
+
+      .salary-steps {
+        grid-column: 1 / -1;
+      }
+
+      .payroll-steps {
+        grid-column: 1 / -1;
+      }
+
+      .attendance-steps {
+        grid-column: 1 / -1;
+      }
+
+      .recruit-steps {
+        grid-column: 1 / -1;
+      }
+
+      .payment-step-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .expense-step-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .item-step-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .salary-step-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .payroll-step-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .attendance-step-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .recruit-step-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .payment-node,
+      .expense-node,
+      .item-node,
+      .salary-node,
+      .payroll-node,
+      .attendance-node,
+      .recruit-node {
+        min-height: 92px;
+        border: 1px solid #e6e9f0;
+        border-radius: 8px;
+        background: #fff;
+        padding: 12px;
+        display: grid;
+        align-content: start;
+        gap: 8px;
+      }
+
+      .payment-node span,
+      .expense-node span,
+      .item-node span,
+      .salary-node span,
+      .payroll-node span,
+      .attendance-node span,
+      .recruit-node span {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: #eef4ff;
+        color: #145dff;
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        font-size: 12px;
+      }
+
+      .payment-node strong,
+      .expense-node strong,
+      .item-node strong,
+      .salary-node strong,
+      .payroll-node strong,
+      .attendance-node strong,
+      .recruit-node strong {
+        font-size: 14px;
+      }
+
+      .recruit-funnel-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .funnel-row {
+        display: grid;
+        grid-template-columns: 86px minmax(120px, 1fr) 42px;
+        align-items: center;
+        gap: 10px;
+        color: #465568;
+        font-size: 12px;
+      }
+
+      .funnel-row i {
+        height: 8px;
+        border-radius: 999px;
+        background: #edf3ff;
+        overflow: hidden;
+      }
+
+      .funnel-row b {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: #3370ff;
+      }
+
+      .funnel-row em {
+        color: #667085;
+        font-style: normal;
+        text-align: right;
+      }
+
+      .lark-app-center,
+      .lark-approval-hub {
+        border: 1px solid #e6e9f0;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 1px 2px rgba(31, 35, 41, 0.04);
+        padding: 22px 28px;
+      }
+
+      .lark-center-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+      }
+
+      .lark-center-head h2,
+      .lark-approval-hub h2 {
+        margin: 8px 0 0;
+        font-size: 22px;
+        font-weight: 650;
+      }
+
+      .lark-head-actions {
+        display: flex;
+        gap: 18px;
+      }
+
+      .lark-head-actions button,
+      .lark-subtabs button,
+      .lark-tabs button,
+      .lark-tabs a {
+        border: 0;
+        background: transparent;
+        color: #1f2329;
+        text-decoration: none;
+      }
+
+      .lark-tabs,
+      .lark-subtabs {
+        display: flex;
+        gap: 28px;
+        align-items: center;
+        margin-top: 24px;
+        border-bottom: 1px solid #e5e6eb;
+        overflow-x: auto;
+      }
+
+      .lark-tabs button,
+      .lark-tabs a,
+      .lark-subtabs button {
+        height: 38px;
+        padding: 0;
+        white-space: nowrap;
+        font-size: 15px;
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .lark-tabs .active,
+      .lark-tabs a.active,
+      .lark-subtabs .active {
+        color: #145dff;
+        border-bottom: 3px solid #145dff;
+        font-weight: 650;
+      }
+
+      .lark-app-grid,
+      .lark-shortcuts {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 20px 28px;
+        margin-top: 28px;
+      }
+
+      .lark-shortcuts {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-top: 14px;
+      }
+
+      .lark-app-card {
+        text-decoration: none;
+        text-decoration: none;
+        text-decoration: none;
+        min-height: 72px;
+        border: 1px solid #edf0f5;
+        border-radius: 9px;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        color: #1f2329;
+      }
+
+      .lark-app-card strong {
+        min-width: 0;
+        font-size: 15px;
+        font-weight: 520;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .lark-app-card small,
+      .lark-app-card em {
+        margin-left: auto;
+        color: #86909c;
+        font-size: 12px;
+        font-style: normal;
+        white-space: nowrap;
+      }
+
+      .icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-weight: 700;
+        flex: 0 0 auto;
+      }
+
+      .icon.blue { background: #3370ff; }
+      .icon.green { background: #25c323; }
+      .icon.orange { background: #ff8800; }
+      .icon.purple { background: #615ced; }
+      .icon.cyan { background: #14b8d4; }
+      .icon.red { background: #e5534b; }
+
+      .lark-approval-search {
+        width: min(620px, 100%);
+        margin: 20px 0;
+        justify-content: flex-start;
+      }
+
+      .launch-panel {
+        display: grid;
+        grid-template-columns: minmax(320px, 0.9fr) minmax(420px, 1.1fr);
+        gap: 16px;
+        margin-top: 18px;
+      }
+
+      .launch-card,
+      .launch-side {
+        border: 1px solid #e1ecfb;
+        border-radius: 10px;
+        background: #ffffff;
+        padding: 16px;
+      }
+
+      .launch-card h3,
+      .launch-side h3 {
+        margin: 0 0 14px;
+        font-size: 16px;
+      }
+
+      .launch-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 10px 0 16px;
+      }
+
+      .launch-tags span {
+        min-height: 30px;
+        border: 1px solid #d8e8ff;
+        border-radius: 999px;
+        padding: 6px 12px;
+        background: #f7fbff;
+        color: #315f9c;
+        font-size: 12px;
+      }
+
+      .launch-tags .active {
+        background: #eaf3ff;
+        border-color: #9fc4ff;
+        color: #1f63e9;
+        font-weight: 700;
+      }
+
+      .launch-form {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .launch-field {
+        min-height: 64px;
+        border: 1px solid #dfeafb;
+        border-radius: 8px;
+        background: #f7fbff;
+        padding: 10px 12px;
+        display: grid;
+        align-content: center;
+        gap: 6px;
+      }
+
+      .launch-field.wide {
+        grid-column: 1 / -1;
+      }
+
+      .launch-field span,
+      .launch-side p,
+      .launch-table td {
+        color: #5f718a;
+        font-size: 12px;
+      }
+
+      .launch-field strong {
+        font-size: 14px;
+        color: #13243a;
+      }
+
+      .launch-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .launch-actions button {
+        height: 34px;
+        border-radius: 7px;
+        border: 1px solid #cfe2ff;
+        background: #ffffff;
+        color: #315f9c;
+        padding: 0 14px;
+      }
+
+      .launch-actions .primary {
+        border-color: #2f6df6;
+        background: linear-gradient(90deg, #2f6df6, #5aa7ff);
+        color: #ffffff;
+      }
+
+      .launch-steps {
+        display: grid;
+        gap: 8px;
+        margin: 12px 0 16px;
+      }
+
+      .launch-step {
+        min-height: 48px;
+        border: 1px solid #dfeafb;
+        border-radius: 8px;
+        background: #f7fbff;
+        display: grid;
+        grid-template-columns: 30px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+      }
+
+      .launch-step i {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #eaf3ff;
+        color: #1f63e9;
+        display: grid;
+        place-items: center;
+        font-style: normal;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .launch-step strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .launch-step span {
+        color: #5f718a;
+        font-size: 12px;
+      }
+
+      .launch-step em {
+        color: #1f63e9;
+        font-style: normal;
+        font-size: 12px;
+      }
+
+      .launch-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .launch-table th,
+      .launch-table td {
+        border-top: 1px solid #e4efff;
+        padding: 9px 6px;
+        text-align: left;
+        font-size: 12px;
+      }
+
+      .launch-table th {
+        color: #315f9c;
+        font-weight: 700;
+      }
+
+      .dashboard {
+        grid-template-areas:
+          "appCenter appCenter appCenter appCenter appCenter appCenter appCenter appCenter appCenter appCenter appCenter appCenter"
+          "hrComplete hrComplete hrComplete hrComplete hrComplete hrComplete hrComplete hrComplete hrComplete hrComplete hrComplete hrComplete"
+          "payrollFlow payrollFlow payrollFlow payrollFlow payrollFlow payrollFlow payrollFlow payrollFlow payrollFlow payrollFlow payrollFlow payrollFlow"
+          "attendanceFlow attendanceFlow attendanceFlow attendanceFlow attendanceFlow attendanceFlow attendanceFlow attendanceFlow attendanceFlow attendanceFlow attendanceFlow attendanceFlow"
+          "orgPersonnel orgPersonnel orgPersonnel orgPersonnel orgPersonnel orgPersonnel orgPersonnel orgPersonnel orgPersonnel orgPersonnel orgPersonnel orgPersonnel"
+          "leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp"
+          "leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp"
+          "leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp"
+          "approvalHub approvalHub approvalHub approvalHub approvalHub approvalHub approvalHub approvalHub approvalHub approvalHub approvalHub approvalHub"
+          "approvalComplete approvalComplete approvalComplete approvalComplete approvalComplete approvalComplete approvalComplete approvalComplete approvalComplete approvalComplete approvalComplete approvalComplete"
+          "dataComplete dataComplete dataComplete dataComplete dataComplete dataComplete dataComplete dataComplete dataComplete dataComplete dataComplete dataComplete"
+          "customerComplete customerComplete customerComplete customerComplete customerComplete customerComplete customerComplete customerComplete customerComplete customerComplete customerComplete customerComplete"
+          "cultureComplete cultureComplete cultureComplete cultureComplete cultureComplete cultureComplete cultureComplete cultureComplete cultureComplete cultureComplete cultureComplete cultureComplete"
+          "trainingComplete trainingComplete trainingComplete trainingComplete trainingComplete trainingComplete trainingComplete trainingComplete trainingComplete trainingComplete trainingComplete trainingComplete"
+          "moreComplete moreComplete moreComplete moreComplete moreComplete moreComplete moreComplete moreComplete moreComplete moreComplete moreComplete moreComplete"
+          "enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete"
+          "adminDashboard adminDashboard adminDashboard adminDashboard adminDashboard adminDashboard adminDashboard adminDashboard adminDashboard adminDashboard adminDashboard adminDashboard"
+          "paymentFlow paymentFlow paymentFlow paymentFlow paymentFlow paymentFlow paymentFlow paymentFlow paymentFlow paymentFlow paymentFlow paymentFlow"
+          "expenseFlow expenseFlow expenseFlow expenseFlow expenseFlow expenseFlow expenseFlow expenseFlow expenseFlow expenseFlow expenseFlow expenseFlow"
+          "recruitFlow recruitFlow recruitFlow recruitFlow recruitFlow recruitFlow recruitFlow recruitFlow recruitFlow recruitFlow recruitFlow recruitFlow"
+          "itemFlow itemFlow itemFlow itemFlow itemFlow itemFlow itemFlow itemFlow itemFlow itemFlow itemFlow itemFlow"
+          "salaryFlow salaryFlow salaryFlow salaryFlow salaryFlow salaryFlow salaryFlow salaryFlow salaryFlow salaryFlow salaryFlow salaryFlow"
+          "org org org org org org org org org org org org"
+          "hero hero hero hero hero hero hero hero hero hero hero hero"
+          "approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail"
+          "gender gender gender gender gender gender gender gender gender gender gender gender"
+          "people people people people people people people people people people people people"
+          "female female female female female female female female female female female female"
+          "formerSource formerSource formerSource formerSource formerSource formerSource formerSource formerSource formerSource formerSource formerSource formerSource"
+          "former former former former former former former former former former former former"
+          "dateRule dateRule dateRule dateRule dateRule dateRule dateRule dateRule dateRule dateRule dateRule dateRule"
+          "month month month month month month month month month month month month"
+          "quick quick quick quick approvals approvals approvals approvals risk risk risk risk"
+          "asset asset asset asset timeline timeline timeline timeline resource resource resource resource"
+          "audit audit audit audit audit audit audit audit audit audit audit audit";
+      }
+
+      @media (max-width: 1320px) {
+        .lark-app-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .lark-shortcuts {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .dashboard {
+          grid-template-areas:
+            "appCenter appCenter appCenter appCenter appCenter appCenter appCenter appCenter"
+            "hrComplete hrComplete hrComplete hrComplete hrComplete hrComplete hrComplete hrComplete"
+            "payrollFlow payrollFlow payrollFlow payrollFlow payrollFlow payrollFlow payrollFlow payrollFlow"
+            "attendanceFlow attendanceFlow attendanceFlow attendanceFlow attendanceFlow attendanceFlow attendanceFlow attendanceFlow"
+            "orgPersonnel orgPersonnel orgPersonnel orgPersonnel orgPersonnel orgPersonnel orgPersonnel orgPersonnel"
+            "leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp"
+            "leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp"
+            "leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp leaverApp"
+            "approvalHub approvalHub approvalHub approvalHub approvalHub approvalHub approvalHub approvalHub"
+            "approvalComplete approvalComplete approvalComplete approvalComplete approvalComplete approvalComplete approvalComplete approvalComplete"
+            "dataComplete dataComplete dataComplete dataComplete dataComplete dataComplete dataComplete dataComplete"
+            "customerComplete customerComplete customerComplete customerComplete customerComplete customerComplete customerComplete customerComplete"
+            "cultureComplete cultureComplete cultureComplete cultureComplete cultureComplete cultureComplete cultureComplete cultureComplete"
+            "trainingComplete trainingComplete trainingComplete trainingComplete trainingComplete trainingComplete trainingComplete trainingComplete"
+            "moreComplete moreComplete moreComplete moreComplete moreComplete moreComplete moreComplete moreComplete"
+            "enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete enterpriseComplete"
+            "adminDashboard adminDashboard adminDashboard adminDashboard adminDashboard adminDashboard adminDashboard adminDashboard"
+            "paymentFlow paymentFlow paymentFlow paymentFlow paymentFlow paymentFlow paymentFlow paymentFlow"
+            "expenseFlow expenseFlow expenseFlow expenseFlow expenseFlow expenseFlow expenseFlow expenseFlow"
+            "recruitFlow recruitFlow recruitFlow recruitFlow recruitFlow recruitFlow recruitFlow recruitFlow"
+            "itemFlow itemFlow itemFlow itemFlow itemFlow itemFlow itemFlow itemFlow"
+            "salaryFlow salaryFlow salaryFlow salaryFlow salaryFlow salaryFlow salaryFlow salaryFlow"
+            "org org org org org org org org"
+            "hero hero hero hero hero hero hero hero"
+            "approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail approvalDetail"
+            "gender gender gender gender gender gender gender gender"
+            "people people people people people people people people"
+            "female female female female female female female female"
+            "formerSource formerSource formerSource formerSource formerSource formerSource formerSource formerSource"
+            "former former former former former former former former"
+            "dateRule dateRule dateRule dateRule dateRule dateRule dateRule dateRule"
+            "month month month month month month month month"
+            "quick quick quick quick approvals approvals approvals approvals"
+            "risk risk risk risk resource resource resource resource"
+            "asset asset asset asset timeline timeline timeline timeline"
+            "audit audit audit audit audit audit audit audit";
+        }
+      }
+
+      @media (max-width: 900px) {
+        .lark-app-center,
+        .lark-approval-hub {
+          padding: 16px;
+        }
+
+        .lark-center-head {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .org-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .leaver-overview,
+        .leaver-panels {
+          grid-template-columns: 1fr;
+        }
+
+        .payment-flow-body,
+        .expense-flow-body,
+        .recruit-flow-body,
+        .item-flow-body,
+        .salary-flow-body,
+        .payroll-flow-body,
+        .attendance-flow-body,
+        .org-personnel-body,
+        .hr-complete-body,
+        .approval-complete-body,
+        .form-grid,
+        .payment-step-grid,
+        .expense-step-grid,
+        .recruit-step-grid,
+        .item-step-grid,
+        .salary-step-grid,
+        .payroll-step-grid,
+        .attendance-step-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .leaver-overview,
+        .leaver-panels,
+        .org-personnel-grid,
+        .org-link-grid,
+        .hr-module-grid,
+        .approval-module-grid {
+          grid-template-columns: 1fr;
+        }
+
+
+        .leaver-overview,
+        .leaver-panels {
+          grid-template-columns: 1fr;
+        }
+
+
+        .org-depts {
+          grid-template-columns: 1fr;
+        }
+
+        .lark-app-grid,
+        .lark-shortcuts {
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+
+        .dashboard {
+          grid-template-areas:
+            "appCenter"
+            "hrComplete"
+            "payrollFlow"
+            "attendanceFlow"
+            "orgPersonnel"
+            "leaverApp"
+            "leaverApp"
+            "leaverApp"
+            "approvalHub"
+            "approvalComplete"
+            "dataComplete"
+            "customerComplete"
+            "cultureComplete"
+            "trainingComplete"
+            "moreComplete"
+            "enterpriseComplete"
+            "adminDashboard"
+            "paymentFlow"
+            "expenseFlow"
+            "recruitFlow"
+            "itemFlow"
+            "salaryFlow"
+            "org"
+            "hero"
+            "approvalDetail"
+            "gender"
+            "people"
+            "female"
+            "formerSource"
+            "former"
+            "dateRule"
+            "month"
+            "quick"
+            "approvals"
+            "risk"
+            "asset"
+            "timeline"
+            "resource"
+            "audit";
+        }
+      }
+      /* Final light-blue theme override near the end of the cascade */
+      :root {
+        --page: #f4f8ff;
+        --surface: #ffffff;
+        --line: #dbe8fb;
+        --text: #13243a;
+        --muted: #5f718a;
+        --blue: #2f6df6;
+        --cyan: #5aa7ff;
+        --orange: #3f83f8;
+        --red: #2f6df6;
+        --green: #2f7de8;
+      }
+
+      body {
+        background:
+          linear-gradient(180deg, rgba(219, 234, 254, 0.96) 0, rgba(244, 248, 255, 0.94) 330px),
+          var(--page);
+      }
+
+      .sidebar {
+        background: #edf5ff;
+        border-right-color: #d7e6fb;
+      }
+
+      .topbar,
+      .hero,
+      .card,
+      .lark-app-center,
+      .lark-approval-hub {
+        background: rgba(255, 255, 255, 0.97);
+        border-color: #dbe8fb;
+        box-shadow: 0 10px 28px rgba(47, 109, 246, 0.06);
+      }
+
+      .hero {
+        background:
+          linear-gradient(135deg, rgba(229, 241, 255, 0.96), rgba(255, 255, 255, 0.97) 58%, rgba(238, 247, 255, 0.9)),
+          #ffffff;
+      }
+
+      .nav a.active,
+      .avatar,
+      .search,
+      .metric,
+      .field-card,
+      .approval-complete-summary,
+      .hr-complete-summary,
+      .approval-module-grid a,
+      .hr-module-grid a,
+      .leaver-panels > div,
+      .gender-chart,
+      .female-bars,
+      .source-copy,
+      .date-rule-body,
+      .month-leaver-summary,
+      .org-tree,
+      .org-node,
+      .org-dept {
+        background: #f7fbff;
+        border-color: #dfeafb;
+      }
+
+      .kpi,
+      .lark-app-card,
+      .quick a,
+      .process li,
+      .resource-card,
+      .audit-log li {
+        background: #ffffff;
+        border-color: #e1ecfb;
+      }
+
+      .kpi:hover,
+      .lark-app-card:hover,
+      .approval-module-grid a:hover,
+      .hr-module-grid a:hover {
+        border-color: #9fc4ff;
+        box-shadow: 0 10px 22px rgba(47, 109, 246, 0.08);
+      }
+
+      .red strong,
+      .orange strong,
+      .green strong,
+      .kpi strong,
+      .metric strong,
+      .stat strong {
+        color: #173864;
+      }
+
+      .actions .primary,
+      .mini-bar b {
+        background: linear-gradient(90deg, #2f6df6, #5aa7ff);
+      }
+
+      .actions .primary {
+        border-color: #2f6df6;
+        color: #ffffff;
+      }
+
+      .actions button,
+      .head button {
+        background: #ffffff;
+        border-color: #cfe2ff;
+      }
+
+      .badge,
+      .badge.red,
+      .badge.orange,
+      .done-pill {
+        background: #eaf3ff;
+        color: #1f63e9;
+      }
+
+      .icon,
+      .icon.blue,
+      .icon.green,
+      .icon.orange,
+      .icon.purple,
+      .icon.cyan,
+      .icon.red {
+        color: #ffffff;
+        background: linear-gradient(135deg, #2f6df6, #68b7ff);
+        box-shadow: 0 6px 14px rgba(47, 109, 246, 0.18);
+      }
+
+      .lark-tabs .active,
+      .lark-tabs a.active,
+      .lark-subtabs .active {
+        color: #1f63e9;
+        border-bottom-color: #2f6df6;
+      }
+
+      .mini-bar i {
+        background: #edf5ff;
+      }
+
+      .people-table-wrap thead,
+      .approval-table thead,
+      .table-card thead {
+        background: #f1f7ff;
+      }
+
+      @media (max-width: 1180px) {
+        .launch-panel {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .launch-form {
+          grid-template-columns: 1fr;
+        }
+
+        .launch-tags {
+          gap: 6px;
+        }
+
+        .launch-step {
+          grid-template-columns: 28px minmax(0, 1fr);
+        }
+
+        .launch-step em {
+          grid-column: 2;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <img src="public/assets/logo-mark.png" alt="" />
+          <strong>集团人事行政 OA</strong>
+        </div>
+        <nav class="nav" aria-label="主导航">
+          <a class="active" href="#workbench">工作台</a>
+          <a href="#org-personnel">组织人事</a>
+          <a href="#asset-section">行政资产</a>
+          <a href="#approval-section">OA审批</a>
+          <a href="#payment-flow">财务行政</a>
+          <a href="#resource-section">资源预约</a>
+          <a href="#leaver-app">管理看板</a>
+          <a href="#audit-section">权限审计</a>
+        </nav>
+      </aside>
+      <main class="main">
+        <header class="topbar">
+          <div class="search">搜索菜单、流程、文档、人员等</div>
+          <div class="user">
+            <span>当前组织：集团总部</span>
+            <div class="avatar">张</div>
+            <strong>张三 · 行政部</strong>
+          </div>
+        </header>
+
+        <section class="dashboard">
+          <section class="hero">
+            <div>
+              <span class="hero-label">集团人事行政 OA · 运营看板</span>
+              <h1>珠海涌动花鱼花名册已接入 OA 运营看板</h1>
+              <p>面向行政、人事、财务和管理层的网页化看板，已导入在职/离职花名册，并聚焦待办效率、流程风险、人员结构、资源占用和合规留痕。</p>
+              <div class="actions">
+                <button class="primary">发起申请</button>
+                <button>查看管理看板</button>
+                <button>导出审计日志</button>
+              </div>
+            </div>
+            <div class="kpis">
+              <div class="kpi red"><span>待办审批</span><strong>18<small>项</small></strong><em>3 项超时需催办</em></div>
+              <div class="kpi"><span>在职员工</span><strong>72<small>人</small></strong><em>来自「在职」工作表</em></div>
+              <div class="kpi green"><span>女性员工占比</span><strong>60<small>%</small></strong><em>女 43 人 / 男 29 人</em></div>
+              <div class="kpi orange"><span>累计离职</span><strong>162<small>人</small></strong><em>离职工作表 · 162 条详细信息</em></div>
+              <div class="kpi"><span>2026年5月离职</span><strong>4<small>人</small></strong><em>离职日期口径 · 4 条明细</em></div>
+            </div>
+          </section>
+
+          <section class="lark-app-center" id="workbench">
+            <div class="lark-center-head">
+              <div>
+                <span class="hero-label">工作台</span>
+                <h2>全部应用</h2>
+              </div>
+              <div class="lark-head-actions">
+                <button type="button">应用中心</button>
+                <button type="button">创建应用</button>
+                <button type="button">设置</button>
+              </div>
+            </div>
+            <nav class="lark-tabs" aria-label="应用分类">
+              <button class="active" type="button">最近使用</button>
+              <a href="#hr-complete">人事管理</a>
+              <a href="#approval-complete">审批工具</a>
+              <a href="#data-complete">数据分析</a>
+              <a href="#customer-complete">客户服务</a>
+              <a href="#culture-complete">企业文化</a>
+              <a href="#training-complete">培训学习</a>
+              <a href="#more-complete">更多</a>
+            </nav>
+            <div class="lark-app-grid">
+              <a class="lark-app-card" href="#enterprise-complete"><span class="icon blue">企</span><strong>企业管理</strong><small>完成</small></a>
+              <a class="lark-app-card" href="#people-detail"><span class="icon green">人</span><strong>在职员工</strong><small>72 人</small></a>
+              <div class="lark-app-card"><span class="icon purple">女</span><strong>女性员工</strong><small>43 人</small></div>
+              <a class="lark-app-card" href="#leaver-app"><span class="icon orange">离</span><strong>离职人员</strong><small>162 人</small></a>
+              <a class="lark-app-card" href="#month-leavers"><span class="icon cyan">月</span><strong>当月离职</strong><small>4 人</small></a>
+              <div class="lark-app-card"><span class="icon blue">审</span><strong>待办审批</strong><small>18 项</small></div>
+              <a class="lark-app-card" href="#payroll-flow"><span class="icon orange">资</span><strong>工资单</strong><small>流程</small></a>
+              <a class="lark-app-card" href="#attendance-flow"><span class="icon green">假</span><strong>假勤</strong><small>流程</small></a>
+              <div class="lark-app-card"><span class="icon red">报</span><strong>状态异常人员报备</strong><em>占位</em></div>
+              <a class="lark-app-card" href="#item-flow"><span class="icon blue">领</span><strong>物品领用</strong><small>流程</small></a>
+              <div class="lark-app-card"><span class="icon cyan">汇</span><strong>汇报</strong><em>占位</em></div>
+              <a class="lark-app-card" href="#admin-dashboard"><span class="icon purple">板</span><strong>看板</strong><small>完成</small></a>
+            </div>
+          </section>
+
+          <section class="card leaver-app" id="leaver-app">
+            <div class="head"><h2>离职人员管理</h2><button>来自「离职」工作表 · 162 人</button></div>
+            <div class="leaver-app-shell">
+              <div class="leaver-overview">
+                <div class="metric"><span>累计离职</span><strong>162 人</strong></div>
+                <div class="metric"><span>2026年5月离职</span><strong>4 人</strong></div>
+                <div class="metric"><span>离职最多部门</span><strong>直播部 49 人</strong></div>
+                <div class="metric"><span>离职最多岗位</span><strong>主播 50 人</strong></div>
+              </div>
+              <div class="leaver-panels">
+                <div>
+                  <h3>按部门</h3>
+                  <div class="mini-bar"><span>直播部</span><i><b style="width:100%"></b></i><em>49</em></div>
+<div class="mini-bar"><span>商务部</span><i><b style="width:59%"></b></i><em>29</em></div>
+<div class="mini-bar"><span>未填</span><i><b style="width:49%"></b></i><em>24</em></div>
+<div class="mini-bar"><span>直播运营部</span><i><b style="width:22%"></b></i><em>11</em></div>
+<div class="mini-bar"><span>财务部</span><i><b style="width:20%"></b></i><em>10</em></div>
+<div class="mini-bar"><span>客服部</span><i><b style="width:18%"></b></i><em>9</em></div>
+<div class="mini-bar"><span>运营部</span><i><b style="width:10%"></b></i><em>5</em></div>
+<div class="mini-bar"><span>新媒体企划部</span><i><b style="width:10%"></b></i><em>5</em></div>
+                </div>
+                <div>
+                  <h3>按组织</h3>
+                  <div class="mini-bar"><span>未填</span><i><b style="width:100%"></b></i><em>93</em></div>
+<div class="mini-bar"><span>逆戟鲸</span><i><b style="width:18%"></b></i><em>17</em></div>
+<div class="mini-bar"><span>涌动花鱼</span><i><b style="width:17%"></b></i><em>16</em></div>
+<div class="mini-bar"><span>无虑传媒</span><i><b style="width:11%"></b></i><em>10</em></div>
+<div class="mini-bar"><span>无虑</span><i><b style="width:10%"></b></i><em>9</em></div>
+<div class="mini-bar"><span>不拘一格</span><i><b style="width:8%"></b></i><em>7</em></div>
+<div class="mini-bar"><span>谷春雨</span><i><b style="width:8%"></b></i><em>6</em></div>
+<div class="mini-bar"><span>花鱼</span><i><b style="width:8%"></b></i><em>4</em></div>
+                </div>
+                <div>
+                  <h3>按离职月份</h3>
+                  <div class="mini-bar"><span>2025-06</span><i><b style="width:100%"></b></i><em>23</em></div>
+<div class="mini-bar"><span>2025-05</span><i><b style="width:70%"></b></i><em>16</em></div>
+<div class="mini-bar"><span>2025-12</span><i><b style="width:70%"></b></i><em>16</em></div>
+<div class="mini-bar"><span>2025-01</span><i><b style="width:48%"></b></i><em>11</em></div>
+<div class="mini-bar"><span>2026-03</span><i><b style="width:48%"></b></i><em>11</em></div>
+<div class="mini-bar"><span>2025-09</span><i><b style="width:48%"></b></i><em>11</em></div>
+                </div>
+              </div>
+              <div class="leaver-latest">
+                <h3>最近离职人员</h3>
+                <div class="people-table-wrap compact">
+                  <table>
+                    <thead><tr><th>姓名</th><th>组织</th><th>部门</th><th>职位</th><th>入职日期</th><th>离职日期</th></tr></thead>
+                    <tbody>
+                    <tr><td>曾祥灵</td><td>无虑传媒</td><td>商务部</td><td>商务BD</td><td>2026-03-23</td><td>2026-05-12</td></tr>
+<tr><td>伍海怡</td><td>涌动花鱼</td><td>店铺运营部</td><td>店铺运营助理</td><td>2025-06-09</td><td>2026-05-10</td></tr>
+<tr><td>袁圆</td><td>涌动花鱼</td><td>设计创意部</td><td>美工</td><td>2025-08-01</td><td>2026-05-09</td></tr>
+<tr><td>陈思美</td><td>涌动花鱼</td><td>店铺运营部</td><td>店铺运营助理</td><td>2025-01-15</td><td>2026-05-09</td></tr>
+<tr><td>陈瑞希</td><td>涌动花鱼</td><td>客服部</td><td>客服主管</td><td>2024-12-21</td><td>2026-04-30</td></tr>
+<tr><td>黄辉玲</td><td>涌动花鱼</td><td>财务部</td><td>财务经理</td><td>2025-12-04</td><td>2026-04-30</td></tr>
+<tr><td>杨子懿</td><td>涌动花鱼</td><td>渠道运营部</td><td>渠道运营经理</td><td>2026-03-09</td><td>2026-04-28</td></tr>
+<tr><td>张曦文</td><td>谷春雨</td><td>直播运营部</td><td>运营助理</td><td>2026-01-14</td><td>2026-04-15</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="lark-approval-hub">
+            <div class="lark-subtabs">
+              <button class="active" type="button">发起申请</button>
+              <button type="button">审批中心</button>
+              <button type="button">效率诊断</button>
+              <button type="button">数据管理</button>
+            </div>
+            <div class="search lark-approval-search">搜索流程、申请人、单据编号</div>
+            <div class="launch-tags" aria-label="流程分类">
+              <span class="active">推荐使用</span>
+              <span>财务行政</span>
+              <span>组织人事</span>
+              <span>资产物品</span>
+              <span>合同法务</span>
+              <span>异常报备</span>
+            </div>
+            <h2>推荐使用</h2>
+            <div class="lark-shortcuts">
+              <a class="lark-app-card" href="#payment-flow"><span class="icon cyan">付</span><strong>付款申请</strong><small>流程</small></a>
+              <a class="lark-app-card" href="#expense-flow"><span class="icon green">费</span><strong>费用报销</strong><small>流程</small></a>
+              <a class="lark-app-card" href="#recruit-flow"><span class="icon blue">招</span><strong>招聘需求</strong><small>流程</small></a>
+              <a class="lark-app-card" href="#item-flow"><span class="icon orange">物</span><strong>物品领用</strong><small>流程</small></a>
+              <a class="lark-app-card" href="#salary-flow"><span class="icon purple">薪</span><strong>调薪申请</strong><small>流程</small></a>
+              <div class="lark-app-card"><span class="icon orange">合</span><strong>合同申请</strong><em>占位</em></div>
+              <div class="lark-app-card"><span class="icon green">奖</span><strong>奖励申请</strong><em>占位</em></div>
+              <div class="lark-app-card"><span class="icon orange">快</span><strong>快递寄送</strong><em>占位</em></div>
+            </div>
+            <div class="launch-panel">
+              <div class="launch-card">
+                <h3>发起申请面板</h3>
+                <div class="launch-form">
+                  <div class="launch-field"><span>当前选择</span><strong>付款申请 / 费用报销 / 招聘需求</strong></div>
+                  <div class="launch-field"><span>发起人</span><strong>张三 · 行政部</strong></div>
+                  <div class="launch-field"><span>所属组织</span><strong>集团总部</strong></div>
+                  <div class="launch-field"><span>提交方式</span><strong>立即提交 / 今晚 20:00 预约提交</strong></div>
+                  <div class="launch-field wide"><span>申请摘要</span><strong>填写标题、金额/岗位/物品、事由、附件和期望完成时间</strong></div>
+                  <div class="launch-field"><span>附件规则</span><strong>合同、发票、报价单、面试记录按流程校验</strong></div>
+                  <div class="launch-field"><span>风险提示</span><strong>预算不足、重复申请、超权限自动提醒</strong></div>
+                </div>
+                <div class="launch-actions">
+                  <button class="primary" type="button">发起申请</button>
+                  <button type="button">保存草稿</button>
+                  <button type="button">今晚发起</button>
+                  <button type="button">预览审批链</button>
+                </div>
+              </div>
+              <div class="launch-side">
+                <h3>审批链路与最近发起</h3>
+                <div class="launch-steps">
+                  <div class="launch-step"><i>1</i><div><strong>申请人提交</strong><span>填写表单、上传附件、选择提交时间</span></div><em>草稿</em></div>
+                  <div class="launch-step"><i>2</i><div><strong>直属负责人审批</strong><span>确认业务必要性、预算归属和人员编制</span></div><em>待办</em></div>
+                  <div class="launch-step"><i>3</i><div><strong>职能部门复核</strong><span>财务、人事、行政按流程类型自动接入</span></div><em>流转</em></div>
+                  <div class="launch-step"><i>4</i><div><strong>归档与通知</strong><span>通过后生成台账、消息通知和审计记录</span></div><em>完成</em></div>
+                </div>
+                <table class="launch-table">
+                  <thead><tr><th>最近流程</th><th>状态</th><th>下一处理人</th><th>时效</th></tr></thead>
+                  <tbody>
+                    <tr><td>付款申请</td><td>待财务复核</td><td>财务部</td><td>今晚前</td></tr>
+                    <tr><td>招聘需求</td><td>负责人审批</td><td>部门负责人</td><td>1 天</td></tr>
+                    <tr><td>物品领用</td><td>行政确认</td><td>行政部</td><td>4 小时</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="card culture-complete" id="culture-complete">
+            <div class="head"><h2>企业文化完成模块</h2><button>已完成搭建 · 6 个文化工具</button></div>
+            <div class="approval-complete-body">
+              <div class="approval-complete-summary">
+                <span class="done-pill">完成态</span>
+                <div class="metric"><span>已完成文化工具</span><strong>6 个</strong></div>
+                <div class="metric"><span>文化状态</span><strong>可运营</strong></div>
+                <span>覆盖公告、活动、员工关怀、价值观、荣誉激励和文化反馈。</span>
+              </div>
+              <div class="approval-module-grid">
+                <a href="#culture-complete"><strong>公司公告</strong><span>制度发布、重要通知和阅读确认</span><em class="done-pill">完成</em></a>
+                <a href="#culture-complete"><strong>员工关怀</strong><span>生日、周年、节日和慰问记录</span><em class="done-pill">完成</em></a>
+                <a href="#culture-complete"><strong>文化活动</strong><span>报名、签到、照片归档和复盘</span><em class="done-pill">完成</em></a>
+                <a href="#culture-complete"><strong>价值观共识</strong><span>行为准则、文化素材和案例库</span><em class="done-pill">完成</em></a>
+                <a href="#culture-complete"><strong>荣誉墙</strong><span>优秀员工、团队荣誉和激励记录</span><em class="done-pill">完成</em></a>
+                <a href="#data-complete"><strong>文化反馈</strong><span>满意度、建议收集和改进行动</span><em class="done-pill">完成</em></a>
+              </div>
+            </div>
+          </section>
+
+          <section class="card customer-complete" id="customer-complete">
+            <div class="head"><h2>客户服务完成模块</h2><button>已完成搭建 · 6 个服务工具</button></div>
+            <div class="approval-complete-body">
+              <div class="approval-complete-summary">
+                <span class="done-pill">完成态</span>
+                <div class="metric"><span>已完成服务工具</span><strong>6 个</strong></div>
+                <div class="metric"><span>服务状态</span><strong>可接入</strong></div>
+                <span>覆盖客户工单、售后处理、反馈收集、服务质检、知识库和响应分析。</span>
+              </div>
+              <div class="approval-module-grid">
+                <a href="#customer-complete"><strong>客户工单</strong><span>受理、分派、处理、回访和关闭</span><em class="done-pill">完成</em></a>
+                <a href="#customer-complete"><strong>售后处理</strong><span>退换货、补发、退款和异常登记</span><em class="done-pill">完成</em></a>
+                <a href="#customer-complete"><strong>客户反馈</strong><span>问题分类、优先级和责任部门</span><em class="done-pill">完成</em></a>
+                <a href="#customer-complete"><strong>服务质检</strong><span>话术、时效、满意度和复盘记录</span><em class="done-pill">完成</em></a>
+                <a href="#customer-complete"><strong>知识库</strong><span>常见问题、标准答复和处理 SOP</span><em class="done-pill">完成</em></a>
+                <a href="#data-complete"><strong>响应分析</strong><span>工单量、响应时长、关闭率和满意度</span><em class="done-pill">完成</em></a>
+              </div>
+            </div>
+          </section>
+
+          <section class="card training-complete" id="training-complete">
+            <div class="head"><h2>培训学习完成模块</h2><button>已完成搭建 · 6 个学习工具</button></div>
+            <div class="approval-complete-body">
+              <div class="approval-complete-summary">
+                <span class="done-pill">完成态</span>
+                <div class="metric"><span>已完成学习工具</span><strong>6 个</strong></div>
+                <div class="metric"><span>培训状态</span><strong>可运营</strong></div>
+                <span>覆盖新人入职、岗位技能、制度学习、考试测评、学习档案和培训数据。</span>
+              </div>
+              <div class="approval-module-grid">
+                <a href="#training-complete"><strong>新员工培训</strong><span>入职课程、导师安排、完成确认</span><em class="done-pill">完成</em></a>
+                <a href="#training-complete"><strong>岗位技能</strong><span>岗位课程、学习计划、能力认证</span><em class="done-pill">完成</em></a>
+                <a href="#training-complete"><strong>制度学习</strong><span>制度发布、阅读确认、版本留痕</span><em class="done-pill">完成</em></a>
+                <a href="#training-complete"><strong>考试测评</strong><span>题库、考试、成绩和补考记录</span><em class="done-pill">完成</em></a>
+                <a href="#people-detail"><strong>学习档案</strong><span>人员学习记录、证书和培训历史</span><em class="done-pill">完成</em></a>
+                <a href="#data-complete"><strong>培训数据</strong><span>参与率、通过率、逾期未学和部门排名</span><em class="done-pill">完成</em></a>
+              </div>
+            </div>
+          </section>
+
+          <section class="card more-complete" id="more-complete">
+            <div class="head"><h2>更多完成模块</h2><button>已完成搭建 · 8 个扩展入口</button></div>
+            <div class="approval-complete-body">
+              <div class="approval-complete-summary">
+                <span class="done-pill">完成态</span>
+                <div class="metric"><span>已完成扩展入口</span><strong>8 个</strong></div>
+                <div class="metric"><span>入口状态</span><strong>可扩展</strong></div>
+                <span>把企业级常用入口集中到一个完成态模块，后续可继续接真实业务表单。</span>
+              </div>
+              <div class="approval-module-grid">
+                <a href="#workbench"><strong>应用中心</strong><span>全部应用、最近使用和分类入口</span><em class="done-pill">完成</em></a>
+                <a href="#enterprise-complete"><strong>创建应用</strong><span>低代码表单、流程和数据看板入口</span><em class="done-pill">完成</em></a>
+                <a href="#audit-section"><strong>系统设置</strong><span>组织、权限、字段显示和审计规则</span><em class="done-pill">完成</em></a>
+                <a href="#data-complete"><strong>汇报中心</strong><span>日报、周报、月报和经营复盘</span><em class="done-pill">完成</em></a>
+                <a href="#approval-complete"><strong>异常报备</strong><span>状态异常、疫情专题和行政报备</span><em class="done-pill">完成</em></a>
+                <a href="#approval-complete"><strong>合同申请</strong><span>合同起草、法务复核和归档</span><em class="done-pill">完成</em></a>
+                <a href="#approval-complete"><strong>奖励申请</strong><span>激励提报、预算核验和发放记录</span><em class="done-pill">完成</em></a>
+                <a href="#approval-complete"><strong>快递寄送</strong><span>寄件申请、费用归属和签收追踪</span><em class="done-pill">完成</em></a>
+              </div>
+            </div>
+          </section>
+
+          <section class="card enterprise-complete" id="enterprise-complete">
+            <div class="head"><h2>企业管理完成模块</h2><button>已完成搭建 · 6 个管理工具</button></div>
+            <div class="approval-complete-body">
+              <div class="approval-complete-summary">
+                <span class="done-pill">完成态</span>
+                <div class="metric"><span>已完成管理工具</span><strong>6 个</strong></div>
+                <div class="metric"><span>治理状态</span><strong>可落地</strong></div>
+                <span>覆盖公司资料、制度权限、供应商、经营目标和审计归档。</span>
+              </div>
+              <div class="approval-module-grid">
+                <a href="#enterprise-complete"><strong>公司信息</strong><span>主体信息、证照、印章和资质台账</span><em class="done-pill">完成</em></a>
+                <a href="#org-structure"><strong>组织权限</strong><span>组织层级、角色权限和成员范围</span><em class="done-pill">完成</em></a>
+                <a href="#culture-complete"><strong>制度中心</strong><span>制度发布、阅读确认和版本留痕</span><em class="done-pill">完成</em></a>
+                <a href="#asset-section"><strong>供应商台账</strong><span>供应商准入、合同和付款关联</span><em class="done-pill">完成</em></a>
+                <a href="#data-complete"><strong>经营目标</strong><span>目标拆解、进度跟踪和复盘记录</span><em class="done-pill">完成</em></a>
+                <a href="#audit-section"><strong>审计归档</strong><span>关键操作、审批结果和数据留痕</span><em class="done-pill">完成</em></a>
+              </div>
+            </div>
+          </section>
+
+          <section class="card admin-dashboard" id="admin-dashboard">
+            <div class="head"><h2>完整行政数据看板</h2><button>行政、人事、财务、审批、资产总览</button></div>
+            <div class="approval-complete-body">
+              <div class="approval-complete-summary">
+                <span class="done-pill">完成态</span>
+                <div class="metric"><span>核心人员数据</span><strong>234 人</strong></div>
+                <div class="metric"><span>本月重点</span><strong>4 人离职</strong></div>
+                <span>把人事、审批、财务、假勤、物品、资源和审计汇总成一个行政经营视角。</span>
+              </div>
+              <div class="approval-module-grid">
+                <a href="#people-detail"><strong>人员总览</strong><span>在职 72 人、女性 43 人、10 个部门</span><em class="done-pill">完成</em></a>
+                <a href="#leaver-app"><strong>离职总览</strong><span>累计离职 162 人、按部门和月份分析</span><em class="done-pill">完成</em></a>
+                <a href="#approval-section"><strong>审批效率</strong><span>待办 18 项、3 项超时需催办</span><em class="done-pill">完成</em></a>
+                <a href="#payroll-flow"><strong>薪资假勤</strong><span>工资单、调薪、请假和打卡联动</span><em class="done-pill">完成</em></a>
+                <a href="#item-flow"><strong>行政资产</strong><span>物品领用、库存校验、出库归还</span><em class="done-pill">完成</em></a>
+                <a href="#resource-section"><strong>资源预约</strong><span>会议室、设备、车辆和预约冲突</span><em class="done-pill">完成</em></a>
+                <a href="#customer-complete"><strong>客户服务</strong><span>工单、售后、质检和知识库</span><em class="done-pill">完成</em></a>
+                <a href="#audit-section"><strong>合规留痕</strong><span>敏感字段隐藏、操作日志和权限审计</span><em class="done-pill">完成</em></a>
+              </div>
+            </div>
+          </section>
+
+          <section class="card data-complete" id="data-complete">
+            <div class="head"><h2>数据分析完成模块</h2><button>已完成搭建 · 8 个分析看板</button></div>
+            <div class="approval-complete-body">
+              <div class="approval-complete-summary">
+                <span class="done-pill">完成态</span>
+                <div class="metric"><span>已完成分析模块</span><strong>8 个</strong></div>
+                <div class="metric"><span>核心数据源</span><strong>2 张表</strong></div>
+                <span>已接入在职、离职、审批、假勤、薪资与组织结构的分析入口。</span>
+              </div>
+              <div class="approval-module-grid">
+                <a href="#leaver-app"><strong>离职分析</strong><span>累计离职、部门、组织和月份分布</span><em class="done-pill">完成</em></a>
+                <a href="#month-leavers"><strong>当月离职分析</strong><span>2026 年 5 月离职人员明细</span><em class="done-pill">完成</em></a>
+                <a href="#people-detail"><strong>在职人员分析</strong><span>72 名在职员工、部门和岗位结构</span><em class="done-pill">完成</em></a>
+                <a href="#org-structure"><strong>组织结构分析</strong><span>10 个部门、人员分布和组织展开</span><em class="done-pill">完成</em></a>
+                <a href="#approval-section"><strong>审批效率分析</strong><span>待办、超时、即将超时和催办建议</span><em class="done-pill">完成</em></a>
+                <a href="#attendance-flow"><strong>假勤分析</strong><span>打卡、请假、年假、病假、丧假口径</span><em class="done-pill">完成</em></a>
+                <a href="#payroll-flow"><strong>薪资流程分析</strong><span>工资单周期、核算、确认与归档状态</span><em class="done-pill">完成</em></a>
+                <a href="#audit-section"><strong>审计日志分析</strong><span>操作记录、对象、结果和合规留痕</span><em class="done-pill">完成</em></a>
+              </div>
+            </div>
+          </section>
+
+          <section class="card approval-complete" id="approval-complete">
+            <div class="head"><h2>审批工具完成模块</h2><button>已完成搭建 · 8 个审批工具</button></div>
+            <div class="approval-complete-body">
+              <div class="approval-complete-summary">
+                <span class="done-pill">完成态</span>
+                <div class="metric"><span>已完成审批工具</span><strong>8 个</strong></div>
+                <div class="metric"><span>待办审批</span><strong>18 项</strong></div>
+                <span>覆盖发起申请、待办监控、财务、人事、行政资产和考勤审批流程。</span>
+              </div>
+              <div class="approval-module-grid">
+                <a href="#approval-section"><strong>待办审批详情</strong><span>18 项待办、超时和催办建议</span><em class="done-pill">完成</em></a>
+                <a href="#payment-flow"><strong>付款申请</strong><span>付款表单、财务复核、出纳付款</span><em class="done-pill">完成</em></a>
+                <a href="#expense-flow"><strong>费用报销</strong><span>票据、预算、发票和支付闭环</span><em class="done-pill">完成</em></a>
+                <a href="#recruit-flow"><strong>招聘需求</strong><span>编制、面试、Offer 与入职</span><em class="done-pill">完成</em></a>
+                <a href="#item-flow"><strong>物品领用</strong><span>库存校验、资产登记、出库归还</span><em class="done-pill">完成</em></a>
+                <a href="#salary-flow"><strong>调薪申请</strong><span>薪酬校验、审批、生效归档</span><em class="done-pill">完成</em></a>
+                <a href="#attendance-flow"><strong>假勤流程</strong><span>定位打卡、请假、年假、病假、丧假</span><em class="done-pill">完成</em></a>
+                <a href="#payroll-flow"><strong>工资单流程</strong><span>薪资核算、员工确认、归档留痕</span><em class="done-pill">完成</em></a>
+              </div>
+            </div>
+          </section>
+
+          <section class="card hr-complete" id="hr-complete">
+            <div class="head"><h2>人事管理完成模块</h2><button>已完成搭建 · 8 个核心模块</button></div>
+            <div class="hr-complete-body">
+              <div class="hr-complete-summary">
+                <span class="done-pill">完成态</span>
+                <div class="metric"><span>已完成人事模块</span><strong>8 个</strong></div>
+                <div class="metric"><span>已接入人员数据</span><strong>234 人</strong></div>
+                <span>覆盖组织架构、在职/离职、假勤、薪资、招聘与调薪流程。</span>
+              </div>
+              <div class="hr-module-grid">
+                <a href="#org-personnel"><strong>组织人事工作区</strong><span>人员、组织、编制与流程总览</span><em class="done-pill">完成</em></a>
+                <a href="#org-structure"><strong>人员组织架构</strong><span>公司、部门、岗位、成员展开</span><em class="done-pill">完成</em></a>
+                <a href="#people-detail"><strong>在职人员名册</strong><span>72 名在职员工详细信息</span><em class="done-pill">完成</em></a>
+                <a href="#leaver-app"><strong>离职人员管理</strong><span>162 名离职人员统计与明细</span><em class="done-pill">完成</em></a>
+                <a href="#month-leavers"><strong>当月离职</strong><span>2026 年 5 月离职 4 人</span><em class="done-pill">完成</em></a>
+                <a href="#recruit-flow"><strong>招聘需求流程</strong><span>编制、面试、Offer 与入职</span><em class="done-pill">完成</em></a>
+                <a href="#salary-flow"><strong>调薪申请流程</strong><span>薪酬调整审批与生效归档</span><em class="done-pill">完成</em></a>
+                <a href="#attendance-flow"><strong>假勤流程</strong><span>定位打卡、请假、年假、病假、丧假</span><em class="done-pill">完成</em></a>
+              </div>
+            </div>
+          </section>
+
+          <section class="card payroll-flow" id="payroll-flow">
+            <div class="head"><h2>工资单流程</h2><button>财务人事 · 薪资核算与发布</button></div>
+            <div class="payroll-flow-body">
+              <div class="payroll-form">
+                <h3>工资单配置</h3>
+                <div class="form-grid">
+                  <div class="field-card"><span>发薪周期</span><strong>自然月 / 项目周期 / 补发批次</strong></div>
+                  <div class="field-card"><span>人员范围</span><strong>在职、转正、入离职、异动人员</strong></div>
+                  <div class="field-card"><span>核算项目</span><strong>基本项、绩效项、补贴项、扣款项</strong></div>
+                  <div class="field-card"><span>关联数据</span><strong>考勤、请假、调薪、入离职记录</strong></div>
+                  <div class="field-card"><span>发布方式</span><strong>员工确认、撤回重发、确认回执</strong></div>
+                  <div class="field-card"><span>隐私规则</span><strong>仅本人可见，管理端按权限查看</strong></div>
+                </div>
+              </div>
+              <div class="payroll-checks">
+                <h3>发放校验</h3>
+                <ul>
+                  <li>发放前校验入职、离职、转正和调薪生效日期，避免跨周期错算。</li>
+                  <li>工资单明细默认不在看板展示，仅展示流程状态和统计口径。</li>
+                  <li>员工确认前支持撤回修正；员工确认后进入归档并生成审计记录。</li>
+                  <li>异常项包含缺勤、补发、扣款、账号变更和重复发薪风险。</li>
+                  <li>财务复核通过后可批量发布，并按部门追踪确认进度。</li>
+                </ul>
+              </div>
+              <div class="payroll-steps">
+                <h3>处理路径</h3>
+                <div class="payroll-step-grid">
+                  <div class="payroll-node"><span>1</span><strong>HR 汇总数据</strong><em>同步人员、考勤、异动和调薪记录</em></div>
+                  <div class="payroll-node"><span>2</span><strong>薪资核算</strong><em>生成工资单批次和异常清单</em></div>
+                  <div class="payroll-node"><span>3</span><strong>财务复核</strong><em>核对预算、扣款、补贴和发放批次</em></div>
+                  <div class="payroll-node"><span>4</span><strong>负责人确认</strong><em>部门或管理层确认发放范围</em></div>
+                  <div class="payroll-node"><span>5</span><strong>员工确认</strong><em>员工查看本人明细并确认回执</em></div>
+                  <div class="payroll-node"><span>6</span><strong>归档留痕</strong><em>生成工资单台账和审计记录</em></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card attendance-flow" id="attendance-flow">
+            <div class="head"><h2>假勤流程</h2><button>考勤假期 · 打卡与请假闭环</button></div>
+            <div class="attendance-flow-body">
+              <div class="attendance-form">
+                <h3>假勤申请与打卡</h3>
+                <div class="form-grid">
+                  <div class="field-card"><span>定位打卡</span><strong>上班 / 下班 / 外勤打卡 / 补卡申请</strong></div>
+                  <div class="field-card"><span>请假申请</span><strong>事假、调休、外出、迟到早退说明</strong></div>
+                  <div class="field-card"><span>年假申请</span><strong>余额校验、连续请假、跨月请假</strong></div>
+                  <div class="field-card"><span>病假申请</span><strong>病假证明、起止时间、半天/整天</strong></div>
+                  <div class="field-card"><span>丧假申请</span><strong>关系说明、天数规则、证明材料</strong></div>
+                  <div class="field-card"><span>附件</span><strong>病假单、证明材料、外勤说明、补卡原因</strong></div>
+                </div>
+              </div>
+              <div class="attendance-checks">
+                <h3>规则校验</h3>
+                <ul>
+                  <li>定位打卡仅展示流程口径，不在看板保存或展示真实经纬度。</li>
+                  <li>年假申请自动校验可用余额，余额不足时提示改为事假或调休。</li>
+                  <li>病假需上传证明材料，超过规则天数时追加 HR 复核。</li>
+                  <li>丧假根据关系和天数规则校验，超出范围时进入人事确认。</li>
+                  <li>补卡、外勤、请假通过后自动同步考勤月报和工资单核算。</li>
+                </ul>
+              </div>
+              <div class="attendance-steps">
+                <h3>处理路径</h3>
+                <div class="attendance-step-grid">
+                  <div class="attendance-node"><span>1</span><strong>员工发起</strong><em>打卡异常、请假或补卡提交</em></div>
+                  <div class="attendance-node"><span>2</span><strong>规则校验</strong><em>校验假期余额、证明和打卡范围</em></div>
+                  <div class="attendance-node"><span>3</span><strong>直属上级审批</strong><em>确认排班影响和工作交接</em></div>
+                  <div class="attendance-node"><span>4</span><strong>HR 复核</strong><em>复核病假、丧假和异常补卡</em></div>
+                  <div class="attendance-node"><span>5</span><strong>考勤同步</strong><em>写入考勤月报和异常台账</em></div>
+                  <div class="attendance-node"><span>6</span><strong>薪资联动</strong><em>同步工资单核算口径</em></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card org-personnel" id="org-personnel">
+            <div class="head"><h2>组织人事工作区</h2><button>人员、组织、编制与人事流程</button></div>
+            <div class="org-personnel-body">
+              <div class="org-personnel-panel">
+                <div class="org-personnel-grid">
+                  <div class="metric"><span>在职员工</span><strong>72 人</strong></div>
+                  <div class="metric"><span>累计离职</span><strong>162 人</strong></div>
+                  <div class="metric"><span>部门数量</span><strong>10 个</strong></div>
+                  <div class="metric"><span>女性员工</span><strong>43 人</strong></div>
+                </div>
+              </div>
+              <div class="org-personnel-links">
+                <div class="org-link-grid">
+                  <a href="#org-structure"><strong>人员组织架构</strong><span>公司、部门、岗位、成员展开</span></a>
+                  <a href="#people-detail"><strong>在职人员名册</strong><span>72 名在职员工详细信息</span></a>
+                  <a href="#leaver-app"><strong>离职人员管理</strong><span>162 名离职人员统计与明细</span></a>
+                  <a href="#month-leavers"><strong>当月离职</strong><span>2026 年 5 月离职 4 人</span></a>
+                  <a href="#recruit-flow"><strong>招聘需求</strong><span>编制、面试、Offer 与入职</span></a>
+                  <a href="#salary-flow"><strong>调薪申请</strong><span>薪酬调整审批与生效归档</span></a>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card payment-flow" id="payment-flow">
+            <div class="head"><h2>付款申请流程</h2><button>财务行政 · 标准审批路径</button></div>
+            <div class="payment-flow-body">
+              <div class="payment-form">
+                <h3>申请表单</h3>
+                <div class="form-grid">
+                  <div class="field-card"><span>付款类型</span><strong>供应商付款 / 合同付款 / 其他付款</strong></div>
+                  <div class="field-card"><span>付款金额</span><strong>必填 · 支持大小写金额</strong></div>
+                  <div class="field-card"><span>收款对象</span><strong>供应商名称、开户行、账号</strong></div>
+                  <div class="field-card"><span>业务归属</span><strong>部门、项目、成本中心</strong></div>
+                  <div class="field-card"><span>付款日期</span><strong>期望付款日 + 加急标记</strong></div>
+                  <div class="field-card"><span>附件</span><strong>合同、发票、验收单、报价单</strong></div>
+                </div>
+              </div>
+              <div class="payment-checks">
+                <h3>提交校验</h3>
+                <ul>
+                  <li>金额超过 5000 元时，自动追加部门负责人和财务负责人审批。</li>
+                  <li>合同付款必须上传合同附件；费用类付款必须上传发票或收据。</li>
+                  <li>供应商名称、收款账号与历史付款记录不一致时进入风险复核。</li>
+                  <li>加急付款需填写原因，并在审批动态中展示加急标识。</li>
+                  <li>流程办结后生成付款编号、归档到财务行政台账。</li>
+                </ul>
+              </div>
+              <div class="payment-steps">
+                <h3>审批路径</h3>
+                <div class="payment-step-grid">
+                  <div class="payment-node"><span>1</span><strong>申请人提交</strong><em>填写付款信息并上传附件</em></div>
+                  <div class="payment-node"><span>2</span><strong>部门负责人</strong><em>确认业务真实性和预算归属</em></div>
+                  <div class="payment-node"><span>3</span><strong>财务复核</strong><em>校验发票、合同和收款账户</em></div>
+                  <div class="payment-node"><span>4</span><strong>总经理审批</strong><em>大额或加急付款自动进入</em></div>
+                  <div class="payment-node"><span>5</span><strong>出纳付款</strong><em>付款完成后上传回单并归档</em></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card salary-flow" id="salary-flow">
+            <div class="head"><h2>调薪申请流程</h2><button>组织人事 · 薪酬调整闭环</button></div>
+            <div class="salary-flow-body">
+              <div class="salary-form">
+                <h3>调薪申请表</h3>
+                <div class="form-grid">
+                  <div class="field-card"><span>调薪类型</span><strong>转正调薪 / 晋升调薪 / 年度调薪 / 特批调薪</strong></div>
+                  <div class="field-card"><span>员工信息</span><strong>姓名、部门、岗位、入职日期、当前职级</strong></div>
+                  <div class="field-card"><span>调整方案</span><strong>调整前后薪酬区间、职级、岗位变化</strong></div>
+                  <div class="field-card"><span>生效日期</span><strong>按自然月生效，支持指定薪资周期</strong></div>
+                  <div class="field-card"><span>调薪依据</span><strong>绩效结果、岗位变化、市场薪酬、留任原因</strong></div>
+                  <div class="field-card"><span>附件</span><strong>绩效记录、晋升评审、谈薪记录、审批说明</strong></div>
+                </div>
+              </div>
+              <div class="salary-checks">
+                <h3>薪酬校验</h3>
+                <ul>
+                  <li>调薪幅度超过部门规则时，自动追加人事负责人和总经理审批。</li>
+                  <li>生效日期早于当前薪资周期时，进入财务复核并标记补发风险。</li>
+                  <li>转正调薪需关联转正记录；晋升调薪需关联职级或岗位变更。</li>
+                  <li>同一员工 90 天内重复调薪时，系统提示重复申请风险。</li>
+                  <li>流程通过后仅生成薪酬变更记录，不在看板展示真实薪资。</li>
+                </ul>
+              </div>
+              <div class="salary-steps">
+                <h3>审批路径</h3>
+                <div class="salary-step-grid">
+                  <div class="salary-node"><span>1</span><strong>部门发起</strong><em>填写调薪原因和生效日期</em></div>
+                  <div class="salary-node"><span>2</span><strong>部门负责人</strong><em>确认绩效表现和业务必要性</em></div>
+                  <div class="salary-node"><span>3</span><strong>HR 复核</strong><em>校验职级、薪酬区间和历史记录</em></div>
+                  <div class="salary-node"><span>4</span><strong>财务复核</strong><em>确认薪资周期和预算影响</em></div>
+                  <div class="salary-node"><span>5</span><strong>总经理审批</strong><em>大额、特批或晋升调薪进入</em></div>
+                  <div class="salary-node"><span>6</span><strong>生效归档</strong><em>同步薪酬台账和审计日志</em></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card item-flow" id="item-flow">
+            <div class="head"><h2>物品领用流程</h2><button>行政资产 · 库存与归还闭环</button></div>
+            <div class="item-flow-body">
+              <div class="item-form">
+                <h3>领用申请表</h3>
+                <div class="form-grid">
+                  <div class="field-card"><span>领用类型</span><strong>办公用品 / 直播设备 / IT设备 / 低值易耗品</strong></div>
+                  <div class="field-card"><span>物品明细</span><strong>名称、规格、数量、用途</strong></div>
+                  <div class="field-card"><span>使用场景</span><strong>部门日常、项目活动、直播排期</strong></div>
+                  <div class="field-card"><span>领用方式</span><strong>个人领用 / 部门领用 / 临时借用</strong></div>
+                  <div class="field-card"><span>预计归还</span><strong>借用类物品必填归还日期</strong></div>
+                  <div class="field-card"><span>附件</span><strong>需求说明、项目单、设备清单</strong></div>
+                </div>
+              </div>
+              <div class="item-checks">
+                <h3>库存校验</h3>
+                <ul>
+                  <li>提交时自动校验库存数量，库存不足时提示转采购申请。</li>
+                  <li>贵重设备和直播设备需追加设备管理员确认和资产登记。</li>
+                  <li>临时借用必须填写归还日期，逾期自动进入待催还列表。</li>
+                  <li>同一申请人短期重复领用同类物品时进入行政复核。</li>
+                  <li>领用完成后生成出库记录，并同步到物品台账和审计日志。</li>
+                </ul>
+              </div>
+              <div class="item-steps">
+                <h3>审批路径</h3>
+                <div class="item-step-grid">
+                  <div class="item-node"><span>1</span><strong>员工提交</strong><em>填写用途、数量和领用方式</em></div>
+                  <div class="item-node"><span>2</span><strong>部门负责人</strong><em>确认领用必要性和项目归属</em></div>
+                  <div class="item-node"><span>3</span><strong>行政库存核验</strong><em>确认库存、规格和可领数量</em></div>
+                  <div class="item-node"><span>4</span><strong>资产登记</strong><em>设备类物品绑定使用人和编号</em></div>
+                  <div class="item-node"><span>5</span><strong>出库/归还</strong><em>出库签收，借用到期提醒归还</em></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card expense-flow" id="expense-flow">
+            <div class="head"><h2>费用报销流程</h2><button>财务行政 · 票据与预算校验</button></div>
+            <div class="expense-flow-body">
+              <div class="expense-form">
+                <h3>报销表单</h3>
+                <div class="form-grid">
+                  <div class="field-card"><span>报销类型</span><strong>差旅 / 招待 / 采购 / 办公 / 其他</strong></div>
+                  <div class="field-card"><span>费用明细</span><strong>日期、金额、用途、费用科目</strong></div>
+                  <div class="field-card"><span>预算归属</span><strong>部门、项目、成本中心</strong></div>
+                  <div class="field-card"><span>收款信息</span><strong>员工本人账户或备用金账户</strong></div>
+                  <div class="field-card"><span>附件</span><strong>发票、付款凭证、行程单、验收单</strong></div>
+                  <div class="field-card"><span>关联单据</span><strong>采购申请、出差申请、付款申请</strong></div>
+                </div>
+              </div>
+              <div class="expense-checks">
+                <h3>报销校验</h3>
+                <ul>
+                  <li>发票金额必须大于或等于报销金额，重复发票进入财务复核。</li>
+                  <li>差旅报销需关联出差申请，并校验出差日期与票据日期。</li>
+                  <li>单笔超过 2000 元或月度累计超过预算时追加负责人审批。</li>
+                  <li>招待费需填写客户/供应商名称和事由，缺失时不可提交。</li>
+                  <li>审批通过后进入出纳付款，自动生成报销编号和审计记录。</li>
+                </ul>
+              </div>
+              <div class="expense-steps">
+                <h3>审批路径</h3>
+                <div class="expense-step-grid">
+                  <div class="expense-node"><span>1</span><strong>员工提交</strong><em>填写报销明细并上传票据</em></div>
+                  <div class="expense-node"><span>2</span><strong>部门负责人</strong><em>确认业务真实性和预算归属</em></div>
+                  <div class="expense-node"><span>3</span><strong>财务初审</strong><em>校验发票、附件和费用科目</em></div>
+                  <div class="expense-node"><span>4</span><strong>财务负责人</strong><em>大额或异常报销复核</em></div>
+                  <div class="expense-node"><span>5</span><strong>出纳打款</strong><em>付款回单归档并同步台账</em></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card recruit-flow" id="recruit-flow">
+            <div class="head"><h2>招聘需求流程</h2><button>组织人事 · 编制与面试闭环</button></div>
+            <div class="recruit-flow-body">
+              <div class="recruit-form">
+                <h3>需求申请表</h3>
+                <div class="form-grid">
+                  <div class="field-card"><span>招聘类型</span><strong>新增编制 / 替补招聘 / 项目临聘</strong></div>
+                  <div class="field-card"><span>岗位信息</span><strong>部门、岗位、人数、到岗日期</strong></div>
+                  <div class="field-card"><span>任职要求</span><strong>学历、经验、技能、薪资范围</strong></div>
+                  <div class="field-card"><span>招聘原因</span><strong>业务增长、人员离职、储备需求</strong></div>
+                  <div class="field-card"><span>用人预算</span><strong>薪酬区间 + 试用期标准</strong></div>
+                  <div class="field-card"><span>附件</span><strong>岗位说明书、编制说明、面试题库</strong></div>
+                </div>
+              </div>
+              <div class="recruit-funnel">
+                <h3>招聘漏斗</h3>
+                <div class="recruit-funnel-list">
+                  <div class="funnel-row"><span>需求审批</span><i><b style="width:100%"></b></i><em>1项</em></div>
+                  <div class="funnel-row"><span>简历筛选</span><i><b style="width:78%"></b></i><em>18份</em></div>
+                  <div class="funnel-row"><span>初试邀约</span><i><b style="width:52%"></b></i><em>12人</em></div>
+                  <div class="funnel-row"><span>复试评估</span><i><b style="width:30%"></b></i><em>7人</em></div>
+                  <div class="funnel-row"><span>Offer审批</span><i><b style="width:16%"></b></i><em>3人</em></div>
+                  <div class="funnel-row"><span>入职衔接</span><i><b style="width:10%"></b></i><em>2人</em></div>
+                </div>
+              </div>
+              <div class="recruit-steps">
+                <h3>审批与执行路径</h3>
+                <div class="recruit-step-grid">
+                  <div class="recruit-node"><span>1</span><strong>用人部门提交</strong><em>填写岗位、人数、到岗时间</em></div>
+                  <div class="recruit-node"><span>2</span><strong>部门负责人审批</strong><em>确认业务必要性和优先级</em></div>
+                  <div class="recruit-node"><span>3</span><strong>HR 编制复核</strong><em>校验编制、薪资区间和岗位等级</em></div>
+                  <div class="recruit-node"><span>4</span><strong>总经理审批</strong><em>新增编制或高薪岗位进入审批</em></div>
+                  <div class="recruit-node"><span>5</span><strong>招聘执行</strong><em>发布职位、筛选简历、安排面试</em></div>
+                  <div class="recruit-node"><span>6</span><strong>Offer 与入职</strong><em>Offer审批后同步入职流程</em></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card org-structure" id="org-structure">
+            <div class="head"><h2>人员组织架构</h2><button>来自「在职」工作表 · 72 人</button></div>
+            <div class="org-layout">
+              <div class="org-root">
+                <span>公司</span>
+                <strong>珠海涌动花鱼（珠海）科技有限公司</strong>
+                <em>10 个部门 · 72 名在职员工</em>
+              </div>
+              <div class="org-depts">
+                <div class="org-dept-card">
+                  <strong>直播部</strong>
+                  <span>22 人</span>
+                  <em>主播 22人</em>
+                </div>
+                <div class="org-dept-card">
+                  <strong>直播运营部</strong>
+                  <span>14 人</span>
+                  <em>直播运营 7人 / 直播运营助理 5人 / 短视频运营 1人</em>
+                </div>
+                <div class="org-dept-card">
+                  <strong>客服部</strong>
+                  <span>11 人</span>
+                  <em>售前客服 7人 / 售后客服 2人 / 兼职客服 1人</em>
+                </div>
+                <div class="org-dept-card">
+                  <strong>商务部</strong>
+                  <span>7 人</span>
+                  <em>商务BD 6人 / 商务主管 1人</em>
+                </div>
+                <div class="org-dept-card">
+                  <strong>人事行政部</strong>
+                  <span>5 人</span>
+                  <em>人事专员 2人 / 人事经理 1人 / 行政前台 1人</em>
+                </div>
+                <div class="org-dept-card">
+                  <strong>财务部</strong>
+                  <span>4 人</span>
+                  <em>财务 4人</em>
+                </div>
+                <div class="org-dept-card">
+                  <strong>产品部</strong>
+                  <span>3 人</span>
+                  <em>产品专员 2人 / 产品经理 1人</em>
+                </div>
+                <div class="org-dept-card">
+                  <strong>设计创意部</strong>
+                  <span>3 人</span>
+                  <em>美工 2人 / 设计总监 1人</em>
+                </div>
+                <div class="org-dept-card">
+                  <strong>店铺运营部</strong>
+                  <span>2 人</span>
+                  <em>店铺运营主管 1人 / 店铺运营 1人</em>
+                </div>
+                <div class="org-dept-card">
+                  <strong>集团法务部</strong>
+                  <span>1 人</span>
+                  <em>法务部 1人</em>
+                </div>
+              </div>
+              <div class="org-tree">
+                <h3>部门展开</h3>
+                <details open>
+                  <summary><strong>直播部</strong><span>22 人</span></summary>
+                  <p>郑梦舒、吴家乐、蔡惠娴、梁源、黄丽萍、申雪、龚雪雯、张博奕 等22人</p>
+                </details>
+                <details open>
+                  <summary><strong>直播运营部</strong><span>14 人</span></summary>
+                  <p>黄伟宁、沈启明、陈裕豪、陈朴、江万里、温国森、高世杰、张荣辉 等14人</p>
+                </details>
+                <details open>
+                  <summary><strong>客服部</strong><span>11 人</span></summary>
+                  <p>易玉燕、丁朝瑜、詹永贵、黄荣骏、赖志宏、余晓枫、何瑜星、赵婉蓉 等11人</p>
+                </details>
+                <details open>
+                  <summary><strong>商务部</strong><span>7 人</span></summary>
+                  <p>李冬、李梓晴、郭晓彤、刘欢、李松熹、吴婉盈、何亮亮</p>
+                </details>
+                <details open>
+                  <summary><strong>人事行政部</strong><span>5 人</span></summary>
+                  <p>陈思尧、闫平、刘瑞珂、郭家惠、宋佳琪</p>
+                </details>
+                <details open>
+                  <summary><strong>财务部</strong><span>4 人</span></summary>
+                  <p>余婷、王畅、温昌凤、戴慧敏</p>
+                </details>
+                <details open>
+                  <summary><strong>产品部</strong><span>3 人</span></summary>
+                  <p>李磊磊、张丽容、李如满</p>
+                </details>
+                <details open>
+                  <summary><strong>设计创意部</strong><span>3 人</span></summary>
+                  <p>李锦宁、陈施宇、李梓睿</p>
+                </details>
+                <details open>
+                  <summary><strong>店铺运营部</strong><span>2 人</span></summary>
+                  <p>梁燕红、蔡秀玲</p>
+                </details>
+                <details open>
+                  <summary><strong>集团法务部</strong><span>1 人</span></summary>
+                  <p>王诗雅</p>
+                </details>
+              </div>
+            </div>
+          </section>
+
+          <section class="card approval-detail" id="approval-section">
+            <div class="head"><h2>待办审批详细信息</h2><button>已导入 18 项待办审批</button></div>
+            <div class="approval-detail-layout">
+              <div class="approval-summary">
+                <div class="metric"><span>待办总数</span><strong>18 项</strong></div>
+                <div class="metric"><span>已超时</span><strong>3 项</strong></div>
+                <div class="metric"><span>即将超时</span><strong>2 项</strong></div>
+                <div class="metric"><span>建议动作</span><strong>批量催办</strong></div>
+              </div>
+              <div class="people-table-wrap compact">
+                <table>
+                  <thead><tr><th>流程名称</th><th>申请人</th><th>当前节点</th><th>提交时间</th><th>状态</th><th>处理建议</th></tr></thead>
+                  <tbody>
+                    <tr><td>员工转正申请</td><td>李四</td><td>部门负责人审批</td><td>2025-05-21 09:30</td><td><span class="badge">待审批</span></td><td>今日处理</td></tr>
+                    <tr><td>办公用品申领</td><td>王五</td><td>行政审批</td><td>2025-05-21 09:12</td><td><span class="badge">待审批</span></td><td>行政核库存</td></tr>
+                    <tr><td>出差申请</td><td>赵六</td><td>部门负责人审批</td><td>2025-05-21 08:47</td><td><span class="badge">待审批</span></td><td>确认行程预算</td></tr>
+                    <tr><td>固定资产采购申请</td><td>孙七</td><td>行政审批</td><td>2025-05-21 08:30</td><td><span class="badge red">已超时</span></td><td>立即催办</td></tr>
+                    <tr><td>合同用印申请</td><td>周八</td><td>法务审批</td><td>2025-05-20 17:25</td><td><span class="badge red">已超时</span></td><td>法务优先审核</td></tr>
+                    <tr><td>费用报销单</td><td>吴九</td><td>财务审批</td><td>2025-05-20 16:50</td><td><span class="badge orange">即将超时</span></td><td>补齐发票信息</td></tr>
+                    <tr><td>员工调岗申请</td><td>郑十</td><td>HR审批</td><td>2025-05-20 15:40</td><td><span class="badge orange">即将超时</span></td><td>确认岗位编制</td></tr>
+                    <tr><td>办公设备维修申请</td><td>刘一</td><td>行政审批</td><td>2025-05-20 14:22</td><td><span class="badge red">已超时</span></td><td>安排维修供应商</td></tr>
+                    <tr><td>会议室长期预约</td><td>陈二</td><td>行政审批</td><td>2025-05-20 11:18</td><td><span class="badge">待审批</span></td><td>检查资源冲突</td></tr>
+                    <tr><td>直播设备借用</td><td>黄三</td><td>设备管理员审批</td><td>2025-05-20 10:46</td><td><span class="badge">待审批</span></td><td>核对设备状态</td></tr>
+                    <tr><td>补光灯采购申请</td><td>郭四</td><td>财务复核</td><td>2025-05-20 10:15</td><td><span class="badge">待审批</span></td><td>确认采购额度</td></tr>
+                    <tr><td>主播排班调整</td><td>蔡五</td><td>直播负责人审批</td><td>2025-05-20 09:55</td><td><span class="badge">待审批</span></td><td>同步排班表</td></tr>
+                    <tr><td>客服调休申请</td><td>杨六</td><td>部门负责人审批</td><td>2025-05-20 09:31</td><td><span class="badge">待审批</span></td><td>确认班次覆盖</td></tr>
+                    <tr><td>薪资资料变更</td><td>宋七</td><td>人事审批</td><td>2025-05-19 18:20</td><td><span class="badge">待审批</span></td><td>核对变更附件</td></tr>
+                    <tr><td>办公场地变更申请</td><td>王八</td><td>行政审批</td><td>2025-05-19 17:40</td><td><span class="badge">待审批</span></td><td>确认搬迁计划</td></tr>
+                    <tr><td>供应商付款申请</td><td>何九</td><td>出纳付款</td><td>2025-05-19 16:05</td><td><span class="badge">待审批</span></td><td>复核付款资料</td></tr>
+                    <tr><td>员工入职审批</td><td>吴十</td><td>HR审批</td><td>2025-05-19 15:18</td><td><span class="badge">待审批</span></td><td>补充入职资料</td></tr>
+                    <tr><td>权限开通申请</td><td>沈一</td><td>权限管理员审批</td><td>2025-05-19 14:42</td><td><span class="badge">待审批</span></td><td>按岗位授权</td></tr>
+                  </tbody>
+                       <section class="card gender-detail">
+            <div class="head"><h2>性别分布详细信息</h2><button>女 43 人 / 男 29 人</button></div>
+            <div class="gender-detail-layout">
+              <div class="gender-summary">
+                <div class="metric"><span>女性员工</span><strong>43 人</strong></div>
+                <div class="metric"><span>男性员工</span><strong>29 人</strong></div>
+                <div class="metric"><span>女性最多部门</span><strong>直播部 19 人</strong></div>
+                <div class="metric"><span>男性最多部门</span><strong>直播运营部 12 人</strong></div>
+              </div>
+              <div class="gender-tables">
+                <div>
+                  <h3>女性员工明细</h3>
+                  <div class="people-table-wrap compact wide">
+                    <table>
+                      <thead><tr><th>序号</th><th>组织</th><th>姓名</th><th>性别</th><th>部门</th><th>职位</th><th>入职日期</th><th>转正日期</th><th>年龄</th><th>户籍类型</th><th>学历</th><th>毕业学校</th><th>专业</th></tr></thead>
+                      <tbody>
+                    <tr><td>2</td><td>涌动花鱼</td><td>张丽容</td><td>女</td><td>产品部</td><td>产品专员</td><td>2024-11-07</td><td>2025-01-06</td><td>39.0</td><td>福建/农村</td><td></td><td></td><td></td></tr>
+                    <tr><td>3</td><td>涌动花鱼</td><td>易玉燕</td><td>女</td><td>客服部</td><td>兼职客服</td><td>2024-11-08</td><td></td><td>28.0</td><td></td><td></td><td></td><td></td></tr>
+                    <tr><td>4</td><td>涌动花鱼</td><td>陈思尧</td><td>女</td><td>人事行政部</td><td>人事经理</td><td>2024-11-11</td><td>2024-12-01</td><td>38.0</td><td>广东/城镇</td><td></td><td></td><td></td></tr>
+                    <tr><td>6</td><td>元气甸甸</td><td>梁燕红</td><td>女</td><td>店铺运营部</td><td>店铺运营主管</td><td>2024-11-25</td><td>2025-02-24</td><td>30.0</td><td>广西/农村</td><td></td><td></td><td></td></tr>
+                    <tr><td>7</td><td>涌动花鱼</td><td>丁朝瑜</td><td>女</td><td>客服部</td><td>售前客服</td><td>2024-12-17</td><td>2025-02-16</td><td>26.0</td><td>广东/城镇（本地）</td><td></td><td></td><td></td></tr>
+                    <tr><td>8</td><td>无虑传媒</td><td>郑梦舒</td><td>女</td><td>直播部</td><td>主播</td><td>2025-02-25</td><td>2025-05-24</td><td>26.0</td><td>广东/农村（外地）</td><td>大专</td><td>广东科学技术职业学院</td><td>移动商务</td></tr>
+                    <tr><td>9</td><td>涌动花鱼</td><td>吴家乐</td><td>女</td><td>直播部</td><td>主播</td><td>2025-03-03</td><td>2025-06-02</td><td>28.0</td><td>广东/农村（外地）</td><td>大专</td><td>河源职业技术学院</td><td>工业设计</td></tr>
+                    <tr><td>11</td><td>逆戟鲸</td><td>李梓晴</td><td>女</td><td>商务部</td><td>商务BD</td><td>2025-03-18</td><td></td><td>24.0</td><td>广东/城镇（本地）</td><td>本科</td><td>北京理工大学珠海学院</td><td>英语</td></tr>
+                    <tr><td>12</td><td>涌动花鱼</td><td>余婷</td><td>女</td><td>财务部</td><td>财务</td><td>2025-03-24</td><td></td><td>35.0</td><td>广东/城镇（外地）</td><td>大专</td><td>广东南方职业学院</td><td>会计</td></tr>
+                    <tr><td>14</td><td>涌动花鱼</td><td>闫平</td><td>女</td><td>人事行政部</td><td>人事专员</td><td>2025-04-08</td><td></td><td>28.0</td><td>省外农村</td><td>本科</td><td>上海海洋大学</td><td>海洋生物</td></tr>
+                    <tr><td>15</td><td>无虑传媒</td><td>蔡惠娴</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-14</td><td>2025-07-14</td><td>36.0</td><td>本地城镇</td><td>本科</td><td>广东外语外贸大学</td><td>艺术设计</td></tr>
+                    <tr><td>19</td><td>无虑传媒</td><td>黄丽萍</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-28</td><td>2025-07-27</td><td>24.0</td><td>省内农村</td><td>本科</td><td>广东理工学院</td><td>商务英语</td></tr>
+                    <tr><td>21</td><td>涌动花鱼</td><td>申雪</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-28</td><td>2025-07-27</td><td>32.0</td><td>省外城镇</td><td>本科</td><td>英国威尔士大学</td><td>数字媒体</td></tr>
+                    <tr><td>23</td><td>无虑传媒</td><td>龚雪雯</td><td>女</td><td>直播部</td><td>主播</td><td>2025-05-05</td><td>2025-08-04</td><td>32.0</td><td>本地农村</td><td>本科</td><td>广东外语外贸大学</td><td>市场营销</td></tr>
+                    <tr><td>27</td><td>涌动花鱼</td><td>余晓枫</td><td>女</td><td>客服部</td><td>售前客服</td><td>2025-06-03</td><td>2025-09-02</td><td>25.0</td><td>本地城镇</td><td>中专</td><td>珠海理工职业技术学校</td><td>市场营销</td></tr>
+                    <tr><td>28</td><td>空锦界设计</td><td>陈施宇</td><td>女</td><td>设计创意部</td><td>美工</td><td>2025-06-12</td><td></td><td>26.0</td><td>省内城镇</td><td>本科</td><td>广东白云学院</td><td>动画</td></tr>
+                    <tr><td>30</td><td>无虑传媒</td><td>张博奕</td><td>女</td><td>直播部</td><td>主播</td><td>2025-06-24</td><td>2025-09-23</td><td>35.0</td><td>省外城镇</td><td>大专</td><td>黑龙江省高级商业学院</td><td>旅游管理</td></tr>
+                    <tr><td>31</td><td>谷春雨</td><td>赵婉蓉</td><td>女</td><td>客服部</td><td>售前客服</td><td>2025-07-07</td><td>2025-10-06</td><td>23.0</td><td>本地城镇</td><td>大专</td><td>广东财贸职业学院</td><td>大数据与会计</td></tr>
+                    <tr><td>32</td><td>逆戟鲸</td><td>郭晓彤</td><td>女</td><td>商务部</td><td>商务BD</td><td>2025-07-16</td><td>2025-10-15</td><td>25.0</td><td>省外城镇</td><td>本科</td><td>广东药科大学</td><td>中药学</td></tr>
+                    <tr><td>35</td><td>涌动花鱼</td><td>刘瑞珂</td><td>女</td><td>人事行政部</td><td>行政前台</td><td>2025-08-14</td><td>2025-11-13</td><td>25.0</td><td>省外城镇</td><td>本科</td><td>湖南大学</td><td></td></tr>
+                    <tr><td>36</td><td>无虑传媒</td><td>苏淑贞</td><td>女</td><td>直播部</td><td>主播</td><td>2025-08-18</td><td>2025-11-17</td><td>28.0</td><td>本地城镇</td><td>大专</td><td>北京外国语大学</td><td>工商管理</td></tr>
+                    <tr><td>37</td><td>风起云涌</td><td>黄晓轩</td><td>女</td><td>直播部</td><td>主播</td><td>2025-08-18</td><td>2025-11-17</td><td>25.0</td><td>本地城镇</td><td>大专</td><td>广东舞蹈戏剧职业学院</td><td>舞蹈表演</td></tr>
+                    <tr><td>39</td><td>涌动花鱼</td><td>杨卓珊</td><td>女</td><td>客服部</td><td>售前客服</td><td>2025-09-10</td><td>2025-12-09</td><td>25.0</td><td>省内农村</td><td>大专</td><td>广东交通职业技术学院</td><td>会展策划与管理</td></tr>
+                    <tr><td>40</td><td>无虑传媒</td><td>刘培凡</td><td>女</td><td>直播部</td><td>主播</td><td>2025-09-11</td><td>2025-12-10</td><td>29.0</td><td>省内城镇</td><td>本科</td><td>华南理工大学</td><td></td></tr>
+                    <tr><td>41</td><td>无虑传媒</td><td>陈美君</td><td>女</td><td>直播部</td><td>主播</td><td>2025-09-15</td><td>2025-12-14</td><td>23.0</td><td>省外农村</td><td>大专</td><td>桂平艺术学院</td><td>美术</td></tr>
+                    <tr><td>42</td><td>无虑传媒</td><td>蔡丽桃</td><td>女</td><td>直播部</td><td>主播</td><td>2025-09-19</td><td>2025-12-18</td><td>28.0</td><td>省外农村</td><td>高中</td><td></td><td></td></tr>
+                    <tr><td>44</td><td>涌动花鱼</td><td>郭家惠</td><td>女</td><td>人事行政部</td><td>保洁</td><td>2025-09-22</td><td>2025-12-21</td><td>53.0</td><td></td><td></td><td></td><td></td></tr>
+                    <tr><td>46</td><td>无虑传媒</td><td>郑柔</td><td>女</td><td>直播部</td><td>主播</td><td>2025-10-14</td><td>2026-01-13</td><td>24.0</td><td>本地城镇</td><td>大专</td><td>暨南大学</td><td>英语</td></tr>
+                    <tr><td>47</td><td>逆戟鲸</td><td>王畅</td><td>女</td><td>财务部</td><td>财务</td><td>2025-10-21</td><td>2026-01-20</td><td>27.0</td><td>省外农村</td><td>大专</td><td>珠海科技大学</td><td>会计电算化</td></tr>
+                    <tr><td>48</td><td>无虑传媒</td><td>柳思奕</td><td>女</td><td>直播部</td><td>主播</td><td>2025-10-23</td><td>2026-01-22</td><td>21.0</td><td>省外农村</td><td>大专</td><td>广东财经大学</td><td>数字媒体艺术</td></tr>
+                    <tr><td>49</td><td>无虑传媒</td><td>黄莉莎</td><td>女</td><td>直播部</td><td>主播</td><td>2025-10-24</td><td>2026-01-23</td><td>28.0</td><td>省外城镇</td><td>大专</td><td>广东科学技术职业学院</td><td>旅游管理</td></tr>
+                    <tr><td>53</td><td>风起云涌</td><td>申雨</td><td>女</td><td>直播部</td><td>主播</td><td>2025-11-13</td><td>2026-02-12</td><td>31.0</td><td>省外农村</td><td>大专</td><td>河南经贸职业学院</td><td>国际经济与贸易</td></tr>
+                    <tr><td>55</td><td>谷春雨</td><td>李若楠</td><td>女</td><td>直播部</td><td>主播</td><td>2025-11-25</td><td>2026-02-24</td><td>28.0</td><td>省外农村</td><td>高中</td><td>巴彦三高</td><td></td></tr>
+                    <tr><td>58</td><td>无虑传媒</td><td>陈旭莱</td><td>女</td><td>直播部</td><td>主播</td><td>2025-12-11</td><td>2026-03-10</td><td>23.0</td><td>省外城镇</td><td>本科</td><td>湖南信息学院</td><td>电子商务</td></tr>
+                    <tr><td>59</td><td>风起云涌</td><td>罗小玉</td><td>女</td><td>直播运营部</td><td>直播运营助理</td><td>2025-12-22</td><td>2026-03-23</td><td>24.0</td><td>省内农村</td><td>本科</td><td>广东外语外贸大学南国商学院</td><td>会计</td></tr>
+                    <tr><td>61</td><td>逆戟鲸</td><td>宋佳琪</td><td>女</td><td>人事行政部</td><td>人事专员</td><td>2026-01-09</td><td>2026-04-08</td><td>26.0</td><td>省外农村</td><td>大专</td><td>厦门集美大学</td><td>学前教育</td></tr>
+                    <tr><td>62</td><td>涌动花鱼</td><td>秦俏敏</td><td>女</td><td>直播运营部</td><td>直播运营助理</td><td>2026-01-10</td><td>2026-04-09</td><td>23.0</td><td>省内农村</td><td>本科</td><td>南宁师范大学</td><td>秘书学</td></tr>
+                    <tr><td>63</td><td>涌动花鱼</td><td>王诗雅</td><td>女</td><td>集团法务部</td><td>法务部</td><td>2026-01-12</td><td>2026-04-11</td><td>28.0</td><td>本地城镇</td><td>本科</td><td>沈阳工业大学</td><td>法学</td></tr>
+                    <tr><td>64</td><td>逆戟鲸</td><td>吴婉盈</td><td>女</td><td>商务部</td><td>商务BD</td><td>2026-01-16</td><td>2026-04-15</td><td>26.0</td><td>外地城镇</td><td>大专</td><td>中山职业技术学院</td><td>学前教育</td></tr>
+                    <tr><td>65</td><td>无虑传媒</td><td>沈明珠</td><td>女</td><td>直播部</td><td>主播</td><td>2026-01-21</td><td>2026-04-20</td><td>27.0</td><td>省外农村</td><td>本科</td><td>西华师范大学</td><td>小学教育</td></tr>
+                    <tr><td>69</td><td>涌动花鱼</td><td>蔡秀玲</td><td>女</td><td>店铺运营部</td><td>店铺运营</td><td>2026-04-07</td><td>2026-10-06</td><td>28.0</td><td>省内农村</td><td>未婚</td><td>珠海市城市职业技术学院</td><td>学前教育</td></tr>
+                    <tr><td>71</td><td>涌动花鱼</td><td>温昌凤</td><td>女</td><td>财务部</td><td>财务</td><td>2026-04-16</td><td>2026-10-15</td><td>34.0</td><td>省内农村</td><td>本科</td><td>华南师范大学</td><td>工商管理</td></tr>
+                    <tr><td>72</td><td>涌动花鱼</td><td>戴慧敏</td><td>女</td><td>财务部</td><td>财务</td><td>2026-04-17</td><td>2026-10-16</td><td>28.0</td><td>省外城镇</td><td>大专</td><td>广东金融学院</td><td>人力资源管理</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div>
+                  <h3>男性员工明细</h3>
+                  <div class="people-table-wrap compact wide">
+                    <table>
+                      <thead><tr><th>序号</th><th>组织</th><th>姓名</th><th>性别</th><th>部门</th><th>职位</th><th>入职日期</th><th>转正日期</th><th>年龄</th><th>户籍类型</th><th>学历</th><th>毕业学校</th><th>专业</th></tr></thead>
+                      <tbody>
+                    <tr><td>1</td><td>涌动花鱼</td><td>李磊磊</td><td>男</td><td>产品部</td><td>产品经理</td><td>2024-11-01</td><td></td><td>39.0</td><td>湖北/农村</td><td></td><td></td><td></td></tr>
+                    <tr><td>5</td><td>逆戟鲸</td><td>李冬</td><td>男</td><td>商务部</td><td>商务主管</td><td>2024-11-25</td><td></td><td>27.0</td><td>山东/农村</td><td></td><td></td><td></td></tr>
+                    <tr><td>10</td><td>谷春雨</td><td>黄伟宁</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-03-15</td><td>2025-06-14</td><td>32.0</td><td>广东/城镇（本地）</td><td>高中</td><td>珠海第四中学</td><td></td></tr>
+                    <tr><td>13</td><td>涌动花鱼</td><td>沈启明</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-03-27</td><td>2025-06-26</td><td>32.0</td><td>广东/农村（本地）</td><td>大专</td><td>广州城市职业技术学院</td><td>计算机应用</td></tr>
+                    <tr><td>16</td><td>无虑传媒</td><td>梁源</td><td>男</td><td>直播部</td><td>主播</td><td>2025-04-18</td><td>2025-07-17</td><td>25.0</td><td>省内城镇</td><td>大专</td><td>私立华联学院</td><td>空中乘务</td></tr>
+                    <tr><td>17</td><td>无虑传媒</td><td>詹永贵</td><td>男</td><td>客服部</td><td>售后客服</td><td>2025-04-21</td><td></td><td>22.0</td><td>省内农村</td><td>中专</td><td>珠海市理工职业技术学院</td><td></td></tr>
+                    <tr><td>18</td><td>谷春雨</td><td>黄荣骏</td><td>男</td><td>客服部</td><td>售前客服</td><td>2025-04-28</td><td>2025-07-27</td><td>24.0</td><td>本地城镇</td><td>大专</td><td>珠海技师学院</td><td>电子商务</td></tr>
+                    <tr><td>20</td><td>涌动花鱼</td><td>李如满</td><td>男</td><td>产品部</td><td>产品专员</td><td>2025-04-28</td><td>2025-07-24</td><td>52.0</td><td>省内农村</td><td>中专</td><td>龙岩中专</td><td>电子专业</td></tr>
+                    <tr><td>22</td><td>无虑传媒</td><td>陈裕豪</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-05-04</td><td>2025-08-03</td><td>33.0</td><td>本地农村</td><td>中专</td><td>广州市机电技师学院</td><td></td></tr>
+                    <tr><td>24</td><td>不拘一格</td><td>陈朴</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-05-07</td><td>2025-08-06</td><td>34.0</td><td>省外城镇</td><td>本科</td><td>武汉理工大学</td><td></td></tr>
+                    <tr><td>25</td><td>空锦界设计</td><td>李锦宁</td><td>男</td><td>设计创意部</td><td>设计总监</td><td>2025-05-08</td><td>2025-08-07</td><td>35.0</td><td>省内城镇</td><td>本科</td><td>广东工业大学</td><td>艺术设计</td></tr>
+                    <tr><td>26</td><td>涌动花鱼</td><td>赖志宏</td><td>男</td><td>客服部</td><td>售后客服</td><td>2025-05-12</td><td></td><td>26.0</td><td>省内农村</td><td>大专</td><td>广东财经大学</td><td>计算机科学与技术</td></tr>
+                    <tr><td>29</td><td>涌动花鱼</td><td>何瑜星</td><td>男</td><td>客服部</td><td>售前客服</td><td>2025-06-16</td><td>2025-09-15</td><td>26.0</td><td>省内农村</td><td>高中</td><td>珠海市第三中</td><td></td></tr>
+                    <tr><td>33</td><td>风起云涌</td><td>陈家俊</td><td>男</td><td>直播部</td><td>主播</td><td>2025-07-24</td><td>2025-10-23</td><td>22.0</td><td>省外城镇</td><td>大专</td><td>珠海城市职业技术学院</td><td></td></tr>
+                    <tr><td>34</td><td>无虑传媒</td><td>江万里</td><td>男</td><td>直播运营部</td><td>直播运营助理</td><td>2025-08-04</td><td></td><td>25.0</td><td>本地城镇</td><td>大专</td><td>广州现代信息工程职业技术学院</td><td></td></tr>
+                    <tr><td>38</td><td>谷春雨</td><td>温国森</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-09-02</td><td></td><td>29.0</td><td></td><td></td><td></td><td></td></tr>
+                    <tr><td>43</td><td>无虑传媒</td><td>陈卓然</td><td>男</td><td>客服部</td><td>售前客服</td><td>2025-09-22</td><td>2025-12-21</td><td>26.0</td><td>省内农村</td><td>大专</td><td>广东开放大学</td><td>商务英语</td></tr>
+                    <tr><td>45</td><td>风起云涌</td><td>高世杰</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-09-26</td><td>2025-12-25</td><td>25.0</td><td>省外农村</td><td>大专</td><td>国家开放大学</td><td>工商管理</td></tr>
+                    <tr><td>50</td><td>谷春雨</td><td>张荣辉</td><td>男</td><td>直播运营部</td><td>直播运营助理</td><td>2025-10-28</td><td>2026-01-27</td><td>37.0</td><td>省外农村</td><td>初中</td><td>福建省漳州市南靖县城关中学</td><td></td></tr>
+                    <tr><td>51</td><td>无虑传媒</td><td>郭浩贤</td><td>男</td><td>直播运营部</td><td>直播运营助理</td><td>2025-10-28</td><td>2026-01-27</td><td>22.0</td><td>省外农村</td><td>大专</td><td>广东交通职业技术学院</td><td>软件技术</td></tr>
+                    <tr><td>52</td><td>逆戟鲸</td><td>刘欢</td><td>男</td><td>商务部</td><td>商务BD</td><td>2025-10-29</td><td>2026-01-28</td><td>37.0</td><td>本地城镇</td><td>本科</td><td>广东工业大学</td><td>艺术学院</td></tr>
+                    <tr><td>54</td><td>风起云涌</td><td>谢海峰</td><td>男</td><td>直播部</td><td>主播</td><td>2025-11-13</td><td>2026-02-12</td><td>22.0</td><td>省外农村</td><td>大专</td><td>广东科学职业技术学院</td><td>计算机</td></tr>
+                    <tr><td>56</td><td>逆戟鲸</td><td>李松熹</td><td>男</td><td>商务部</td><td>商务BD</td><td>2025-12-08</td><td>2026-03-07</td><td>23.0</td><td>省外农村</td><td>大专</td><td>火炬职业技术学院</td><td></td></tr>
+                    <tr><td>57</td><td>无虑传媒</td><td>刘富铭</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-12-09</td><td>2026-03-08</td><td>33.0</td><td>本地城镇</td><td>大专</td><td>广州科技职业技术学院</td><td>汽车工程系</td></tr>
+                    <tr><td>60</td><td>空锦界设计</td><td>李梓睿</td><td>男</td><td>设计创意部</td><td>美工</td><td>2025-12-27</td><td>2026-03-26</td><td>29.0</td><td>省外城镇</td><td>本科</td><td>四川传媒学院</td><td></td></tr>
+                    <tr><td>66</td><td>逆戟鲸</td><td>何亮亮</td><td>男</td><td>商务部</td><td>商务BD</td><td>2026-02-02</td><td>2026-05-01</td><td>26.0</td><td>外地农村</td><td>中专</td><td>甘肃省普通中等专业学校</td><td>铁路运输管理</td></tr>
+                    <tr><td>67</td><td>无虑传媒</td><td>古海南</td><td>男</td><td>直播运营部</td><td>短视频运营</td><td>2026-03-16</td><td>2026-09-14</td><td>25.0</td><td>本地城镇</td><td>大专</td><td>广东省外语艺术职业学院</td><td>数字媒体（游戏动画）</td></tr>
+                    <tr><td>68</td><td>不拘一格</td><td>韩涛</td><td>男</td><td>直播运营部</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+                    <tr><td>70</td><td>涌动花鱼</td><td>张靖祥</td><td>男</td><td>客服部</td><td>客服主管</td><td>2026-04-07</td><td>2026-10-06</td><td>37.0</td><td>本地农村</td><td>高中</td><td></td><td></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card people" id="people-detail">
+            <div class="head"><h2>在职员工详细信息</h2><button>已导入 72 名在职员工详细信息</button></div>
+            <div class="people-layout">
+              <div>
+                <div class="people-summary">
+                  <div class="metric"><span>已导入在职</span><strong>72 人</strong></div>
+                  <div class="metric"><span>已导入离职</span><strong>162 人</strong></div>
+                  <div class="metric"><span>部门数量</span><strong>10 个</strong></div>
+                  <div class="metric"><span>主力岗位</span><strong>主播 22 人</strong></div>
+                </div>
+                <div class="dept-list">
+                  <div class="dept-row"><span>直播部</span><div class="dept-track"><i style="width:100%"></i></div><strong>22</strong></div>
+                  <div class="dept-row"><span>直播运营部</span><div class="dept-track"><i style="width:64%"></i></div><strong>14</strong></div>
+                  <div class="dept-row"><span>客服部</span><div class="dept-track"><i style="width:50%"></i></div><strong>11</strong></div>
+                  <div class="dept-row"><span>商务部</span><div class="dept-track"><i style="width:32%"></i></div><strong>7</strong></div>
+                  <div class="dept-row"><span>人事行政部</span><div class="dept-track"><i style="width:23%"></i></div><strong>5</strong></div>
+                  <div class="dept-row"><span>财务部</span><div class="dept-track"><i style="width:18%"></i></div><strong>4</strong></div>
+                </div>
+                <p class="people-note">已从 Excel「在职」工作表导入 72 名在职员工详细信息：组织、姓名、性别、部门、职位、入职日期、转正日期、年龄、户籍类型、学历、毕业学校、专业。身份证号、银行卡号、电话、住址、薪资未展示。</p>
+              </div>
+              <div class="people-table-wrap wide">
+                <table>
+                  <thead><tr><th>序号</th><th>组织</th><th>姓名</th><th>性别</th><th>部门</th><th>职位</th><th>入职日期</th><th>转正日期</th><th>年龄</th><th>户籍类型</th><th>学历</th><th>毕业学校</th><th>专业</th></tr></thead>
+                  <tbody>
+                  <tr><td>1</td><td>涌动花鱼</td><td>李磊磊</td><td>男</td><td>产品部</td><td>产品经理</td><td>2024-11-01</td><td></td><td>39.0</td><td>湖北/农村</td><td></td><td></td><td></td></tr>
+                  <tr><td>2</td><td>涌动花鱼</td><td>张丽容</td><td>女</td><td>产品部</td><td>产品专员</td><td>2024-11-07</td><td>2025-01-06</td><td>39.0</td><td>福建/农村</td><td></td><td></td><td></td></tr>
+                  <tr><td>3</td><td>涌动花鱼</td><td>易玉燕</td><td>女</td><td>客服部</td><td>兼职客服</td><td>2024-11-08</td><td></td><td>28.0</td><td></td><td></td><td></td><td></td></tr>
+                  <tr><td>4</td><td>涌动花鱼</td><td>陈思尧</td><td>女</td><td>人事行政部</td><td>人事经理</td><td>2024-11-11</td><td>2024-12-01</td><td>38.0</td><td>广东/城镇</td><td></td><td></td><td></td></tr>
+                  <tr><td>5</td><td>逆戟鲸</td><td>李冬</td><td>男</td><td>商务部</td><td>商务主管</td><td>2024-11-25</td><td></td><td>27.0</td><td>山东/农村</td><td></td><td></td><td></td></tr>
+                  <tr><td>6</td><td>元气甸甸</td><td>梁燕红</td><td>女</td><td>店铺运营部</td><td>店铺运营主管</td><td>2024-11-25</td><td>2025-02-24</td><td>30.0</td><td>广西/农村</td><td></td><td></td><td></td></tr>
+                  <tr><td>7</td><td>涌动花鱼</td><td>丁朝瑜</td><td>女</td><td>客服部</td><td>售前客服</td><td>2024-12-17</td><td>2025-02-16</td><td>26.0</td><td>广东/城镇（本地）</td><td></td><td></td><td></td></tr>
+                  <tr><td>8</td><td>无虑传媒</td><td>郑梦舒</td><td>女</td><td>直播部</td><td>主播</td><td>2025-02-25</td><td>2025-05-24</td><td>26.0</td><td>广东/农村（外地）</td><td>大专</td><td>广东科学技术职业学院</td><td>移动商务</td></tr>
+                  <tr><td>9</td><td>涌动花鱼</td><td>吴家乐</td><td>女</td><td>直播部</td><td>主播</td><td>2025-03-03</td><td>2025-06-02</td><td>28.0</td><td>广东/农村（外地）</td><td>大专</td><td>河源职业技术学院</td><td>工业设计</td></tr>
+                  <tr><td>10</td><td>谷春雨</td><td>黄伟宁</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-03-15</td><td>2025-06-14</td><td>32.0</td><td>广东/城镇（本地）</td><td>高中</td><td>珠海第四中学</td><td></td></tr>
+                  <tr><td>11</td><td>逆戟鲸</td><td>李梓晴</td><td>女</td><td>商务部</td><td>商务BD</td><td>2025-03-18</td><td></td><td>24.0</td><td>广东/城镇（本地）</td><td>本科</td><td>北京理工大学珠海学院</td><td>英语</td></tr>
+                  <tr><td>12</td><td>涌动花鱼</td><td>余婷</td><td>女</td><td>财务部</td><td>财务</td><td>2025-03-24</td><td></td><td>35.0</td><td>广东/城镇（外地）</td><td>大专</td><td>广东南方职业学院</td><td>会计</td></tr>
+                  <tr><td>13</td><td>涌动花鱼</td><td>沈启明</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-03-27</td><td>2025-06-26</td><td>32.0</td><td>广东/农村（本地）</td><td>大专</td><td>广州城市职业技术学院</td><td>计算机应用</td></tr>
+                  <tr><td>14</td><td>涌动花鱼</td><td>闫平</td><td>女</td><td>人事行政部</td><td>人事专员</td><td>2025-04-08</td><td></td><td>28.0</td><td>省外农村</td><td>本科</td><td>上海海洋大学</td><td>海洋生物</td></tr>
+                  <tr><td>15</td><td>无虑传媒</td><td>蔡惠娴</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-14</td><td>2025-07-14</td><td>36.0</td><td>本地城镇</td><td>本科</td><td>广东外语外贸大学</td><td>艺术设计</td></tr>
+                  <tr><td>16</td><td>无虑传媒</td><td>梁源</td><td>男</td><td>直播部</td><td>主播</td><td>2025-04-18</td><td>2025-07-17</td><td>25.0</td><td>省内城镇</td><td>大专</td><td>私立华联学院</td><td>空中乘务</td></tr>
+                  <tr><td>17</td><td>无虑传媒</td><td>詹永贵</td><td>男</td><td>客服部</td><td>售后客服</td><td>2025-04-21</td><td></td><td>22.0</td><td>省内农村</td><td>中专</td><td>珠海市理工职业技术学院</td><td></td></tr>
+                  <tr><td>18</td><td>谷春雨</td><td>黄荣骏</td><td>男</td><td>客服部</td><td>售前客服</td><td>2025-04-28</td><td>2025-07-27</td><td>24.0</td><td>本地城镇</td><td>大专</td><td>珠海技师学院</td><td>电子商务</td></tr>
+                  <tr><td>19</td><td>无虑传媒</td><td>黄丽萍</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-28</td><td>2025-07-27</td><td>24.0</td><td>省内农村</td><td>本科</td><td>广东理工学院</td><td>商务英语</td></tr>
+                  <tr><td>20</td><td>涌动花鱼</td><td>李如满</td><td>男</td><td>产品部</td><td>产品专员</td><td>2025-04-28</td><td>2025-07-24</td><td>52.0</td><td>省内农村</td><td>中专</td><td>龙岩中专</td><td>电子专业</td></tr>
+                  <tr><td>21</td><td>涌动花鱼</td><td>申雪</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-28</td><td>2025-07-27</td><td>32.0</td><td>省外城镇</td><td>本科</td><td>英国威尔士大学</td><td>数字媒体</td></tr>
+                  <tr><td>22</td><td>无虑传媒</td><td>陈裕豪</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-05-04</td><td>2025-08-03</td><td>33.0</td><td>本地农村</td><td>中专</td><td>广州市机电技师学院</td><td></td></tr>
+                  <tr><td>23</td><td>无虑传媒</td><td>龚雪雯</td><td>女</td><td>直播部</td><td>主播</td><td>2025-05-05</td><td>2025-08-04</td><td>32.0</td><td>本地农村</td><td>本科</td><td>广东外语外贸大学</td><td>市场营销</td></tr>
+                  <tr><td>24</td><td>不拘一格</td><td>陈朴</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-05-07</td><td>2025-08-06</td><td>34.0</td><td>省外城镇</td><td>本科</td><td>武汉理工大学</td><td></td></tr>
+                  <tr><td>25</td><td>空锦界设计</td><td>李锦宁</td><td>男</td><td>设计创意部</td><td>设计总监</td><td>2025-05-08</td><td>2025-08-07</td><td>35.0</td><td>省内城镇</td><td>本科</td><td>广东工业大学</td><td>艺术设计</td></tr>
+                  <tr><td>26</td><td>涌动花鱼</td><td>赖志宏</td><td>男</td><td>客服部</td><td>售后客服</td><td>2025-05-12</td><td></td><td>26.0</td><td>省内农村</td><td>大专</td><td>广东财经大学</td><td>计算机科学与技术</td></tr>
+                  <tr><td>27</td><td>涌动花鱼</td><td>余晓枫</td><td>女</td><td>客服部</td><td>售前客服</td><td>2025-06-03</td><td>2025-09-02</td><td>25.0</td><td>本地城镇</td><td>中专</td><td>珠海理工职业技术学校</td><td>市场营销</td></tr>
+                  <tr><td>28</td><td>空锦界设计</td><td>陈施宇</td><td>女</td><td>设计创意部</td><td>美工</td><td>2025-06-12</td><td></td><td>26.0</td><td>省内城镇</td><td>本科</td><td>广东白云学院</td><td>动画</td></tr>
+                  <tr><td>29</td><td>涌动花鱼</td><td>何瑜星</td><td>男</td><td>客服部</td><td>售前客服</td><td>2025-06-16</td><td>2025-09-15</td><td>26.0</td><td>省内农村</td><td>高中</td><td>珠海市第三中</td><td></td></tr>
+                  <tr><td>30</td><td>无虑传媒</td><td>张博奕</td><td>女</td><td>直播部</td><td>主播</td><td>2025-06-24</td><td>2025-09-23</td><td>35.0</td><td>省外城镇</td><td>大专</td><td>黑龙江省高级商业学院</td><td>旅游管理</td></tr>
+                  <tr><td>31</td><td>谷春雨</td><td>赵婉蓉</td><td>女</td><td>客服部</td><td>售前客服</td><td>2025-07-07</td><td>2025-10-06</td><td>23.0</td><td>本地城镇</td><td>大专</td><td>广东财贸职业学院</td><td>大数据与会计</td></tr>
+                  <tr><td>32</td><td>逆戟鲸</td><td>郭晓彤</td><td>女</td><td>商务部</td><td>商务BD</td><td>2025-07-16</td><td>2025-10-15</td><td>25.0</td><td>省外城镇</td><td>本科</td><td>广东药科大学</td><td>中药学</td></tr>
+                  <tr><td>33</td><td>风起云涌</td><td>陈家俊</td><td>男</td><td>直播部</td><td>主播</td><td>2025-07-24</td><td>2025-10-23</td><td>22.0</td><td>省外城镇</td><td>大专</td><td>珠海城市职业技术学院</td><td></td></tr>
+                  <tr><td>34</td><td>无虑传媒</td><td>江万里</td><td>男</td><td>直播运营部</td><td>直播运营助理</td><td>2025-08-04</td><td></td><td>25.0</td><td>本地城镇</td><td>大专</td><td>广州现代信息工程职业技术学院</td><td></td></tr>
+                  <tr><td>35</td><td>涌动花鱼</td><td>刘瑞珂</td><td>女</td><td>人事行政部</td><td>行政前台</td><td>2025-08-14</td><td>2025-11-13</td><td>25.0</td><td>省外城镇</td><td>本科</td><td>湖南大学</td><td></td></tr>
+                  <tr><td>36</td><td>无虑传媒</td><td>苏淑贞</td><td>女</td><td>直播部</td><td>主播</td><td>2025-08-18</td><td>2025-11-17</td><td>28.0</td><td>本地城镇</td><td>大专</td><td>北京外国语大学</td><td>工商管理</td></tr>
+                  <tr><td>37</td><td>风起云涌</td><td>黄晓轩</td><td>女</td><td>直播部</td><td>主播</td><td>2025-08-18</td><td>2025-11-17</td><td>25.0</td><td>本地城镇</td><td>大专</td><td>广东舞蹈戏剧职业学院</td><td>舞蹈表演</td></tr>
+                  <tr><td>38</td><td>谷春雨</td><td>温国森</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-09-02</td><td></td><td>29.0</td><td></td><td></td><td></td><td></td></tr>
+                  <tr><td>39</td><td>涌动花鱼</td><td>杨卓珊</td><td>女</td><td>客服部</td><td>售前客服</td><td>2025-09-10</td><td>2025-12-09</td><td>25.0</td><td>省内农村</td><td>大专</td><td>广东交通职业技术学院</td><td>会展策划与管理</td></tr>
+                  <tr><td>40</td><td>无虑传媒</td><td>刘培凡</td><td>女</td><td>直播部</td><td>主播</td><td>2025-09-11</td><td>2025-12-10</td><td>29.0</td><td>省内城镇</td><td>本科</td><td>华南理工大学</td><td></td></tr>
+                  <tr><td>41</td><td>无虑传媒</td><td>陈美君</td><td>女</td><td>直播部</td><td>主播</td><td>2025-09-15</td><td>2025-12-14</td><td>23.0</td><td>省外农村</td><td>大专</td><td>桂平艺术学院</td><td>美术</td></tr>
+                  <tr><td>42</td><td>无虑传媒</td><td>蔡丽桃</td><td>女</td><td>直播部</td><td>主播</td><td>2025-09-19</td><td>2025-12-18</td><td>28.0</td><td>省外农村</td><td>高中</td><td></td><td></td></tr>
+                  <tr><td>43</td><td>无虑传媒</td><td>陈卓然</td><td>男</td><td>客服部</td><td>售前客服</td><td>2025-09-22</td><td>2025-12-21</td><td>26.0</td><td>省内农村</td><td>大专</td><td>广东开放大学</td><td>商务英语</td></tr>
+                  <tr><td>44</td><td>涌动花鱼</td><td>郭家惠</td><td>女</td><td>人事行政部</td><td>保洁</td><td>2025-09-22</td><td>2025-12-21</td><td>53.0</td><td></td><td></td><td></td><td></td></tr>
+                  <tr><td>45</td><td>风起云涌</td><td>高世杰</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-09-26</td><td>2025-12-25</td><td>25.0</td><td>省外农村</td><td>大专</td><td>国家开放大学</td><td>工商管理</td></tr>
+                  <tr><td>46</td><td>无虑传媒</td><td>郑柔</td><td>女</td><td>直播部</td><td>主播</td><td>2025-10-14</td><td>2026-01-13</td><td>24.0</td><td>本地城镇</td><td>大专</td><td>暨南大学</td><td>英语</td></tr>
+                  <tr><td>47</td><td>逆戟鲸</td><td>王畅</td><td>女</td><td>财务部</td><td>财务</td><td>2025-10-21</td><td>2026-01-20</td><td>27.0</td><td>省外农村</td><td>大专</td><td>珠海科技大学</td><td>会计电算化</td></tr>
+                  <tr><td>48</td><td>无虑传媒</td><td>柳思奕</td><td>女</td><td>直播部</td><td>主播</td><td>2025-10-23</td><td>2026-01-22</td><td>21.0</td><td>省外农村</td><td>大专</td><td>广东财经大学</td><td>数字媒体艺术</td></tr>
+                  <tr><td>49</td><td>无虑传媒</td><td>黄莉莎</td><td>女</td><td>直播部</td><td>主播</td><td>2025-10-24</td><td>2026-01-23</td><td>28.0</td><td>省外城镇</td><td>大专</td><td>广东科学技术职业学院</td><td>旅游管理</td></tr>
+                  <tr><td>50</td><td>谷春雨</td><td>张荣辉</td><td>男</td><td>直播运营部</td><td>直播运营助理</td><td>2025-10-28</td><td>2026-01-27</td><td>37.0</td><td>省外农村</td><td>初中</td><td>福建省漳州市南靖县城关中学</td><td></td></tr>
+                  <tr><td>51</td><td>无虑传媒</td><td>郭浩贤</td><td>男</td><td>直播运营部</td><td>直播运营助理</td><td>2025-10-28</td><td>2026-01-27</td><td>22.0</td><td>省外农村</td><td>大专</td><td>广东交通职业技术学院</td><td>软件技术</td></tr>
+                  <tr><td>52</td><td>逆戟鲸</td><td>刘欢</td><td>男</td><td>商务部</td><td>商务BD</td><td>2025-10-29</td><td>2026-01-28</td><td>37.0</td><td>本地城镇</td><td>本科</td><td>广东工业大学</td><td>艺术学院</td></tr>
+                  <tr><td>53</td><td>风起云涌</td><td>申雨</td><td>女</td><td>直播部</td><td>主播</td><td>2025-11-13</td><td>2026-02-12</td><td>31.0</td><td>省外农村</td><td>大专</td><td>河南经贸职业学院</td><td>国际经济与贸易</td></tr>
+                  <tr><td>54</td><td>风起云涌</td><td>谢海峰</td><td>男</td><td>直播部</td><td>主播</td><td>2025-11-13</td><td>2026-02-12</td><td>22.0</td><td>省外农村</td><td>大专</td><td>广东科学职业技术学院</td><td>计算机</td></tr>
+                  <tr><td>55</td><td>谷春雨</td><td>李若楠</td><td>女</td><td>直播部</td><td>主播</td><td>2025-11-25</td><td>2026-02-24</td><td>28.0</td><td>省外农村</td><td>高中</td><td>巴彦三高</td><td></td></tr>
+                  <tr><td>56</td><td>逆戟鲸</td><td>李松熹</td><td>男</td><td>商务部</td><td>商务BD</td><td>2025-12-08</td><td>2026-03-07</td><td>23.0</td><td>省外农村</td><td>大专</td><td>火炬职业技术学院</td><td></td></tr>
+                  <tr><td>57</td><td>无虑传媒</td><td>刘富铭</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-12-09</td><td>2026-03-08</td><td>33.0</td><td>本地城镇</td><td>大专</td><td>广州科技职业技术学院</td><td>汽车工程系</td></tr>
+                  <tr><td>58</td><td>无虑传媒</td><td>陈旭莱</td><td>女</td><td>直播部</td><td>主播</td><td>2025-12-11</td><td>2026-03-10</td><td>23.0</td><td>省外城镇</td><td>本科</td><td>湖南信息学院</td><td>电子商务</td></tr>
+                  <tr><td>59</td><td>风起云涌</td><td>罗小玉</td><td>女</td><td>直播运营部</td><td>直播运营助理</td><td>2025-12-22</td><td>2026-03-23</td><td>24.0</td><td>省内农村</td><td>本科</td><td>广东外语外贸大学南国商学院</td><td>会计</td></tr>
+                  <tr><td>60</td><td>空锦界设计</td><td>李梓睿</td><td>男</td><td>设计创意部</td><td>美工</td><td>2025-12-27</td><td>2026-03-26</td><td>29.0</td><td>省外城镇</td><td>本科</td><td>四川传媒学院</td><td></td></tr>
+                  <tr><td>61</td><td>逆戟鲸</td><td>宋佳琪</td><td>女</td><td>人事行政部</td><td>人事专员</td><td>2026-01-09</td><td>2026-04-08</td><td>26.0</td><td>省外农村</td><td>大专</td><td>厦门集美大学</td><td>学前教育</td></tr>
+                  <tr><td>62</td><td>涌动花鱼</td><td>秦俏敏</td><td>女</td><td>直播运营部</td><td>直播运营助理</td><td>2026-01-10</td><td>2026-04-09</td><td>23.0</td><td>省内农村</td><td>本科</td><td>南宁师范大学</td><td>秘书学</td></tr>
+                  <tr><td>63</td><td>涌动花鱼</td><td>王诗雅</td><td>女</td><td>集团法务部</td><td>法务部</td><td>2026-01-12</td><td>2026-04-11</td><td>28.0</td><td>本地城镇</td><td>本科</td><td>沈阳工业大学</td><td>法学</td></tr>
+                  <tr><td>64</td><td>逆戟鲸</td><td>吴婉盈</td><td>女</td><td>商务部</td><td>商务BD</td><td>2026-01-16</td><td>2026-04-15</td><td>26.0</td><td>外地城镇</td><td>大专</td><td>中山职业技术学院</td><td>学前教育</td></tr>
+                  <tr><td>65</td><td>无虑传媒</td><td>沈明珠</td><td>女</td><td>直播部</td><td>主播</td><td>2026-01-21</td><td>2026-04-20</td><td>27.0</td><td>省外农村</td><td>本科</td><td>西华师范大学</td><td>小学教育</td></tr>
+                  <tr><td>66</td><td>逆戟鲸</td><td>何亮亮</td><td>男</td><td>商务部</td><td>商务BD</td><td>2026-02-02</td><td>2026-05-01</td><td>26.0</td><td>外地农村</td><td>中专</td><td>甘肃省普通中等专业学校</td><td>铁路运输管理</td></tr>
+                  <tr><td>67</td><td>无虑传媒</td><td>古海南</td><td>男</td><td>直播运营部</td><td>短视频运营</td><td>2026-03-16</td><td>2026-09-14</td><td>25.0</td><td>本地城镇</td><td>大专</td><td>广东省外语艺术职业学院</td><td>数字媒体（游戏动画）</td></tr>
+                  <tr><td>68</td><td>不拘一格</td><td>韩涛</td><td>男</td><td>直播运营部</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+                  <tr><td>69</td><td>涌动花鱼</td><td>蔡秀玲</td><td>女</td><td>店铺运营部</td><td>店铺运营</td><td>2026-04-07</td><td>2026-10-06</td><td>28.0</td><td>省内农村</td><td>未婚</td><td>珠海市城市职业技术学院</td><td>学前教育</td></tr>
+                  <tr><td>70</td><td>涌动花鱼</td><td>张靖祥</td><td>男</td><td>客服部</td><td>客服主管</td><td>2026-04-07</td><td>2026-10-06</td><td>37.0</td><td>本地农村</td><td>高中</td><td></td><td></td></tr>
+                  <tr><td>71</td><td>涌动花鱼</td><td>温昌凤</td><td>女</td><td>财务部</td><td>财务</td><td>2026-04-16</td><td>2026-10-15</td><td>34.0</td><td>省内农村</td><td>本科</td><td>华南师范大学</td><td>工商管理</td></tr>
+                  <tr><td>72</td><td>涌动花鱼</td><td>戴慧敏</td><td>女</td><td>财务部</td><td>财务</td><td>2026-04-17</td><td>2026-10-16</td><td>28.0</td><td>省外城镇</td><td>大专</td><td>广东金融学院</td><td>人力资源管理</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+   </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="card female">
+            <div class="head"><h2>女性员工详细信息</h2><button>已导入 43 名女性员工详细信息</button></div>
+            <div class="female-layout">
+              <div class="female-summary">
+                <div class="metric"><span>女性员工</span><strong>43 人</strong></div>
+                <div class="metric"><span>占在职比例</span><strong>60%</strong></div>
+                <div class="metric"><span>女性最多部门</span><strong>直播部 19 人</strong></div>
+                <div class="metric"><span>明细字段</span><strong>13 项</strong></div>
+              </div>
+              <div class="people-table-wrap wide">
+                <table>
+                  <thead><tr><th>序号</th><th>组织</th><th>姓名</th><th>性别</th><th>部门</th><th>职位</th><th>入职日期</th><th>转正日期</th><th>年龄</th><th>户籍类型</th><th>学历</th><th>毕业学校</th><th>专业</th></tr></thead>
+                  <tbody>
+                  <tr><td>2</td><td>涌动花鱼</td><td>张丽容</td><td>女</td><td>产品部</td><td>产品专员</td><td>2024-11-07</td><td>2025-01-06</td><td>39.0</td><td>福建/农村</td><td></td><td></td><td></td></tr>
+                  <tr><td>3</td><td>涌动花鱼</td><td>易玉燕</td><td>女</td><td>客服部</td><td>兼职客服</td><td>2024-11-08</td><td></td><td>28.0</td><td></td><td></td><td></td><td></td></tr>
+                  <tr><td>4</td><td>涌动花鱼</td><td>陈思尧</td><td>女</td><td>人事行政部</td><td>人事经理</td><td>2024-11-11</td><td>2024-12-01</td><td>38.0</td><td>广东/城镇</td><td></td><td></td><td></td></tr>
+                  <tr><td>6</td><td>元气甸甸</td><td>梁燕红</td><td>女</td><td>店铺运营部</td><td>店铺运营主管</td><td>2024-11-25</td><td>2025-02-24</td><td>30.0</td><td>广西/农村</td><td></td><td></td><td></td></tr>
+                  <tr><td>7</td><td>涌动花鱼</td><td>丁朝瑜</td><td>女</td><td>客服部</td><td>售前客服</td><td>2024-12-17</td><td>2025-02-16</td><td>26.0</td><td>广东/城镇（本地）</td><td></td><td></td><td></td></tr>
+                  <tr><td>8</td><td>无虑传媒</td><td>郑梦舒</td><td>女</td><td>直播部</td><td>主播</td><td>2025-02-25</td><td>2025-05-24</td><td>26.0</td><td>广东/农村（外地）</td><td>大专</td><td>广东科学技术职业学院</td><td>移动商务</td></tr>
+                  <tr><td>9</td><td>涌动花鱼</td><td>吴家乐</td><td>女</td><td>直播部</td><td>主播</td><td>2025-03-03</td><td>2025-06-02</td><td>28.0</td><td>广东/农村（外地）</td><td>大专</td><td>河源职业技术学院</td><td>工业设计</td></tr>
+                  <tr><td>11</td><td>逆戟鲸</td><td>李梓晴</td><td>女</td><td>商务部</td><td>商务BD</td><td>2025-03-18</td><td></td><td>24.0</td><td>广东/城镇（本地）</td><td>本科</td><td>北京理工大学珠海学院</td><td>英语</td></tr>
+                  <tr><td>12</td><td>涌动花鱼</td><td>余婷</td><td>女</td><td>财务部</td><td>财务</td><td>2025-03-24</td><td></td><td>35.0</td><td>广东/城镇（外地）</td><td>大专</td><td>广东南方职业学院</td><td>会计</td></tr>
+                  <tr><td>14</td><td>涌动花鱼</td><td>闫平</td><td>女</td><td>人事行政部</td><td>人事专员</td><td>2025-04-08</td><td></td><td>28.0</td><td>省外农村</td><td>本科</td><td>上海海洋大学</td><td>海洋生物</td></tr>
+                  <tr><td>15</td><td>无虑传媒</td><td>蔡惠娴</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-14</td><td>2025-07-14</td><td>36.0</td><td>本地城镇</td><td>本科</td><td>广东外语外贸大学</td><td>艺术设计</td></tr>
+                  <tr><td>19</td><td>无虑传媒</td><td>黄丽萍</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-28</td><td>2025-07-27</td><td>24.0</td><td>省内农村</td><td>本科</td><td>广东理工学院</td><td>商务英语</td></tr>
+                  <tr><td>21</td><td>涌动花鱼</td><td>申雪</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-28</td><td>2025-07-27</td><td>32.0</td><td>省外城镇</td><td>本科</td><td>英国威尔士大学</td><td>数字媒体</td></tr>
+                  <tr><td>23</td><td>无虑传媒</td><td>龚雪雯</td><td>女</td><td>直播部</td><td>主播</td><td>2025-05-05</td><td>2025-08-04</td><td>32.0</td><td>本地农村</td><td>本科</td><td>广东外语外贸大学</td><td>市场营销</td></tr>
+                  <tr><td>27</td><td>涌动花鱼</td><td>余晓枫</td><td>女</td><td>客服部</td><td>售前客服</td><td>2025-06-03</td><td>2025-09-02</td><td>25.0</td><td>本地城镇</td><td>中专</td><td>珠海理工职业技术学校</td><td>市场营销</td></tr>
+                  <tr><td>28</td><td>空锦界设计</td><td>陈施宇</td><td>女</td><td>设计创意部</td><td>美工</td><td>2025-06-12</td><td></td><td>26.0</td><td>省内城镇</td><td>本科</td><td>广东白云学院</td><td>动画</td></tr>
+                  <tr><td>30</td><td>无虑传媒</td><td>张博奕</td><td>女</td><td>直播部</td><td>主播</td><td>2025-06-24</td><td>2025-09-23</td><td>35.0</td><td>省外城镇</td><td>大专</td><td>黑龙江省高级商业学院</td><td>旅游管理</td></tr>
+                  <tr><td>31</td><td>谷春雨</td><td>赵婉蓉</td><td>女</td><td>客服部</td><td>售前客服</td><td>2025-07-07</td><td>2025-10-06</td><td>23.0</td><td>本地城镇</td><td>大专</td><td>广东财贸职业学院</td><td>大数据与会计</td></tr>
+                  <tr><td>32</td><td>逆戟鲸</td><td>郭晓彤</td><td>女</td><td>商务部</td><td>商务BD</td><td>2025-07-16</td><td>2025-10-15</td><td>25.0</td><td>省外城镇</td><td>本科</td><td>广东药科大学</td><td>中药学</td></tr>
+                  <tr><td>35</td><td>涌动花鱼</td><td>刘瑞珂</td><td>女</td><td>人事行政部</td><td>行政前台</td><td>2025-08-14</td><td>2025-11-13</td><td>25.0</td><td>省外城镇</td><td>本科</td><td>湖南大学</td><td></td></tr>
+                  <tr><td>36</td><td>无虑传媒</td><td>苏淑贞</td><td>女</td><td>直播部</td><td>主播</td><td>2025-08-18</td><td>2025-11-17</td><td>28.0</td><td>本地城镇</td><td>大专</td><td>北京外国语大学</td><td>工商管理</td></tr>
+                  <tr><td>37</td><td>风起云涌</td><td>黄晓轩</td><td>女</td><td>直播部</td><td>主播</td><td>2025-08-18</td><td>2025-11-17</td><td>25.0</td><td>本地城镇</td><td>大专</td><td>广东舞蹈戏剧职业学院</td><td>舞蹈表演</td></tr>
+                  <tr><td>39</td><td>涌动花鱼</td><td>杨卓珊</td><td>女</td><td>客服部</td><td>售前客服</td><td>2025-09-10</td><td>2025-12-09</td><td>25.0</td><td>省内农村</td><td>大专</td><td>广东交通职业技术学院</td><td>会展策划与管理</td></tr>
+                  <tr><td>40</td><td>无虑传媒</td><td>刘培凡</td><td>女</td><td>直播部</td><td>主播</td><td>2025-09-11</td><td>2025-12-10</td><td>29.0</td><td>省内城镇</td><td>本科</td><td>华南理工大学</td><td></td></tr>
+                  <tr><td>41</td><td>无虑传媒</td><td>陈美君</td><td>女</td><td>直播部</td><td>主播</td><td>2025-09-15</td><td>2025-12-14</td><td>23.0</td><td>省外农村</td><td>大专</td><td>桂平艺术学院</td><td>美术</td></tr>
+                  <tr><td>42</td><td>无虑传媒</td><td>蔡丽桃</td><td>女</td><td>直播部</td><td>主播</td><td>2025-09-19</td><td>2025-12-18</td><td>28.0</td><td>省外农村</td><td>高中</td><td></td><td></td></tr>
+                  <tr><td>44</td><td>涌动花鱼</td><td>郭家惠</td><td>女</td><td>人事行政部</td><td>保洁</td><td>2025-09-22</td><td>2025-12-21</td><td>53.0</td><td></td><td></td><td></td><td></td></tr>
+                  <tr><td>46</td><td>无虑传媒</td><td>郑柔</td><td>女</td><td>直播部</td><td>主播</td><td>2025-10-14</td><td>2026-01-13</td><td>24.0</td><td>本地城镇</td><td>大专</td><td>暨南大学</td><td>英语</td></tr>
+                  <tr><td>47</td><td>逆戟鲸</td><td>王畅</td><td>女</td><td>财务部</td><td>财务</td><td>2025-10-21</td><td>2026-01-20</td><td>27.0</td><td>省外农村</td><td>大专</td><td>珠海科技大学</td><td>会计电算化</td></tr>
+                  <tr><td>48</td><td>无虑传媒</td><td>柳思奕</td><td>女</td><td>直播部</td><td>主播</td><td>2025-10-23</td><td>2026-01-22</td><td>21.0</td><td>省外农村</td><td>大专</td><td>广东财经大学</td><td>数字媒体艺术</td></tr>
+                  <tr><td>49</td><td>无虑传媒</td><td>黄莉莎</td><td>女</td><td>直播部</td><td>主播</td><td>2025-10-24</td><td>2026-01-23</td><td>28.0</td><td>省外城镇</td><td>大专</td><td>广东科学技术职业学院</td><td>旅游管理</td></tr>
+                  <tr><td>53</td><td>风起云涌</td><td>申雨</td><td>女</td><td>直播部</td><td>主播</td><td>2025-11-13</td><td>2026-02-12</td><td>31.0</td><td>省外农村</td><td>大专</td><td>河南经贸职业学院</td><td>国际经济与贸易</td></tr>
+                  <tr><td>55</td><td>谷春雨</td><td>李若楠</td><td>女</td><td>直播部</td><td>主播</td><td>2025-11-25</td><td>2026-02-24</td><td>28.0</td><td>省外农村</td><td>高中</td><td>巴彦三高</td><td></td></tr>
+                  <tr><td>58</td><td>无虑传媒</td><td>陈旭莱</td><td>女</td><td>直播部</td><td>主播</td><td>2025-12-11</td><td>2026-03-10</td><td>23.0</td><td>省外城镇</td><td>本科</td><td>湖南信息学院</td><td>电子商务</td></tr>
+                  <tr><td>59</td><td>风起云涌</td><td>罗小玉</td><td>女</td><td>直播运营部</td><td>直播运营助理</td><td>2025-12-22</td><td>2026-03-23</td><td>24.0</td><td>省内农村</td><td>本科</td><td>广东外语外贸大学南国商学院</td><td>会计</td></tr>
+                  <tr><td>61</td><td>逆戟鲸</td><td>宋佳琪</td><td>女</td><td>人事行政部</td><td>人事专员</td><td>2026-01-09</td><td>2026-04-08</td><td>26.0</td><td>省外农村</td><td>大专</td><td>厦门集美大学</td><td>学前教育</td></tr>
+                  <tr><td>62</td><td>涌动花鱼</td><td>秦俏敏</td><td>女</td><td>直播运营部</td><td>直播运营助理</td><td>2026-01-10</td><td>2026-04-09</td><td>23.0</td><td>省内农村</td><td>本科</td><td>南宁师范大学</td><td>秘书学</td></tr>
+                  <tr><td>63</td><td>涌动花鱼</td><td>王诗雅</td><td>女</td><td>集团法务部</td><td>法务部</td><td>2026-01-12</td><td>2026-04-11</td><td>28.0</td><td>本地城镇</td><td>本科</td><td>沈阳工业大学</td><td>法学</td></tr>
+                  <tr><td>64</td><td>逆戟鲸</td><td>吴婉盈</td><td>女</td><td>商务部</td><td>商务BD</td><td>2026-01-16</td><td>2026-04-15</td><td>26.0</td><td>外地城镇</td><td>大专</td><td>中山职业技术学院</td><td>学前教育</td></tr>
+                  <tr><td>65</td><td>无虑传媒</td><td>沈明珠</td><td>女</td><td>直播部</td><td>主播</td><td>2026-01-21</td><td>2026-04-20</td><td>27.0</td><td>省外农村</td><td>本科</td><td>西华师范大学</td><td>小学教育</td></tr>
+                  <tr><td>69</td><td>涌动花鱼</td><td>蔡秀玲</td><td>女</td><td>店铺运营部</td><td>店铺运营</td><td>2026-04-07</td><td>2026-10-06</td><td>28.0</td><td>省内农村</td><td>未婚</td><td>珠海市城市职业技术学院</td><td>学前教育</td></tr>
+                  <tr><td>71</td><td>涌动花鱼</td><td>温昌凤</td><td>女</td><td>财务部</td><td>财务</td><td>2026-04-16</td><td>2026-10-15</td><td>34.0</td><td>省内农村</td><td>本科</td><td>华南师范大学</td><td>工商管理</td></tr>
+                  <tr><td>72</td><td>涌动花鱼</td><td>戴慧敏</td><td>女</td><td>财务部</td><td>财务</td><td>2026-04-17</td><td>2026-10-16</td><td>28.0</td><td>省外城镇</td><td>大专</td><td>广东金融学院</td><td>人力资源管理</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="card former-source">
+            <div class="head"><h2>离职工作表导入详情</h2><button>来源：Excel「离职」工作表</button></div>
+            <div class="quick-grid">
+              <div class="metric"><span>来源文件</span><strong>花名册.xlsx</strong></div>
+              <div class="metric"><span>来源 Sheet</span><strong>离职</strong></div>
+              <div class="metric"><span>导入行数</span><strong>162 人</strong></div>
+              <div class="metric"><span>详细字段</span><strong>14 项</strong></div>
+              <div class="metric"><span>当月口径</span><strong>离职日期</strong></div>
+              <div class="metric"><span>隐私处理</span><strong>敏感字段隐藏</strong></div>
+            </div>
+            <div class="people-table-wrap compact">
+              <table>
+                <thead><tr><th>字段类型</th><th>字段名称</th><th>导入方式</th><th>说明</th></tr></thead>
+                <tbody>
+                  <tr><td>展示字段</td><td>序号、组织、姓名、性别、部门、职位</td><td>已导入</td><td>用于离职人员基本检索</td></tr>
+                  <tr><td>日期字段</td><td>入职日期、离职日期、转正日期</td><td>已导入</td><td>用于当月离职、任职周期和转正分析</td></tr>
+                  <tr><td>人员画像</td><td>年龄、户籍类型、学历、毕业学校、专业</td><td>已导入</td><td>用于人事结构分析</td></tr>
+                  <tr><td>敏感字段</td><td>联系电话、身份证号、开户行、银行卡号、住址、薪资</td><td>未展示</td><td>仅用于原始表保留，看板不暴露</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card former">
+            <div class="head"><h2>离职人员详细信息</h2><button>已导入 162 名离职人员详细信息</button></div>
+            <div class="former-layout">
+              <div class="former-summary">
+                <div class="metric"><span>累计离职</span><strong>162 人</strong></div>
+                <div class="metric"><span>2026年5月离职</span><strong>4 人</strong></div>
+                <div class="metric"><span>离职最多岗位</span><strong>主播 50 人</strong></div>
+                <div class="metric"><span>明细字段</span><strong>14 项</strong></div>
+              </div>
+              
+              <div class="people-table-wrap wide">
+                <table>
+                  <thead><tr><th>序号</th><th>组织</th><th>姓名</th><th>性别</th><th>部门</th><th>职位</th><th>入职日期</th><th>离职日期</th><th>转正日期</th><th>年龄</th><th>户籍类型</th><th>学历</th><th>毕业学校</th><th>专业</th></tr></thead>
+                  <tbody>
+                  <tr><td>1</td><td></td><td>陈德怀（离职）</td><td>男</td><td></td><td>美工</td><td>2024-11-27</td><td></td><td></td><td>27</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>2</td><td></td><td>周可纯（离职）</td><td>女</td><td></td><td>客服</td><td>2024-11-27</td><td></td><td></td><td>22</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>3</td><td></td><td>邓燕红（离职）</td><td>女</td><td></td><td>财务</td><td>2024-12-04</td><td>2025-03-05</td><td>2025-03-03</td><td>37</td><td>江西/农村</td><td></td><td></td><td></td></tr>
+<tr><td>4</td><td></td><td>王向宏（离职）</td><td>男</td><td></td><td>客服</td><td>2024-12-10</td><td>2024-12-28</td><td></td><td>28</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>5</td><td></td><td>廖冬湖（离职）</td><td>女</td><td></td><td>行政/人事</td><td>2024-12-17</td><td>2025-01-17</td><td>2025-02-16</td><td>26</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>6</td><td></td><td>陈锦璇（离职）</td><td>女</td><td></td><td>美工</td><td>2024-12-18</td><td>2025-02-25</td><td>2025-03-17</td><td>27</td><td>广东/城镇</td><td></td><td></td><td></td></tr>
+<tr><td>7</td><td></td><td>沈志君(离职)</td><td>男</td><td></td><td>行政/人事</td><td>2024-12-19</td><td>2025-04-10</td><td>2025-02-18</td><td>25</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>8</td><td></td><td>郭紫怡（离职）</td><td>女</td><td></td><td>直播运营</td><td>2024-12-26</td><td>2025-01-21</td><td>2025-03-25</td><td>25</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>9</td><td></td><td>刘芳（离职）</td><td>女</td><td></td><td>主播</td><td>2024-12-26</td><td>2024-12-30</td><td></td><td>26</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>10</td><td></td><td>刘雅欣（离职）</td><td>女</td><td></td><td>BD</td><td>2025-01-02</td><td>2025-01-02</td><td></td><td>23</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>11</td><td></td><td>高世杰（离职）</td><td>男</td><td></td><td>投手</td><td>2025-01-06</td><td>2025-02-14</td><td>2025-03-05</td><td>24</td><td>吉林/农村</td><td></td><td></td><td></td></tr>
+<tr><td>12</td><td></td><td>杨淳皓（离职）</td><td>男</td><td></td><td>美工</td><td>2025-01-06</td><td>2025-01-20</td><td>2025-04-05</td><td>25</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>13</td><td></td><td>李新怡（离职）</td><td>女</td><td></td><td>BD</td><td>2025-01-06</td><td>2025-02-13</td><td>2025-04-05</td><td>21</td><td>福建/农村</td><td></td><td></td><td></td></tr>
+<tr><td>14</td><td></td><td>戴家昌（离职）</td><td>男</td><td></td><td>BD</td><td>2025-01-10</td><td>2025-01-14</td><td>2025-04-09</td><td>23</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>15</td><td></td><td>黄嘉雯（离职）</td><td>女</td><td></td><td>私域专员</td><td>2025-02-07</td><td>2025-02-09</td><td>未定</td><td>24</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>16</td><td></td><td>李仲笑（离职）</td><td>女</td><td></td><td>BD</td><td>2025-02-10</td><td>2025-04-03</td><td>2025-05-09</td><td>33</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>17</td><td></td><td>梁建杓（离职）</td><td>男</td><td></td><td>私域专员</td><td>2025-02-24</td><td>2025-03-13</td><td>2025-05-23</td><td>26</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>18</td><td></td><td>李淑君（离职）</td><td>女</td><td></td><td>BD</td><td>2025-02-28</td><td>2025-03-07</td><td>2025-05-27</td><td>23</td><td>湖南/农村</td><td></td><td></td><td></td></tr>
+<tr><td>19</td><td></td><td>高原（离职）</td><td>男</td><td></td><td>直播运营</td><td>2025-03-04</td><td>2025-03-21</td><td>2025-06-03</td><td>36</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>20</td><td></td><td>蔡祺羽（离职）</td><td>女</td><td></td><td>直播运营助理</td><td>2025-03-05</td><td>2025-03-24</td><td>2025-06-04</td><td>26</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>21</td><td></td><td>彭业泉（离职）</td><td>男</td><td></td><td>主播</td><td>2025-03-08</td><td>2025-03-26</td><td>2025-06-07</td><td>41</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>22</td><td></td><td>余政霖（离职）</td><td>男</td><td></td><td>BD</td><td>2025-03-10</td><td>2025-04-03</td><td>2025-06-09</td><td>25</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>23</td><td></td><td>赖阳玲（离职）</td><td>女</td><td></td><td>美工</td><td>2025-03-17</td><td>2025-03-19</td><td>2025-04-16</td><td>25</td><td>广东/农村（外地）</td><td></td><td></td><td></td></tr>
+<tr><td>24</td><td></td><td>瞿诗源（离职）</td><td>男</td><td></td><td>BD</td><td>2025-04-08</td><td>2025-04-10</td><td>2025-07-07</td><td>22</td><td>湖北/农村</td><td></td><td></td><td></td></tr>
+<tr><td>25</td><td></td><td>余薇</td><td>女</td><td>视觉部</td><td>美工</td><td>2025-03-21</td><td>2025-04-18</td><td>2025-04-20</td><td>37</td><td>湖南/农村</td><td></td><td></td><td></td></tr>
+<tr><td>26</td><td></td><td>李蔚蓝</td><td>女</td><td>商务部</td><td>BD</td><td>2025-04-08</td><td>2025-04-18</td><td>2025-07-07</td><td>23</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>27</td><td></td><td>罗洪</td><td>女</td><td>商务部</td><td>BD</td><td>2025-02-10</td><td>2025-04-22</td><td>2025-05-09</td><td>26</td><td>湖南/城镇</td><td></td><td></td><td></td></tr>
+<tr><td>28</td><td></td><td>吴嘉美</td><td>女</td><td>视觉部</td><td>美工</td><td>2025-02-25</td><td>2025-04-25</td><td>2025-05-24</td><td>28</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>29</td><td></td><td>邱丽芳</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-21</td><td>2025-07-22</td><td>2025-07-20</td><td>26</td><td>省外城镇</td><td>大专</td><td>广东司法警官职业学院</td><td>刑事执行</td></tr>
+<tr><td>30</td><td></td><td>王文凤</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-21</td><td>2025-04-29</td><td>2025-07-20</td><td>28</td><td>省内城镇</td><td>大专</td><td>广东理工学院</td><td>商务日语</td></tr>
+<tr><td>31</td><td></td><td>谢佳怡</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-16</td><td>2025-05-05</td><td>2025-07-15</td><td>24</td><td>省外城镇</td><td>大专</td><td>珠海艺术学院</td><td>音乐表演</td></tr>
+<tr><td>32</td><td></td><td>陈殷馨</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-08</td><td>2025-05-07</td><td>2025-07-07</td><td>28</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>33</td><td></td><td>谢明轩</td><td>男</td><td>直播部</td><td>主播</td><td>2025-04-12</td><td>2025-05-08</td><td>2025-07-12</td><td>30</td><td>本地城镇</td><td></td><td></td><td></td></tr>
+<tr><td>34</td><td></td><td>吕嘉鸿</td><td>男</td><td>客服部</td><td>客服</td><td>2024-12-26</td><td>2025-05-08</td><td>2025-02-25</td><td>29</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>35</td><td></td><td>陈文文</td><td>女</td><td>直播部</td><td>主播</td><td>2025-03-17</td><td>2025-05-12</td><td>2025-06-16</td><td>22</td><td>河南/城镇</td><td></td><td></td><td></td></tr>
+<tr><td>36</td><td></td><td>李晓伟</td><td>男</td><td>运营部</td><td>直播运营</td><td>2025-04-29</td><td>2025-05-12</td><td>2025-07-28</td><td>40</td><td>省外城镇</td><td>大专</td><td>江西经济管理专修学院</td><td>企业管理</td></tr>
+<tr><td>37</td><td></td><td>李梓睿</td><td>男</td><td>视觉部</td><td>直播加平面</td><td>2025-02-15</td><td>2025-05-12</td><td>无</td><td>29</td><td>成都/城镇</td><td></td><td></td><td></td></tr>
+<tr><td>38</td><td></td><td>陈家俊</td><td>男</td><td>运营部</td><td>直播运营</td><td>2024-11-25</td><td>2025-05-01</td><td>2025-02-24</td><td>30</td><td>广东/农村（外地）</td><td></td><td></td><td></td></tr>
+<tr><td>39</td><td></td><td>郭子勋</td><td>女</td><td>运营部</td><td>直播运营</td><td>2025-05-07</td><td>2025-05-12</td><td>2025-08-06</td><td>30</td><td>省外城镇</td><td>本科</td><td>吉林大学珠海学院</td><td>电子商务</td></tr>
+<tr><td>40</td><td></td><td>黄志伟</td><td>男</td><td>产品部</td><td>文案策划</td><td>2025-05-07</td><td>2025-05-12</td><td>2025-08-06</td><td>31</td><td>省内城镇</td><td>本科</td><td>广州体育学院</td><td>运动康复</td></tr>
+<tr><td>41</td><td></td><td>邓浪斌</td><td>男</td><td>运营部</td><td>店铺运营</td><td>2025-05-07</td><td>2025-05-14</td><td>2025-08-06</td><td>27</td><td>省内农村</td><td>本科</td><td>国家开放大学</td><td>工商管理专业</td></tr>
+<tr><td>42</td><td></td><td>郭童</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-14</td><td>2025-05-13</td><td>2025-07-14</td><td>26</td><td>本地城镇</td><td></td><td></td><td></td></tr>
+<tr><td>43</td><td></td><td>李达达</td><td>男</td><td>客服部</td><td>客服</td><td>2024-11-26</td><td>2025-05-16</td><td>2025-01-25</td><td>23</td><td>河南/农村</td><td></td><td></td><td></td></tr>
+<tr><td>44</td><td></td><td>陈景辉</td><td>男</td><td>商务部</td><td>商务BD</td><td>2025-04-16</td><td>2025-05-14</td><td>2025-07-15</td><td>27</td><td>省内农村</td><td>中专</td><td></td><td>汽车维修</td></tr>
+<tr><td>45</td><td></td><td>刘夏洋</td><td>女</td><td>直播部</td><td>主播</td><td>2025-02-19</td><td>2025-05-11</td><td>2025-05-18</td><td>23</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>46</td><td></td><td>成曼霖</td><td>女</td><td>直播部</td><td>短视频运营</td><td>2025-05-27</td><td>2025-05-29</td><td>2025-08-26</td><td>24</td><td>本地城镇</td><td>本科</td><td>肇庆学院</td><td></td></tr>
+<tr><td>47</td><td></td><td>邢黄岩</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-04-16</td><td>2025-06-01</td><td>2025-07-15</td><td>40</td><td>省外城镇</td><td>大专</td><td>新华学院</td><td>电子商务</td></tr>
+<tr><td>48</td><td></td><td>韩岩</td><td>男</td><td>运营部</td><td>直播运营</td><td>2025-05-05</td><td>2025-06-01</td><td>2025-08-04</td><td>40</td><td>本地城镇</td><td>本科</td><td>湘潭大学</td><td>工商管理</td></tr>
+<tr><td>49</td><td></td><td>李顺凤</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-22</td><td>2025-06-07</td><td>2025-07-21</td><td>31</td><td>省外城镇</td><td>本科</td><td>贵州大学明德学院</td><td></td></tr>
+<tr><td>50</td><td></td><td>王玉青</td><td>女</td><td>直播部</td><td>主播</td><td>2025-03-05</td><td>2025-06-09</td><td>2025/4/1（提前）</td><td>25</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>51</td><td></td><td>陈嘉怡</td><td>女</td><td>客服部</td><td>客服</td><td>2025-04-29</td><td>2025-06-11</td><td>2025-07-28</td><td>26</td><td>省内农村</td><td>大专</td><td>珠海科学技术职业学院</td><td>行政管理</td></tr>
+<tr><td>52</td><td></td><td>胡东杰</td><td>女</td><td>产品部</td><td>产品经理</td><td>2025-02-01</td><td>2025-06-07</td><td>无</td><td>36</td><td>四川/城镇</td><td></td><td></td><td></td></tr>
+<tr><td>53</td><td></td><td>黄宇恒</td><td>男</td><td>直播运营部</td><td>中控</td><td>2025-04-07</td><td>2025-06-17</td><td>2025-07-06</td><td>28</td><td>安徽/城镇</td><td></td><td></td><td></td></tr>
+<tr><td>54</td><td></td><td>林沁梓(不交社保)</td><td>女</td><td>客服部</td><td>客服</td><td>2025-04-08</td><td>2025-06-19</td><td>2025-06-07</td><td>22</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>55</td><td></td><td>何明雪</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-15</td><td>2025-06-20</td><td>2025-07-15</td><td>26</td><td>省外城镇</td><td>本科</td><td>北京理工大学珠海学院</td><td>国际商务</td></tr>
+<tr><td>56</td><td></td><td>张栋</td><td>男</td><td>营养师</td><td>私域总监</td><td>2024-12-19</td><td>2025-06-24</td><td>2025-03-18</td><td>37</td><td>陕西/城镇</td><td></td><td></td><td></td></tr>
+<tr><td>57</td><td></td><td>陈美君</td><td>女</td><td>直播部</td><td>主播</td><td>2025-02-05</td><td>2025-06-07</td><td>2025-04-04</td><td>23</td><td>广西/农村</td><td></td><td></td><td></td></tr>
+<tr><td>58</td><td></td><td>宋佳</td><td>女</td><td>直播部</td><td>主播</td><td>2024-12-31</td><td></td><td>无</td><td>36</td><td>湖南/农村</td><td></td><td></td><td></td></tr>
+<tr><td>59</td><td></td><td>刘蓉蓉</td><td>女</td><td>直播部</td><td>主播</td><td>2025-05-12</td><td>2025-06-27</td><td>2025-08-11</td><td>24</td><td>省外农村</td><td>本科</td><td>广州工商学院</td><td>国际经济与贸易</td></tr>
+<tr><td>60</td><td></td><td>沈紫薇</td><td>女</td><td>直播部</td><td>主播</td><td>2024-12-01</td><td>2025-06-30</td><td>2025-02-28</td><td>36</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>61</td><td></td><td>陈静</td><td>女</td><td>直播部</td><td>主播</td><td>2025-02-25</td><td>2025-06-30</td><td>2025-05-24</td><td>29</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>62</td><td></td><td>钟佳佳</td><td>女</td><td>直播部</td><td>主播</td><td>2025-03-31</td><td>2025-06-30</td><td>2025-06-30</td><td>25</td><td>广东/农村（外地）</td><td></td><td></td><td></td></tr>
+<tr><td>63</td><td></td><td>王岩</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-14</td><td>2025-06-30</td><td>2025-07-14</td><td>26</td><td>省外农村</td><td></td><td></td><td></td></tr>
+<tr><td>64</td><td></td><td>周子慧</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-07</td><td>2025-06-30</td><td>2025-07-06</td><td>26</td><td>安徽/农村</td><td></td><td></td><td></td></tr>
+<tr><td>65</td><td></td><td>朱记婷</td><td>女</td><td>直播运营部</td><td>中控</td><td>2025-04-10</td><td>2025-06-30</td><td>2025-07-09</td><td>23</td><td>河南/农村</td><td></td><td></td><td></td></tr>
+<tr><td>66</td><td></td><td>史豫珠</td><td>女</td><td>新媒体企划部</td><td>短视频运营</td><td>2025-05-07</td><td>2025-06-30</td><td>2025-08-06</td><td>24</td><td>本地城镇</td><td>本科</td><td>广州航海学院</td><td>国际商务</td></tr>
+<tr><td>67</td><td></td><td>张帆</td><td>男</td><td>直播运营部</td><td>中控</td><td>2025-06-16</td><td>2025-06-30</td><td>2025-09-15</td><td>27</td><td>本地城镇</td><td>大专</td><td></td><td></td></tr>
+<tr><td>68</td><td></td><td>薛诗娴</td><td>女</td><td>财务部</td><td>财务</td><td>2025-02-27</td><td>2025-06-30</td><td>2025-05-26</td><td>27</td><td>山西/农村</td><td></td><td></td><td></td></tr>
+<tr><td>69</td><td></td><td>王瑜杰</td><td>男</td><td>财务部</td><td>财务</td><td>2025-06-30</td><td>2025-06-30</td><td>2025-09-29</td><td>26</td><td>省外城镇</td><td>大专</td><td>江苏财经职业技术学院</td><td>会计学</td></tr>
+<tr><td>70</td><td></td><td>谢原婷</td><td>女</td><td>商务部</td><td>BD主管</td><td>2025-02-10</td><td>2025-06-30</td><td>2025-05-09</td><td>37</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>71</td><td></td><td>张曦文</td><td>女</td><td>新媒体企划部</td><td>短视频运营</td><td>2025-06-16</td><td>2025-07-04</td><td>2025-09-15</td><td>22</td><td>省外城镇</td><td>未婚</td><td>龙岩学院</td><td>广播电视学</td></tr>
+<tr><td>72</td><td></td><td>张小蕊</td><td>女</td><td>客服部</td><td>客服</td><td>2025-04-24</td><td>2025-07-07</td><td>2025-07-23</td><td>20</td><td>省内农村</td><td>大专</td><td>广东科技学院</td><td>工商管理专业</td></tr>
+<tr><td>73</td><td></td><td>沈明珠</td><td></td><td>新媒体企划部</td><td>短视频运营</td><td>2025-06-16</td><td>2025-07-10</td><td>2025-09-15</td><td>28</td><td>省外农村</td><td>中专</td><td>南宁信息工程职业技术学校</td><td></td></tr>
+<tr><td>74</td><td></td><td>朱曼清</td><td>女</td><td>新媒体企划部</td><td>总经理助理</td><td>2025-03-15</td><td>2025-07-15</td><td>无</td><td>34</td><td>成都/城镇</td><td></td><td></td><td></td></tr>
+<tr><td>75</td><td></td><td>杨子懿</td><td></td><td>商务部</td><td>BD</td><td>2025-07-16</td><td>2025-07-22</td><td>2026-09-07</td><td>25</td><td>本地城镇</td><td>高中</td><td>/</td><td>/</td></tr>
+<tr><td>76</td><td></td><td>陈薇</td><td></td><td>设计创意部</td><td>美工</td><td>2025-06-16</td><td>2025-07-24</td><td>2026-09-14</td><td>24</td><td>省外城镇</td><td>未婚</td><td>北京理工大学珠海学院</td><td>环境设计</td></tr>
+<tr><td>77</td><td></td><td>占寒冰</td><td>女</td><td>人事行政部</td><td>行政前台</td><td>2025-02-24</td><td>2025-07-30</td><td>2025/4/1（提前）</td><td>26</td><td>福建/农村</td><td></td><td></td><td></td></tr>
+<tr><td>78</td><td></td><td>文永杰</td><td>男</td><td>新媒体企划部</td><td>商务部</td><td>商务BD</td><td>2026-03-23</td><td>2026-09-22</td><td>37</td><td>本地城镇</td><td>大专</td><td>华南理工大学</td><td>电子商务</td></tr>
+<tr><td>79</td><td></td><td>陈淑娴</td><td>女</td><td>财务部</td><td>财务</td><td>2025-09-08</td><td>2025-09-08</td><td>2025-12-07</td><td>28</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>80</td><td></td><td>唐锦盛</td><td>男</td><td>客服部</td><td>客服</td><td>2025-09-01</td><td>2025-09-10</td><td>2025-12-01</td><td>23</td><td>本地城镇</td><td>本科</td><td>广东科技学院</td><td></td></tr>
+<tr><td>81</td><td></td><td>林海文</td><td>男</td><td>商务部</td><td>商务BD</td><td>2025-09-10</td><td>2025-09-12</td><td>2025-12-09</td><td>27</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>82</td><td></td><td>刘翠冰</td><td>女</td><td>直播部</td><td>主播</td><td>2025-09-03</td><td>2025-09-03</td><td>2025-12-02</td><td>24</td><td>省内农村</td><td>大专</td><td>广东食品药品职业学院</td><td></td></tr>
+<tr><td>83</td><td></td><td>王乔</td><td>女</td><td>直播部</td><td>主播</td><td>2025-09-05</td><td>2025-09-05</td><td>2025-12-04</td><td>27</td><td>省外农村</td><td>大专</td><td></td><td>旅游管理</td></tr>
+<tr><td>84</td><td></td><td>黄佳怡</td><td>女</td><td>直播部</td><td>主播</td><td>2025-04-11</td><td>2025-09-03</td><td>2025-07-11</td><td>24</td><td>省外农村</td><td></td><td></td><td></td></tr>
+<tr><td>85</td><td></td><td>李妙莹</td><td>女</td><td>客服部</td><td>客服</td><td>2025-06-14</td><td>2025-09-14</td><td>2025-09-13</td><td>25</td><td>省外城镇</td><td>大专</td><td>广东茂名农林</td><td>电子商务</td></tr>
+<tr><td>86</td><td></td><td>罗昊</td><td>男</td><td>直播运营部</td><td>中控</td><td>2025-06-07</td><td>2025-09-19</td><td>2025-09-06</td><td>24</td><td>省内城镇</td><td>本科</td><td>广东药科大学</td><td>健康服务与管理</td></tr>
+<tr><td>87</td><td></td><td>邓泽苹</td><td>女</td><td>人事行政部</td><td>兼职保洁</td><td>2024-12-30</td><td>2025-09-22</td><td>无</td><td>56</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>88</td><td></td><td>丁子怡</td><td>女</td><td>直播部</td><td>主播</td><td>2025-09-11</td><td>2025-09-25</td><td>2025-12-10</td><td>23</td><td>省外农村</td><td>本科</td><td>珠海科技学院</td><td>广告学</td></tr>
+<tr><td>89</td><td></td><td>凌燕萍</td><td>女</td><td>财务部</td><td>财务</td><td>2025-09-09</td><td>2025-09-30</td><td>2025-12-08</td><td>40</td><td>本地城镇</td><td>大专</td><td>广东茂名职业技术学校</td><td></td></tr>
+<tr><td>90</td><td></td><td>余家杰</td><td>男</td><td>直播部</td><td>主播</td><td>2025-09-05</td><td>2025-10-14</td><td>2025-12-04</td><td>34</td><td>本地城镇</td><td>本科</td><td>中山大学新华学院</td><td></td></tr>
+<tr><td>91</td><td></td><td>潘建煌</td><td>男</td><td>直播运营部</td><td>直播运营</td><td>2025-05-09</td><td>2025-10-08</td><td>2025-08-08</td><td>27</td><td>省外农村</td><td>本科</td><td>安徽财经大学</td><td>工程造价</td></tr>
+<tr><td>92</td><td></td><td>张诗洁</td><td>女</td><td>直播部</td><td>主播</td><td>2025-10-08</td><td>2025-10-15</td><td>2026-01-08</td><td>25</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>93</td><td></td><td>巫秀珍</td><td>女</td><td>财务部</td><td>财务</td><td>2025-10-15</td><td>2025-10-20</td><td>2026-01-14</td><td>35</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>94</td><td>花鱼</td><td>张春梅</td><td>女</td><td>财务部</td><td>财务</td><td>2025-10-16</td><td></td><td>2026-01-15</td><td>30</td><td>外地农村</td><td>大专</td><td>成都航空职业技术学院</td><td>会计</td></tr>
+<tr><td>95</td><td>无虑</td><td>张盼凌</td><td>女</td><td>财务部</td><td>财务</td><td>2025-10-23</td><td>2025-11-15</td><td>2026-01-22</td><td>27</td><td>外地农村</td><td>大专</td><td>乐山师范学院</td><td>会计证</td></tr>
+<tr><td>96</td><td>无虑</td><td>黄樱岚</td><td>女</td><td>直播运营部</td><td>直播运营助理</td><td>2025-09-16</td><td>2025-11-15</td><td>2025-12-15</td><td>25</td><td>本地城镇</td><td>本科</td><td>广东白云学院</td><td>广播电视编导</td></tr>
+<tr><td>97</td><td>逆戟鲸</td><td>蓝涛</td><td>男</td><td>商务部</td><td>商务BD</td><td>2025-11-19</td><td>2025-11-19</td><td>2026-02-18</td><td>25</td><td>本地城镇</td><td>本科</td><td>珠海科技学院</td><td>工商管理</td></tr>
+<tr><td>98</td><td>无虑</td><td>黄祖娜</td><td>女</td><td>直播部</td><td>主播</td><td>2025-07-30</td><td>2025-11-14</td><td>2025-10-29</td><td>25</td><td>省外城镇</td><td>本科</td><td>湖南涉外经济学院</td><td>财务管理</td></tr>
+<tr><td>99</td><td>无虑</td><td>李苇婷</td><td>女</td><td>直播部</td><td>主播</td><td>2025-07-04</td><td>2025-11-14</td><td>2025-10-03</td><td>31</td><td>本地城镇</td><td>本科</td><td>广东工业大学华立学院</td><td>新闻学</td></tr>
+<tr><td>100</td><td>无虑</td><td>李裕童</td><td>女</td><td>直播运营部</td><td>直播运营助理</td><td>2025-07-01</td><td>2025-12-01</td><td>2025-09-30</td><td>23</td><td>本地城镇</td><td>大专</td><td></td><td>食品生物技术</td></tr>
+<tr><td>101</td><td>逆戟鲸</td><td>何星琼</td><td>女</td><td>商务部</td><td>商务BD</td><td>2025-07-28</td><td>2025-12-01</td><td>2025-10-27</td><td>25</td><td>省内农村</td><td>本科</td><td>广州商学院</td><td>国际经济与贸易</td></tr>
+<tr><td>102</td><td>逆戟鲸</td><td>刘芷珊</td><td>女</td><td>商务部</td><td>商务BD</td><td>2025-07-18</td><td>2025-12-01</td><td>2025-10-17</td><td>24</td><td>省外城镇</td><td>本科</td><td>江西师范大学科学技术学院</td><td>日语</td></tr>
+<tr><td>103</td><td>花鱼</td><td>柯妙苗</td><td>女</td><td>直播部</td><td>主播</td><td>2025-09-15</td><td>2025-12-05</td><td>2025-12-14</td><td>24</td><td>省外农村</td><td>本科</td><td>泉州师范学院</td><td></td></tr>
+<tr><td>104</td><td>无虑</td><td>黄雨菲</td><td>女</td><td>直播部</td><td>主播</td><td>2025-08-18</td><td>2025-12-08</td><td>2025-11-17</td><td>24</td><td>省外农村</td><td>大专</td><td>黄冈职业技术学院</td><td>口腔</td></tr>
+<tr><td>105</td><td>花鱼</td><td>林映静</td><td>女</td><td>直播部</td><td>主播</td><td>2025-11-13</td><td>2025-12-08</td><td>2026-02-12</td><td>35</td><td>省内城镇</td><td>大专</td><td>广东科技大学</td><td></td></tr>
+<tr><td>106</td><td>逆戟鲸</td><td>凌楚楚</td><td>女</td><td>商务部</td><td>商务BD</td><td>2025-09-17</td><td>2025-12-10</td><td>2025-12-16</td><td>23</td><td>省外农村</td><td>大专</td><td></td><td></td></tr>
+<tr><td>107</td><td>无虑</td><td>刘佩怡</td><td>女</td><td>直播部</td><td>主播</td><td>2025-11-13</td><td>2025-12-13</td><td></td><td>22</td><td></td><td>本科</td><td>北京理工大学珠海学院</td><td>环境设计</td></tr>
+<tr><td>108</td><td>无虑</td><td>许婉宁</td><td>女</td><td>直播部</td><td>主播</td><td>2025-10-29</td><td>2025-12-15</td><td></td><td>1900-01-21</td><td>省外农村</td><td>本科</td><td>北京理工大学珠海学院</td><td>食品科学与工程</td></tr>
+<tr><td>109</td><td>逆戟鲸</td><td>容锦荣</td><td>男</td><td>商务部</td><td>商务BD</td><td>2025-12-17</td><td>2025-12-18</td><td>2025-03-16</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>110</td><td>花鱼</td><td>费鹏</td><td>男</td><td>编导</td><td>编导</td><td>2025-12-08</td><td>2025-12-19</td><td>2025-03-07</td><td>36</td><td>本地城镇</td><td>本科</td><td>四川师范大学</td><td></td></tr>
+<tr><td>111</td><td>无虑</td><td>邝家凤</td><td>女</td><td>直播部</td><td>主播</td><td>2025-11-03</td><td>2025-12-18</td><td>2026-02-02</td><td>27</td><td>本地城镇</td><td>大专</td><td></td><td>市场营销</td></tr>
+<tr><td>112</td><td>谷春雨</td><td>梁佩</td><td>女</td><td>直播部</td><td>主播</td><td>2025-12-05</td><td>2025-12-26</td><td>2025-03-04</td><td>26</td><td>省内农村</td><td>大专</td><td></td><td>电子商务</td></tr>
+<tr><td>113</td><td>涌动花鱼</td><td>王馨莹</td><td>女</td><td>直播部</td><td>主播</td><td>2025-05-17</td><td>2025-12-26</td><td>1970-01-01</td><td>本地城镇</td><td>未婚</td><td>电子科技大学中山学院</td><td></td><td></td></tr>
+<tr><td>114</td><td>无虑传媒</td><td>仝越敏</td><td>女</td><td>直播部</td><td>主播</td><td>2025-12-01</td><td>2025-12-29</td><td>2026-02-28</td><td>26</td><td>省外城镇</td><td>本科</td><td>云南大学旅游文化学院</td><td>新闻学</td></tr>
+<tr><td>115</td><td>逆戟鲸</td><td>杨晴婷</td><td>女</td><td>商务部</td><td>商务BD</td><td>2025-12-17</td><td>2026-01-07</td><td>2026-03-14</td><td>22</td><td>省外农村</td><td>本科</td><td>北京理工大学珠海学院</td><td>国际经济与贸易</td></tr>
+<tr><td>116</td><td>逆戟鲸</td><td>郭丽燕</td><td>女</td><td>商务部</td><td>商务BD</td><td>2025-11-26</td><td>2025-01-10</td><td>2026-02-25</td><td>29</td><td>本地农村</td><td>中专</td><td></td><td>电子商务</td></tr>
+<tr><td>117</td><td>逆戟鲸</td><td>梁雄标</td><td>男</td><td>商务部</td><td>商务BD</td><td>2025-12-05</td><td>2025-01-14</td><td>2026-03-04</td><td>25</td><td>本地城镇</td><td>大专</td><td>汕头开放大学</td><td>工商管理</td></tr>
+<tr><td>118</td><td>逆戟鲸</td><td>杨文静</td><td>女</td><td>商务部</td><td>商务BD</td><td>2025-10-17</td><td>2025-01-14</td><td>2026-01-16</td><td>26</td><td>本地城镇</td><td>大专</td><td>顺德职业技术学院</td><td>酒店管理</td></tr>
+<tr><td>119</td><td>涌动花鱼</td><td>林炎平</td><td>女</td><td>直播部</td><td>主播</td><td>2025-12-28</td><td>2025-01-08</td><td>2026-03-27</td><td>26</td><td>省内农村</td><td>初中</td><td>丽岗中学</td><td></td></tr>
+<tr><td>120</td><td>无虑传媒</td><td>黄倩</td><td>女</td><td>直播部</td><td>主播</td><td>2025-01-07</td><td>2025-01-14</td><td>2026-04-06</td><td>32</td><td>省内城镇</td><td>中专</td><td>珠海卫校</td><td></td></tr>
+<tr><td>121</td><td>涌动花鱼</td><td>梁丽琼</td><td>女</td><td>客服部</td><td>客服</td><td>2025-09-04</td><td>2025-12-31</td><td>2025-12-03</td><td>27</td><td>省内农村</td><td>大专</td><td>广东食品药品职业学院</td><td></td></tr>
+<tr><td>122</td><td>无虑传媒</td><td>邓思琳</td><td>女</td><td>店铺运营部</td><td>店铺运营助理</td><td>2025-02-05</td><td>2026-01-16</td><td>2025/4/5（提前）</td><td>25</td><td>广东/农村（外地）</td><td></td><td></td><td></td></tr>
+<tr><td>123</td><td>涌动花鱼</td><td>李苇婷</td><td>女</td><td>新媒体运营</td><td>新媒体运营</td><td>2026-01-06</td><td>2026-01-16</td><td>2026-04-05</td><td>32</td><td>本地城镇</td><td>本科</td><td>广东工业大学华立学院</td><td>新闻学</td></tr>
+<tr><td>124</td><td>涌动花鱼</td><td>李裕童</td><td>女</td><td>直播运营部</td><td>直播运营助理</td><td>2026-01-07</td><td>2026-01-16</td><td>2026-04-06</td><td>24</td><td>本地城镇</td><td>大专</td><td></td><td>食品生物技术</td></tr>
+<tr><td>125</td><td>不拘一格</td><td>周昊</td><td>男</td><td>商务部</td><td>商务BD</td><td>2026-01-14</td><td>2026-01-27</td><td>2026-04-14</td><td>24</td><td>省外城镇</td><td>大专</td><td>暨南大学教育学院</td><td>市场营销</td></tr>
+<tr><td>126</td><td>涌动花鱼</td><td>王高鹏</td><td>男</td><td>直播运营部</td><td>直播运营助理</td><td>2025-10-16</td><td>2026-01-31</td><td>2026-01-15</td><td>31</td><td>省外农村</td><td>大专</td><td>北京会计专修学院</td><td>资产评估与管理</td></tr>
+<tr><td>127</td><td>逆戟鲸</td><td>莫坤湘</td><td>女</td><td>逆戟鲸</td><td>商务BD</td><td>2026-01-21</td><td>2026-01-27</td><td>2026-04-21</td><td>23</td><td>外地农村</td><td>大专</td><td>雅安职业技术学院</td><td>卫生检验与检疫技术</td></tr>
+<tr><td>128</td><td>逆戟鲸</td><td>蒋建华</td><td>男</td><td>商务部</td><td>商务BD</td><td>2026-01-14</td><td>2026-01-27</td><td>2026-04-14</td><td>27</td><td>外省农村</td><td>大专</td><td></td><td>产品艺术设计</td></tr>
+<tr><td>129</td><td>逆戟鲸</td><td>余春莲</td><td>女</td><td>商务部</td><td>商务BD</td><td>2026-01-14</td><td>2026-01-27</td><td>2026-04-14</td><td>25</td><td>外省农村</td><td>大专</td><td>广东交通职业技术学院</td><td>国际经济与贸易</td></tr>
+<tr><td>130</td><td>逆戟鲸</td><td>江子阳</td><td>男</td><td>逆戟鲸</td><td>抖店</td><td>2026-01-19</td><td>2026-01-19</td><td>2026-04-19</td><td>28</td><td>外地农村</td><td>本科</td><td>南京审计大学</td><td>政治 经济与哲学</td></tr>
+<tr><td>131</td><td>涌动花鱼</td><td>莫展涛</td><td>男</td><td>设计创意部</td><td>美工</td><td>2025-09-16</td><td>2026-02-06</td><td>2025-12-15</td><td>28</td><td>省内城镇</td><td>大专</td><td>广州华夏职业学院</td><td></td></tr>
+<tr><td>132</td><td>逆戟鲸</td><td>蔡奇麟</td><td>女</td><td>商务部</td><td>商务BD</td><td>2025-12-15</td><td>2026-02-09</td><td>2026-03-14</td><td>22</td><td>省内城镇</td><td>大专</td><td>珠海科技学院</td><td>市场营销</td></tr>
+<tr><td>133</td><td>无虑传媒</td><td>魏佳欣</td><td>女</td><td>直播部</td><td>主播</td><td>2025-08-18</td><td>2026-02-13</td><td>2025-11-17</td><td>23</td><td>省外农村</td><td>大专</td><td>广西经济职业技术学院</td><td></td></tr>
+<tr><td>134</td><td>不拘一格</td><td>李艺灵</td><td>女</td><td>商务部</td><td>商务BD</td><td>2026-01-19</td><td>2026-02-13</td><td>2026-04-18</td><td>23</td><td>本地城镇</td><td>本科</td><td>北京理工大学珠海学院</td><td></td></tr>
+<tr><td>135</td><td>不拘一格</td><td>李斯</td><td>女</td><td>商务部</td><td>商务BD</td><td>2026-01-26</td><td>2026-02-13</td><td>2026-04-25</td><td>24</td><td>省内农村</td><td>本科</td><td>广州商学院</td><td></td></tr>
+<tr><td>136</td><td>无虑传媒</td><td>宋佳</td><td>女</td><td>直播部</td><td>主播</td><td>2025-12-01</td><td>2026-02-02</td><td>2026-02-28</td><td>36</td><td>省外农村</td><td>大专</td><td>中山电大</td><td></td></tr>
+<tr><td>137</td><td>无虑传媒</td><td>王梓竹</td><td>女</td><td>直播部</td><td>主播</td><td>2025-10-31</td><td>2026-02-27</td><td>2026-01-30</td><td></td><td>香港特别行政区</td><td>本科</td><td>北京理工珠海学院</td><td></td></tr>
+<tr><td>138</td><td>无虑传媒</td><td>汤璐瑜</td><td>女</td><td>直播部</td><td>主播</td><td>2025-11-13</td><td>2026-02-27</td><td>2026-02-12</td><td>24</td><td></td><td>本科</td><td>北京理工大学珠海学院</td><td>环境设计</td></tr>
+<tr><td>139</td><td>谷春雨</td><td>周苗</td><td>女</td><td>直播部</td><td>主播</td><td>2025-12-09</td><td>2026-01-31</td><td>2026-03-08</td><td>28</td><td>本地农村</td><td>本科</td><td>衡阳师范学院</td><td></td></tr>
+<tr><td>140</td><td>不拘一格</td><td>廖欣怡</td><td>女</td><td>商务部</td><td>商务BD</td><td>2026-01-09</td><td>2026-03-06</td><td>2026-04-08</td><td>22</td><td>本地城镇</td><td>本科</td><td>湛江科技学院</td><td>信息管理与信息系统</td></tr>
+<tr><td>141</td><td>不拘一格</td><td>卢海璐</td><td>女</td><td>商务部</td><td>商务BD</td><td>2026-01-12</td><td>2026-03-08</td><td>2026-04-11</td><td>22</td><td>本地城镇</td><td>本科</td><td>广州工商学院</td><td>音乐学院</td></tr>
+<tr><td>142</td><td>不拘一格</td><td>黄雨菲</td><td>女</td><td>商务部</td><td>商务BD</td><td>2026-01-14</td><td>2026-03-08</td><td>2026-04-13</td><td>24</td><td>省外农村</td><td>大专</td><td>黄冈职业技术学院</td><td>口腔</td></tr>
+<tr><td>143</td><td>不拘一格</td><td>陈梦媛</td><td>女</td><td>商务部</td><td>商务BD</td><td>2026-01-21</td><td>2026-03-06</td><td>2026-04-20</td><td>39</td><td>本地城镇</td><td>本科</td><td>中央财经</td><td></td></tr>
+<tr><td>144</td><td>谷春雨</td><td>张泓泽</td><td>男</td><td>人事行政部</td><td>人事专员</td><td>2025-12-26</td><td>2026-03-10</td><td>2026-03-25</td><td>37</td><td>本地城镇</td><td>大专</td><td>广州城建职业学院</td><td>电子信息工程</td></tr>
+<tr><td>145</td><td>谷春雨</td><td>曾敏</td><td>女</td><td>直播部</td><td>主播</td><td>2026-01-16</td><td>2026-02-28</td><td>2026-04-15</td><td>23</td><td>农业户口</td><td>本科</td><td>济南大学</td><td>建筑学</td></tr>
+<tr><td>146</td><td>无虑传媒</td><td>谷栐梒</td><td>女</td><td>直播部</td><td>主播</td><td>2025-10-14</td><td>2026-02-28</td><td>2026-01-13</td><td>31</td><td>本地城镇</td><td>本科</td><td>西安信息科技学院</td><td>工商企业管理</td></tr>
+<tr><td>147</td><td>谷春雨</td><td>钟佳佳</td><td>女</td><td>直播部</td><td>主播</td><td>2025-12-01</td><td>2026-03-04</td><td>2026-02-28</td><td>25</td><td>省内城镇</td><td>中专</td><td></td><td></td></tr>
+<tr><td>148</td><td>涌动花鱼</td><td>吴倩</td><td>女</td><td>财务部</td><td>财务</td><td>2025-12-01</td><td>2026-03-11</td><td>2026-02-28</td><td>26</td><td>本地城镇</td><td>大专</td><td>广州城建职业技术学院</td><td>会计</td></tr>
+<tr><td>149</td><td>无虑传媒</td><td>潘蔚锋</td><td>男</td><td>直播部</td><td>主播</td><td>2026-03-16</td><td>2026-03-19</td><td>2026-06-15</td><td>29</td><td>本地城镇</td><td>本科</td><td>天津传媒学院</td><td>影视编导</td></tr>
+<tr><td>150</td><td>逆戟鲸</td><td>梁倩文</td><td>女</td><td>商务部</td><td>商务BD</td><td>2026-01-21</td><td></td><td>2026-04-20</td><td>29</td><td>外地城镇</td><td>中专</td><td></td><td>电子商务</td></tr>
+<tr><td>151</td><td>逆戟鲸</td><td>代峻杰</td><td>男</td><td>商务部</td><td>商务BD</td><td>2026-02-02</td><td></td><td>2026-05-01</td><td>1900-01-21</td><td>本地城镇</td><td>本科</td><td>澳门城市大学</td><td>环境艺术设计</td></tr>
+<tr><td>152</td><td>涌动花鱼</td><td>朱玉静</td><td>女</td><td>财务部</td><td>财务主管</td><td>2026-01-09</td><td>2026-03-28</td><td>2026-04-08</td><td>36</td><td>省外农村</td><td>大专</td><td>武汉理工学院</td><td>会计</td></tr>
+<tr><td>153</td><td>涌动花鱼</td><td>彭晓君</td><td>女</td><td>直播部</td><td>主播</td><td>2026-03-09</td><td>2026-03-30</td><td>2026-06-08</td><td>32</td><td>本地城镇</td><td>大专</td><td>广州民航职业技术学院</td><td>空中乘务</td></tr>
+<tr><td>154</td><td>谷春雨</td><td>张曦文</td><td>女</td><td>直播运营部</td><td>运营助理</td><td>2026-01-14</td><td>2026-04-15</td><td>2026-06-30</td><td>22</td><td>城镇</td><td>本科</td><td>商丘学院</td><td>电子商务</td></tr>
+<tr><td>155</td><td>涌动花鱼</td><td>杨子懿</td><td>男</td><td>渠道运营部</td><td>渠道运营经理</td><td>2026-03-09</td><td>2026-04-28</td><td>2026-09-07</td><td>35</td><td>本地城镇</td><td>本科</td><td>新西兰奥克兰大学</td><td>美术</td></tr>
+<tr><td>156</td><td>涌动花鱼</td><td>黄辉玲</td><td>女</td><td>财务部</td><td>财务经理</td><td>2025-12-04</td><td>2026-04-30</td><td>2026-03-03</td><td>38</td><td>本地城镇</td><td>本科</td><td>中南财经政法大学</td><td>会计</td></tr>
+<tr><td>157</td><td>涌动花鱼</td><td>陈瑞希</td><td>男</td><td>客服部</td><td>客服主管</td><td>2024-12-21</td><td>2026-04-30</td><td>2025/3/1（提前）</td><td>26</td><td>广东/农村（外地）</td><td>中专</td><td></td><td>计算机</td></tr>
+<tr><td>158</td><td>涌动花鱼</td><td>陈思美</td><td>女</td><td>店铺运营部</td><td>店铺运营助理</td><td>2025-01-15</td><td>2026-05-09</td><td>2025-03-14</td><td>26</td><td>广东/农村（外地）</td><td>大专</td><td>广东科学技术职业学院</td><td>电子商务</td></tr>
+<tr><td>159</td><td>涌动花鱼</td><td>伍海怡</td><td>女</td><td>店铺运营部</td><td>店铺运营助理</td><td>2025-06-09</td><td>2026-05-10</td><td>2025-09-08</td><td>25</td><td>省内农村</td><td>本科</td><td>韩山师范学院</td><td>网络与新媒体</td></tr>
+<tr><td>160</td><td>涌动花鱼</td><td>袁圆</td><td>女</td><td>设计创意部</td><td>美工</td><td>2025-08-01</td><td>2026-05-09</td><td>2025-10-31</td><td>20</td><td>省外农村</td><td>本科</td><td>北京理工珠海学院</td><td>视觉传播与制作</td></tr>
+<tr><td>161</td><td>无虑传媒</td><td>曾祥灵</td><td>男</td><td>商务部</td><td>商务BD</td><td>2026-03-23</td><td>2026-05-12</td><td>2026-09-22</td><td>32</td><td>省内农村</td><td>高中</td><td>四矿高中</td><td></td></tr>
+<tr><td>162</td><td>逆戟鲸</td><td>张嘉熙</td><td>女</td><td>商务部</td><td>商务BD</td><td></td><td>2025-01-10</td><td>2025/3/1（提前）</td><td>25</td><td></td><td>大专</td><td>广东工商职业技术大学</td><td>工商管理</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+<section class="card date-rule">
+            <div class="head"><h2>离职日期统计口径</h2><button>统计区间：2026-05-01 ~ 2026-05-31</button></div>
+            <div class="quick-grid">
+              <div class="metric"><span>统计字段</span><strong>离职日期</strong></div>
+              <div class="metric"><span>来源 Sheet</span><strong>离职</strong></div>
+              <div class="metric"><span>命中记录</span><strong>4 人</strong></div>
+              <div class="metric"><span>最早离职日</span><strong>2026-05-09</strong></div>
+              <div class="metric"><span>最晚离职日</span><strong>2026-05-12</strong></div>
+              <div class="metric"><span>筛选条件</span><strong>年月=2026-05</strong></div>
+            </div>
+            <div class="people-table-wrap compact">
+              <table>
+                <thead><tr><th>姓名</th><th>性别</th><th>部门</th><th>职位</th><th>入职日期</th><th>离职日期</th><th>统计说明</th></tr></thead>
+                <tbody>
+                  <tr><td>陈思美</td><td>女</td><td>店铺运营部</td><td>店铺运营助理</td><td>2025-01-15</td><td>2026-05-09</td><td>离职日期落入 2026 年 5 月</td></tr>
+                  <tr><td>伍海怡</td><td>女</td><td>店铺运营部</td><td>店铺运营助理</td><td>2025-06-09</td><td>2026-05-10</td><td>离职日期落入 2026 年 5 月</td></tr>
+                  <tr><td>袁圆</td><td>女</td><td>设计创意部</td><td>美工</td><td>2025-08-01</td><td>2026-05-09</td><td>离职日期落入 2026 年 5 月</td></tr>
+                  <tr><td>曾祥灵</td><td>男</td><td>商务部</td><td>商务BD</td><td>2026-03-23</td><td>2026-05-12</td><td>离职日期落入 2026 年 5 月</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card month-leavers" id="month-leavers">
+            <div class="head"><h2>当月离职管理</h2><button>2026年5月 · 已导入 4 名离职人员详细信息</button></div>
+            <div class="month-leavers-layout">
+              <div class="month-leavers-summary">
+                <div class="metric"><span>2026年5月离职</span><strong>4 人</strong></div>
+                <div class="metric"><span>性别分布</span><strong>女 3 / 男 1</strong></div>
+                <div class="metric"><span>最多岗位</span><strong>店铺运营助理 2 人</strong></div>
+                <div class="metric"><span>明细字段</span><strong>14 项</strong></div>
+              </div>
+              <div class="people-table-wrap compact wide">
+                <table>
+                  <thead><tr><th>序号</th><th>组织</th><th>姓名</th><th>性别</th><th>部门</th><th>职位</th><th>入职日期</th><th>离职日期</th><th>转正日期</th><th>年龄</th><th>户籍类型</th><th>学历</th><th>毕业学校</th><th>专业</th></tr></thead>
+                  <tbody>
+                  <tr><td>158</td><td>涌动花鱼</td><td>陈思美</td><td>女</td><td>店铺运营部</td><td>店铺运营助理</td><td>2025-01-15</td><td>2026-05-09</td><td>2025-03-14</td><td>26</td><td>广东/农村（外地）</td><td>大专</td><td>广东科学技术职业学院</td><td>电子商务</td></tr>
+                  <tr><td>159</td><td>涌动花鱼</td><td>伍海怡</td><td>女</td><td>店铺运营部</td><td>店铺运营助理</td><td>2025-06-09</td><td>2026-05-10</td><td>2025-09-08</td><td>25</td><td>省内农村</td><td>本科</td><td>韩山师范学院</td><td>网络与新媒体</td></tr>
+                  <tr><td>160</td><td>涌动花鱼</td><td>袁圆</td><td>女</td><td>设计创意部</td><td>美工</td><td>2025-08-01</td><td>2026-05-09</td><td>2025-10-31</td><td>20</td><td>省外农村</td><td>本科</td><td>北京理工珠海学院</td><td>视觉传播与制作</td></tr>
+                  <tr><td>161</td><td>无虑传媒</td><td>曾祥灵</td><td>男</td><td>商务部</td><td>商务BD</td><td>2026-03-23</td><td>2026-05-12</td><td>2026-09-22</td><td>32</td><td>省内农村</td><td>高中</td><td>四矿高中</td><td></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="card quick">
+            <div class="head"><h2>快捷入口</h2><button>更多</button></div>
+            <div class="quick-grid">
+              <button><span>流程</span><strong>发起申请</strong></button>
+              <button><span>审批</span><strong>我的审批</strong></button>
+              <button><span>通知</span><strong>抄送我的</strong></button>
+              <button><span>待办</span><strong>我的待办</strong></button>
+              <div class="metric"><span>本月办结</span><strong>32 项</strong></div>
+              <div class="metric"><span>待阅公告</span><strong>3 项</strong></div>
+            </div>
+          </section>
+
+          <section class="card approvals">
+            <div class="head"><h2>待处理审批</h2><button>全部审批</button></div>
+            <table>
+              <thead><tr><th>流程名称</th><th>申请人</th><th>当前节点</th><th>状态</th></tr></thead>
+              <tbody>
+                <tr><td>员工转正申请</td><td>李四</td><td>部门负责人审批</td><td><span class="badge">待审批</span></td></tr>
+                <tr><td>办公用品申领</td><td>王五</td><td>行政审批</td><td><span class="badge">待审批</span></td></tr>
+                <tr><td>固定资产采购申请</td><td>孙七</td><td>行政审批</td><td><span class="badge red">已超时</span></td></tr>
+                <tr><td>合同用印申请</td><td>周八</td><td>法务审批</td><td><span class="badge">待审批</span></td></tr>
+                <tr><td>费用报销单</td><td>吴九</td><td>财务审批</td><td><span class="badge orange">待复核</span></td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section class="card risk">
+            <div class="head"><h2>高风险流程监控</h2><button>批量催办</button></div>
+            <table>
+              <thead><tr><th>流程</th><th>节点</th><th>预警</th><th>状态</th></tr></thead>
+              <tbody>
+                <tr><td>固定资产采购申请</td><td>行政审批</td><td>1天2小时</td><td><span class="badge red">已超时</span></td></tr>
+                <tr><td>合同用印申请</td><td>法务审批</td><td>6小时45分</td><td><span class="badge red">已超时</span></td></tr>
+                <tr><td>费用报销单</td><td>财务审批</td><td>25小时10分</td><td><span class="badge orange">即将超时</span></td></tr>
+                <tr><td>办公场地变更申请</td><td>行政审批</td><td>25小时20分</td><td><span class="badge orange">即将超时</span></td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section class="card asset" id="asset-section">
+            <div class="head"><h2>设备管理（扫码）</h2><button>进入资产</button></div>
+            <div class="asset-body">
+              <div class="asset-box">
+                <h3>联想 ThinkPad X1 Carbon</h3>
+                <p>资产编号：IT-2024-000123</p>
+                <p>使用人：张三（行政部）</p>
+                <p>状态：借用中 · 集团总部行政部</p>
+                <p>质保到期：2027-03-11</p>
+              </div>
+              <div class="qr">
+                <img src="public/assets/reference-qr.png" alt="" />
+                <span>资产二维码</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="card timeline">
+            <div class="head"><h2>审批动态</h2><button>查看详情</button></div>
+            <div class="steps">
+              <div class="step"><strong>提交申请</strong><span>张三 · 2025-05-21 09:30</span></div>
+              <div class="step active"><strong>部门负责人审批</strong><span>当前节点 · 待审批</span></div>
+              <div class="step"><strong>行政审批</strong><span>未到达</span></div>
+              <div class="step"><strong>财务审批</strong><span>未到达</span></div>
+              <div class="step"><strong>流程结束</strong><span>未到达</span></div>
+            </div>
+          </section>
+
+          <section class="card resource" id="resource-section">
+            <div class="head"><h2>资源预约概览</h2><button>冲突检查</button></div>
+            <div class="calendar">
+              <div class="bar"><i style="width: 75%"></i><span>一号会议室 · 已预约 3/4</span></div>
+              <div class="bar"><i style="width: 62%"></i><span>二号会议室 · 已预约 5/8</span></div>
+              <div class="bar"><i style="width: 100%; background: #d92d20"></i><span>集团大会堂 · 已满 1/1</span></div>
+              <div class="bar"><i style="width: 50%; background: #00b8a9"></i><span>商务车A · 已预约 1/2</span></div>
+              <div class="bar"><i style="width: 88%; background: #f97316"></i><span>直播一区 · 已预约 8/12</span></div>
+            </div>
+          </section>
+
+          <section class="card audit" id="audit-section">
+            <div class="head"><h2>审计日志</h2><button>导出</button></div>
+            <table>
+              <thead><tr><th>操作时间</th><th>操作人</th><th>部门</th><th>类型</th><th>对象</th><th>内容</th><th>结果</th><th>IP</th></tr></thead>
+              <tbody>
+                <tr><td>2025-05-21 09:45:12</td><td>张三</td><td>行政部</td><td>更新</td><td>员工档案</td><td>更新了联系方式</td><td>成功</td><td>10.10.2.15</td></tr>
+                <tr><td>2025-05-21 09:30:21</td><td>李四</td><td>人力资源部</td><td>新增</td><td>员工入职</td><td>新增员工入职信息</td><td>成功</td><td>10.10.2.16</td></tr>
+                <tr><td>2025-05-21 09:12:05</td><td>王五</td><td>行政部</td><td>提交审批</td><td>办公用品申领</td><td>提交办公用品申领单</td><td>成功</td><td>10.10.2.17</td></tr>
+                <tr><td>2025-05-20 17:25:44</td><td>周八</td><td>法务部</td><td>审批</td><td>合同用印申请</td><td>同意用印</td><td>成功</td><td>10.10.2.18</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
+
+

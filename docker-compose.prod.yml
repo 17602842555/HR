@@ -1,0 +1,83 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:?POSTGRES_USER is required} -d ${POSTGRES_DB:?POSTGRES_DB is required}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}?schema=public
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8787
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      COOKIE_NAME: ${COOKIE_NAME:-oa_session}
+      COOKIE_MAX_AGE_SECONDS: ${COOKIE_MAX_AGE_SECONDS:-28800}
+      AUTH_FAILED_LOGIN_LIMIT: ${AUTH_FAILED_LOGIN_LIMIT:-5}
+      AUTH_FAILED_LOGIN_WINDOW_MS: ${AUTH_FAILED_LOGIN_WINDOW_MS:-600000}
+      AUTH_FAILED_LOGIN_MAX_KEYS: ${AUTH_FAILED_LOGIN_MAX_KEYS:-10000}
+      FILE_STORAGE_DRIVER: ${FILE_STORAGE_DRIVER:-local}
+      FILE_STORAGE_DIR: ${FILE_STORAGE_DIR:?FILE_STORAGE_DIR is required}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-}
+      OBJECT_STORAGE_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:-}
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:-}
+      OBJECT_STORAGE_PREFIX: ${OBJECT_STORAGE_PREFIX:-}
+      OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-1}
+      FILE_MAX_UPLOAD_BYTES: ${FILE_MAX_UPLOAD_BYTES:-5242880}
+      IMPORT_MAX_HTML_BYTES: ${IMPORT_MAX_HTML_BYTES:-10485760}
+      API_BODY_LIMIT_BYTES: ${API_BODY_LIMIT_BYTES:-10551296}
+      DEFAULT_TENANT_CODE: ${DEFAULT_TENANT_CODE:-default}
+      DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-admin@oa.local}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-}
+      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN is required}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+      RUN_DB_SEED: ${RUN_DB_SEED:-0}
+      ALLOW_PRODUCTION_SEED: ${ALLOW_PRODUCTION_SEED:-0}
+    volumes:
+      - "file-storage:${FILE_STORAGE_DIR:?FILE_STORAGE_DIR is required}"
+    expose:
+      - "8787"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8787/ready >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        VITE_REQUIRE_API: "1"
+        VITE_DEMO_FALLBACK: "0"
+    restart: always
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  postgres-data:
+  file-storage:

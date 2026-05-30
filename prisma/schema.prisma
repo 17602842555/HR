@@ -1,0 +1,614 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  LEAVED
+  SUSPENDED
+}
+
+enum WorkflowDefinitionStatus {
+  DRAFT
+  ACTIVE
+  DISABLED
+}
+
+enum WorkflowInstanceStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  CANCELLED
+}
+
+enum WorkflowNodeStatus {
+  PENDING
+  ACTIVE
+  APPROVED
+  REJECTED
+  SKIPPED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  TRANSFERRED
+}
+
+enum AssetStatus {
+  AVAILABLE
+  BORROWED
+  IN_USE
+  REPAIRING
+  RETIRED
+}
+
+enum ResourceStatus {
+  AVAILABLE
+  DISABLED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  REJECTED
+}
+
+enum FileVisibility {
+  PRIVATE
+  TENANT
+  PUBLIC
+}
+
+model Tenant {
+  id                  String               @id @default(uuid())
+  code                String               @unique
+  name                String
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  users               User[]
+  roles               Role[]
+  permissions         Permission[]
+  departments         Department[]
+  employees           Employee[]
+  workflowDefinitions WorkflowDefinition[]
+  workflowInstances   WorkflowInstance[]
+  approvalRules       ApprovalRule[]
+  auditLogs           AuditLog[]
+  exportRecords       ExportRecord[]
+  assets              Asset[]
+  resources           Resource[]
+  bookings            Booking[]
+  files               FileObject[]
+  leaveRequests       LeaveRequest[]
+  attendanceRecords   AttendanceRecord[]
+  financeRequests     FinanceRequest[]
+  payrollBatches      PayrollBatch[]
+  dataImportRuns      DataImportRun[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  tenantId     String        @map("tenant_id")
+  email        String
+  name         String
+  passwordHash String        @map("password_hash")
+  sessionVersion Int         @default(1) @map("session_version")
+  status       UserStatus    @default(ACTIVE)
+  employeeId   String?       @unique @map("employee_id")
+  lastLoginAt  DateTime?     @map("last_login_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  employee     Employee?     @relation(fields: [employeeId], references: [id])
+  roles        UserRole[]
+  auditLogs    AuditLog[]    @relation("AuditActor")
+  exportRecords ExportRecord[] @relation("ExportActor")
+  files        FileObject[]  @relation("FileUploader")
+  approvers    WorkflowApprover[]
+  leaveRequests LeaveRequest[] @relation("LeaveApplicant")
+  financeRequests FinanceRequest[] @relation("FinanceRequester")
+  payrollReviews PayrollBatch[] @relation("PayrollReviewer")
+  dataImportRuns DataImportRun[] @relation("DataImportActor")
+
+  @@unique([tenantId, email])
+  @@index([tenantId, status])
+  @@map("users")
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  tenantId    String           @map("tenant_id")
+  code        String
+  name        String
+  description String?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  tenant      Tenant           @relation(fields: [tenantId], references: [id])
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@unique([tenantId, code])
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  tenantId    String           @map("tenant_id")
+  code        String
+  name        String
+  module      String
+  description String?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  tenant      Tenant           @relation(fields: [tenantId], references: [id])
+  roles       RolePermission[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, module])
+  @@map("permissions")
+}
+
+model UserRole {
+  tenantId  String   @map("tenant_id")
+  userId    String   @map("user_id")
+  roleId    String   @map("role_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([tenantId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  tenantId     String     @map("tenant_id")
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+  dataScope    Json?      @map("data_scope")
+  fieldPolicy  Json?      @map("field_policy")
+  allowExport  Boolean    @default(false) @map("allow_export")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([tenantId])
+  @@map("role_permissions")
+}
+
+model Department {
+  id          String       @id @default(uuid())
+  tenantId    String       @map("tenant_id")
+  parentId    String?      @map("parent_id")
+  code        String
+  name        String
+  sortOrder   Int          @default(0) @map("sort_order")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  parent      Department?  @relation("DepartmentTree", fields: [parentId], references: [id])
+  children    Department[] @relation("DepartmentTree")
+  employees   Employee[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, parentId])
+  @@map("departments")
+}
+
+model Employee {
+  id            String          @id @default(uuid())
+  tenantId      String          @map("tenant_id")
+  employeeNo    String          @map("employee_no")
+  departmentId  String?         @map("department_id")
+  name          String
+  gender        String?
+  roleTitle     String?         @map("role_title")
+  status        EmployeeStatus  @default(ACTIVE)
+  entryDate     DateTime?       @map("entry_date")
+  leaveDate     DateTime?       @map("leave_date")
+  phone         String?
+  email         String?
+  sensitiveInfo Json?           @map("sensitive_info")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  tenant        Tenant          @relation(fields: [tenantId], references: [id])
+  department    Department?     @relation(fields: [departmentId], references: [id])
+  user          User?
+
+  @@unique([tenantId, employeeNo])
+  @@index([tenantId, status])
+  @@index([tenantId, departmentId])
+  @@map("employees")
+}
+
+model WorkflowDefinition {
+  id          String                   @id @default(uuid())
+  tenantId    String                   @map("tenant_id")
+  code        String
+  name        String
+  category    String
+  version     Int                      @default(1)
+  status      WorkflowDefinitionStatus @default(DRAFT)
+  formSchema   Json                     @default("{}") @map("form_schema")
+  ruleSnapshot Json                     @default("{}") @map("rule_snapshot")
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  updatedAt   DateTime                 @updatedAt @map("updated_at")
+  tenant      Tenant                   @relation(fields: [tenantId], references: [id])
+  nodes       WorkflowDefinitionNode[]
+  instances   WorkflowInstance[]
+
+  @@unique([tenantId, code, version])
+  @@index([tenantId, status])
+  @@map("workflow_definitions")
+}
+
+model WorkflowDefinitionNode {
+  id           String             @id @default(uuid())
+  tenantId     String             @map("tenant_id")
+  definitionId String             @map("definition_id")
+  name         String
+  stepOrder    Int                @map("step_order")
+  approvalMode String             @default("AND") @map("approval_mode")
+  approverRule Json               @default("{}") @map("approver_rule")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  definition   WorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@unique([definitionId, stepOrder])
+  @@index([tenantId])
+  @@map("workflow_definition_nodes")
+}
+
+model ApprovalRule {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  department   String
+  templateId   String   @map("template_id")
+  templateName String   @map("template_name")
+  enabled      Boolean  @default(true)
+  nodes        Json     @default("[]")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, department, templateId])
+  @@index([tenantId, department])
+  @@map("approval_rules")
+}
+
+model WorkflowInstance {
+  id                   String                 @id @default(uuid())
+  tenantId             String                 @map("tenant_id")
+  definitionId          String                 @map("definition_id")
+  definitionCode        String                 @map("definition_code")
+  definitionVersion     Int                    @map("definition_version")
+  title                String
+  status               WorkflowInstanceStatus @default(PENDING)
+  applicantUserId       String?                @map("applicant_user_id")
+  applicantEmployeeId   String?                @map("applicant_employee_id")
+  departmentId          String?                @map("department_id")
+  formData              Json                   @default("{}") @map("form_data")
+  definitionSnapshot    Json                   @default("{}") @map("definition_snapshot")
+  currentNodeId         String?                @map("current_node_id")
+  idempotencyKey        String?                @map("idempotency_key")
+  submittedAt           DateTime?              @map("submitted_at")
+  completedAt           DateTime?              @map("completed_at")
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  tenant                Tenant                 @relation(fields: [tenantId], references: [id])
+  definition            WorkflowDefinition     @relation(fields: [definitionId], references: [id])
+  nodes                 WorkflowInstanceNode[]
+  files                 FileObject[]
+  leaveRequests         LeaveRequest[]         @relation("LeaveWorkflowInstance")
+  financeRequests       FinanceRequest[]       @relation("FinanceWorkflowInstance")
+  payrollBatches        PayrollBatch[]         @relation("PayrollWorkflowInstance")
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status])
+  @@index([tenantId, definitionCode])
+  @@map("workflow_instances")
+}
+
+model WorkflowInstanceNode {
+  id          String             @id @default(uuid())
+  tenantId    String             @map("tenant_id")
+  instanceId  String             @map("instance_id")
+  name        String
+  stepOrder   Int                @map("step_order")
+  approvalMode String            @default("AND") @map("approval_mode")
+  status      WorkflowNodeStatus @default(PENDING)
+  startedAt   DateTime?          @map("started_at")
+  completedAt DateTime?          @map("completed_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  instance    WorkflowInstance   @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  approvers   WorkflowApprover[]
+
+  @@unique([instanceId, stepOrder])
+  @@index([tenantId, status])
+  @@map("workflow_instance_nodes")
+}
+
+model WorkflowApprover {
+  id             String               @id @default(uuid())
+  tenantId       String               @map("tenant_id")
+  nodeId         String               @map("node_id")
+  userId         String?              @map("user_id")
+  approverName   String               @map("approver_name")
+  status         ApprovalStatus       @default(PENDING)
+  decision       String?
+  comment        String?
+  decidedAt      DateTime?            @map("decided_at")
+  idempotencyKey String?              @map("idempotency_key")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+  node           WorkflowInstanceNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  user           User?                @relation(fields: [userId], references: [id])
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status])
+  @@map("workflow_approvers")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  actorUserId String?  @map("actor_user_id")
+  action      String
+  objectType  String   @map("object_type")
+  objectId    String?  @map("object_id")
+  summary     String
+  metadata    Json     @default("{}")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, objectType, objectId])
+  @@map("audit_logs")
+}
+
+model ExportRecord {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  actorUserId String?  @map("actor_user_id")
+  action      String
+  module      String
+  scope       String
+  businessReason String?  @map("business_reason")
+  fileName    String?  @map("file_name")
+  format      String   @default("csv")
+  rowCount    Int      @default(0) @map("row_count")
+  filters     Json     @default("{}")
+  status      String   @default("SUCCESS")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  requestId   String?  @map("request_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  actor       User?    @relation("ExportActor", fields: [actorUserId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, action])
+  @@index([tenantId, actorUserId])
+  @@map("export_records")
+}
+
+model Asset {
+  id          String       @id @default(uuid())
+  tenantId    String       @map("tenant_id")
+  assetNo     String       @map("asset_no")
+  name        String
+  category    String
+  status      AssetStatus  @default(AVAILABLE)
+  owner       String?
+  location    String?
+  qrVersion   Int          @default(1) @map("qr_version")
+  metadata    Json         @default("{}")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  files       FileObject[]
+
+  @@unique([tenantId, assetNo])
+  @@index([tenantId, status])
+  @@map("assets")
+}
+
+model Resource {
+  id          String         @id @default(uuid())
+  tenantId    String         @map("tenant_id")
+  code        String
+  type        String
+  name        String
+  capacity    Int?
+  status      ResourceStatus @default(AVAILABLE)
+  location    String?
+  metadata    Json           @default("{}")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  tenant      Tenant         @relation(fields: [tenantId], references: [id])
+  bookings    Booking[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, type])
+  @@map("resources")
+}
+
+model Booking {
+  id          String        @id @default(uuid())
+  tenantId    String        @map("tenant_id")
+  resourceId  String        @map("resource_id")
+  applicantId String?       @map("applicant_id")
+  purpose     String
+  status      BookingStatus @default(PENDING)
+  startsAt    DateTime      @map("starts_at")
+  endsAt      DateTime      @map("ends_at")
+  metadata    Json          @default("{}")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  tenant      Tenant        @relation(fields: [tenantId], references: [id])
+  resource    Resource      @relation(fields: [resourceId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([resourceId, startsAt, endsAt])
+  @@map("bookings")
+}
+
+model LeaveRequest {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+  applicantUserId    String?  @map("applicant_user_id")
+  workflowInstanceId String?  @map("workflow_instance_id")
+  employeeName       String   @map("employee_name")
+  leaveType          String   @map("leave_type")
+  dateRange          String   @map("date_range")
+  days               Float
+  status             String   @default("PENDING")
+  metadata           Json     @default("{}")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  tenant             Tenant   @relation(fields: [tenantId], references: [id])
+  applicant          User?    @relation("LeaveApplicant", fields: [applicantUserId], references: [id])
+  workflowInstance   WorkflowInstance? @relation("LeaveWorkflowInstance", fields: [workflowInstanceId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@map("leave_requests")
+}
+
+model AttendanceRecord {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  employeeName String  @map("employee_name")
+  department  String
+  workDate    DateTime @map("work_date")
+  checkInAt   DateTime? @map("check_in_at")
+  checkOutAt  DateTime? @map("check_out_at")
+  status      String   @default("NORMAL")
+  minutesLate Int      @default(0) @map("minutes_late")
+  source      String   @default("manual")
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, workDate])
+  @@index([tenantId, status])
+  @@index([tenantId, employeeName])
+  @@map("attendance_records")
+}
+
+model FinanceRequest {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+  requestNo          String   @map("request_no")
+  requestType        String   @map("request_type")
+  title              String
+  applicantUserId    String?  @map("applicant_user_id")
+  department         String
+  amount             Decimal  @db.Decimal(12, 2)
+  currency           String   @default("CNY")
+  vendor             String?
+  paymentMethod      String?  @map("payment_method")
+  status             String   @default("PENDING_APPROVAL")
+  workflowInstanceId String?  @map("workflow_instance_id")
+  metadata           Json     @default("{}")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  tenant             Tenant   @relation(fields: [tenantId], references: [id])
+  applicant          User?    @relation("FinanceRequester", fields: [applicantUserId], references: [id])
+  workflowInstance   WorkflowInstance? @relation("FinanceWorkflowInstance", fields: [workflowInstanceId], references: [id])
+
+  @@unique([tenantId, requestNo])
+  @@index([tenantId, requestType])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@map("finance_requests")
+}
+
+model PayrollBatch {
+  id             String    @id @default(uuid())
+  tenantId       String    @map("tenant_id")
+  batchNo        String    @map("batch_no")
+  cycle          String
+  scope          String
+  owner          String
+  status         String    @default("PENDING_REVIEW")
+  reviewerUserId String?   @map("reviewer_user_id")
+  workflowInstanceId String? @map("workflow_instance_id")
+  publishedAt    DateTime? @map("published_at")
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  reviewer        User?    @relation("PayrollReviewer", fields: [reviewerUserId], references: [id])
+  workflowInstance WorkflowInstance? @relation("PayrollWorkflowInstance", fields: [workflowInstanceId], references: [id])
+
+  @@unique([tenantId, batchNo])
+  @@index([tenantId, status])
+  @@map("payroll_batches")
+}
+
+model FileObject {
+  id                 String         @id @default(uuid())
+  tenantId           String         @map("tenant_id")
+  uploaderUserId      String?        @map("uploader_user_id")
+  workflowInstanceId  String?        @map("workflow_instance_id")
+  assetId             String?        @map("asset_id")
+  fileName            String         @map("file_name")
+  mimeType            String         @map("mime_type")
+  storageKey          String         @map("storage_key")
+  sizeBytes           BigInt         @map("size_bytes")
+  checksum            String?
+  visibility          FileVisibility @default(PRIVATE)
+  createdAt           DateTime       @default(now()) @map("created_at")
+  tenant              Tenant         @relation(fields: [tenantId], references: [id])
+  uploader            User?          @relation("FileUploader", fields: [uploaderUserId], references: [id])
+  workflowInstance    WorkflowInstance? @relation(fields: [workflowInstanceId], references: [id])
+  asset               Asset?         @relation(fields: [assetId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@map("files")
+}
+
+model DataImportRun {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  actorUserId    String?  @map("actor_user_id")
+  sourceType     String   @map("source_type")
+  sourceName     String   @map("source_name")
+  sourceChecksum String   @map("source_checksum")
+  status         String   @default("SUCCESS")
+  recordCounts   Json     @default("{}") @map("record_counts")
+  metadata       Json     @default("{}")
+  startedAt      DateTime @default(now()) @map("started_at")
+  finishedAt     DateTime? @map("finished_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  actor          User?    @relation("DataImportActor", fields: [actorUserId], references: [id])
+
+  @@index([tenantId, startedAt])
+  @@index([tenantId, sourceName, sourceChecksum])
+  @@map("data_import_runs")
+}

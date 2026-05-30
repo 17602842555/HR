@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "example": true,
+  "documentId": "HR-SIGNOFF-20260530-EXAMPLE",
+  "environment": "staging",
+  "signedAt": "2026-05-30T12:00:00.000Z",
+  "source": {
+    "sourceName": "oa-dashboard.html",
+    "sourceChecksum": "cb02799371d23ebfc0957f447ff9104a28df85a50c42cef411a5fe8db926c759",
+    "importedAt": "2026-05-30T12:00:00.000Z",
+    "counts": {
+      "activeEmployees": 72,
+      "leavers": 162,
+      "femaleEmployees": 43,
+      "monthLeavers": 4,
+      "departments": 10,
+      "orgs": 8
+    }
+  },
+  "dataPolicy": {
+    "fieldPolicy": {
+      "defaultMasked": true,
+      "revealPermission": "employee.sensitive.read",
+      "maskedFields": [
+        "idCard",
+        "bankAccount",
+        "phone",
+        "address",
+        "salary",
+        "hukou",
+        "school",
+        "major",
+        "age"
+      ]
+    },
+    "exportPolicy": {
+      "requiresPermission": true,
+      "allowsSensitiveExport": false,
+      "recordsExportLedger": true,
+      "requiresBusinessReason": true,
+      "allowedExportPermissions": [
+        "employee.export",
+        "audit.export"
+      ]
+    },
+    "retention": {
+      "employeeRecords": "Personnel records retained according to approved HR retention policy.",
+      "leaverRecords": "Leaver records retained according to approved HR retention policy.",
+      "auditLogs": "Audit logs retained according to company compliance policy.",
+      "exportFiles": "Export files retained only in approved evidence storage and removed from local workstations after delivery."
+    }
+  },
+  "approvals": [
+    {
+      "role": "HR owner",
+      "name": "Example HR Owner",
+      "email": "hr-owner@example.company",
+      "decision": "approved",
+      "approvedAt": "2026-05-30T12:10:00.000Z"
+    },
+    {
+      "role": "Product owner",
+      "name": "Example Product Owner",
+      "email": "product-owner@example.company",
+      "decision": "approved",
+      "approvedAt": "2026-05-30T12:20:00.000Z"
+    },
+    {
+      "role": "Security reviewer",
+      "name": "Example Security Reviewer",
+      "email": "security-reviewer@example.company",
+      "decision": "approved",
+      "approvedAt": "2026-05-30T12:30:00.000Z"
+    }
+  ],
+  "openExceptions": []
+}

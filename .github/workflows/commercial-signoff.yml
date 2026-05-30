@@ -1,0 +1,96 @@
+name: commercial-signoff
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "GitHub environment holding the release input secrets"
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  validate-release-signoffs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.target_environment }}
+    permissions:
+      contents: read
+
+    env:
+      TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+      PRODUCTION_ENV_B64: ${{ secrets.PRODUCTION_ENV_B64 }}
+      PRODUCTION_SECRETS_SIGNOFF_B64: ${{ secrets.PRODUCTION_SECRETS_SIGNOFF_B64 }}
+      HR_DATA_SIGNOFF_B64: ${{ secrets.HR_DATA_SIGNOFF_B64 }}
+      FILE_STORAGE_SIGNOFF_B64: ${{ secrets.FILE_STORAGE_SIGNOFF_B64 }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Materialize release input files
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p reports/commercial-evidence/signoff-validation
+          npm run prepare:release-inputs -- --json --output reports/commercial-evidence/signoff-validation/release-inputs.json
+
+      - name: Validate production env
+        if: always()
+        run: |
+          set -euo pipefail
+          umask 077
+          npm run validate:production-env -- .env.production --json \
+            | tee reports/commercial-evidence/signoff-validation/production-env.json
+
+      - name: Validate secrets signoff
+        if: always()
+        run: |
+          set -euo pipefail
+          umask 077
+          npm run validate:secrets-signoff -- docs/production-secrets-signoff.json --env .env.production --json \
+            | tee reports/commercial-evidence/signoff-validation/secrets-signoff.json
+
+      - name: Validate HR data signoff
+        if: always()
+        run: |
+          set -euo pipefail
+          umask 077
+          npm run validate:hr-signoff -- docs/hr-data-signoff.json --source oa-dashboard.html --json \
+            | tee reports/commercial-evidence/signoff-validation/hr-signoff.json
+
+      - name: Validate file storage signoff
+        if: always()
+        run: |
+          set -euo pipefail
+          umask 077
+          set -a
+          # shellcheck disable=SC1091
+          source .env.production
+          set +a
+          args=(docs/file-storage-signoff.json --environment "$TARGET_ENVIRONMENT" --json)
+          if [ "${FILE_STORAGE_DRIVER:-}" = "local" ]; then
+            args+=(--file-storage-dir "${FILE_STORAGE_DIR:-}")
+          fi
+          npm run validate:storage-signoff -- "${args[@]}" \
+            | tee reports/commercial-evidence/signoff-validation/storage-signoff.json
+
+      - name: Upload signoff validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: commercial-signoff-validation
+          path: reports/commercial-evidence/signoff-validation
+          if-no-files-found: ignore

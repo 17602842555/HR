@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-30T04:15:32.150Z",
+  "migrations": [
+    {
+      "name": "20260529120000_init_commercial_oa",
+      "path": "prisma/migrations/20260529120000_init_commercial_oa/migration.sql",
+      "bytes": 20466,
+      "sha256": "188e99df4e5e2898029f3675fdc4d200d6add4ed7b2b2e6d435276ba4513883e",
+      "statementCount": 103
+    },
+    {
+      "name": "20260529160000_finance_attendance",
+      "path": "prisma/migrations/20260529160000_finance_attendance/migration.sql",
+      "bytes": 2172,
+      "sha256": "d2d5928e5df04d649d1dc6b497a0fa97b3f47475c007c1579cca7d3dcc96c1c4",
+      "statementCount": 10
+    },
+    {
+      "name": "20260529163000_business_workflow_links",
+      "path": "prisma/migrations/20260529163000_business_workflow_links/migration.sql",
+      "bytes": 722,
+      "sha256": "6ef09e6401a894f389ba1484e2e853e9ba8a5ee81ddabd9fa291a9b87526d840",
+      "statementCount": 5
+    },
+    {
+      "name": "20260529172000_data_import_runs",
+      "path": "prisma/migrations/20260529172000_data_import_runs/migration.sql",
+      "bytes": 1265,
+      "sha256": "66271d0a3b85618a60b12b534bb68590948892504a06c7a587a962275c9e0969",
+      "statementCount": 5
+    },
+    {
+      "name": "20260529184000_user_session_version",
+      "path": "prisma/migrations/20260529184000_user_session_version/migration.sql",
+      "bytes": 78,
+      "sha256": "2bc7f90368e9628611f1248c6e74b26a0e8e24cd6628d571801bfa49c7696dfb",
+      "statementCount": 1
+    },
+    {
+      "name": "20260530090000_data_import_success_unique",
+      "path": "prisma/migrations/20260530090000_data_import_success_unique/migration.sql",
+      "bytes": 309,
+      "sha256": "d7d94178d204b2ffccc06d17afa649d1a19f4c518a368029517561016cbe5f48",
+      "statementCount": 1
+    },
+    {
+      "name": "20260530113000_workflow_submit_idempotency",
+      "path": "prisma/migrations/20260530113000_workflow_submit_idempotency/migration.sql",
+      "bytes": 282,
+      "sha256": "ec13f06e6f90a321a3992b3adfc0ae3c636dd9aaa674c23207e65e60580168a6",
+      "statementCount": 2
+    },
+    {
+      "name": "20260530143000_role_permission_policies",
+      "path": "prisma/migrations/20260530143000_role_permission_policies/migration.sql",
+      "bytes": 159,
+      "sha256": "f1745fdfb24afc1779000bbd52c3eedd0cc93ef9d6e8fc01746d8be662a7f313",
+      "statementCount": 1
+    },
+    {
+      "name": "20260530172000_attendance_records",
+      "path": "prisma/migrations/20260530172000_attendance_records/migration.sql",
+      "bytes": 1119,
+      "sha256": "7e4ca7158cd1f19aa214d3b3aecee3c459771f919996b74b69afcb1dc3645d32",
+      "statementCount": 5
+    },
+    {
+      "name": "20260530190000_finance_requests",
+      "path": "prisma/migrations/20260530190000_finance_requests/migration.sql",
+      "bytes": 1761,
+      "sha256": "3ec88ffef943cc39888ab1c68abaa72e9cecc66289d70993c11d5c109f19ae60",
+      "statementCount": 8
+    },
+    {
+      "name": "20260530213000_export_records",
+      "path": "prisma/migrations/20260530213000_export_records/migration.sql",
+      "bytes": 1334,
+      "sha256": "5993d4b9905e7b77610cbe9a4831d980dfb0cc8a74a84e34cabec8a243fe61a6",
+      "statementCount": 6
+    },
+    {
+      "name": "20260530231500_export_business_reason",
+      "path": "prisma/migrations/20260530231500_export_business_reason/migration.sql",
+      "bytes": 78,
+      "sha256": "e0cda924e0d49f0587a842a10209160331400ef0c60a6ec07b613335b92c9323",
+      "statementCount": 1
+    },
+    {
+      "name": "20260530233000_export_records_append_only",
+      "path": "prisma/migrations/20260530233000_export_records_append_only/migration.sql",
+      "bytes": 633,
+      "sha256": "bb0db642500f52b6c9c7d42b71ae80e79ce70117739099f289f5640280c13439",
+      "statementCount": 5
+    },
+    {
+      "name": "20260530234000_data_import_runs_append_only",
+      "path": "prisma/migrations/20260530234000_data_import_runs_append_only/migration.sql",
+      "bytes": 651,
+      "sha256": "5fffd311388578b572ca251682735c2fbeff10ea58ab21f9d127a7db6fa7fb8d",
+      "statementCount": 5
+    }
+  ],
+  "summary": {
+    "migrationCount": 14,
+    "stableSha256": "011480385f54e5010d467730bfdd49f1184682d7b5e2285e8d3ad2b619add87f",
+    "sha256": "011480385f54e5010d467730bfdd49f1184682d7b5e2285e8d3ad2b619add87f"
+  }
+}
