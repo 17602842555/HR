@@ -24,8 +24,12 @@ function status(level, name, message, details = {}) {
   return { details, level, message, name };
 }
 
+function stripAnsi(value = "") {
+  return String(value || "").replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
 function sanitizeMessage(value = "") {
-  return String(value || "")
+  return stripAnsi(value)
     .replaceAll(/(token|secret|password|key)=\S+/gi, "$1=[REDACTED]")
     .replaceAll(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
     .slice(0, 300);

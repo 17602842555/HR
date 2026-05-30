@@ -569,6 +569,7 @@ function checkDeploymentArtifacts() {
     "buildCloudflareDeploymentStatus",
     "runCloudflareDeploymentStatus",
     "requiredCloudflareGithubSecrets",
+    "stripAnsi",
     "runCloudflareSmoke",
     "github-secrets",
     "tunnel-status",
@@ -583,6 +584,7 @@ function checkDeploymentArtifacts() {
     "cloudflare deployment status passes only when secrets tunnel and smoke are ready",
     "cloudflare deployment status reports current partial backend configuration blockers",
     "cloudflare deployment status reads GitHub secret names without values",
+    "cloudflare deployment status sanitizes CLI errors for JSON evidence",
     "cloudflare deployment status parses wrangler tunnel info output"
   ].forEach((needle) => assertIncludes(cloudflareDeploymentStatusTests, needle, "server/tests/cloudflare-deployment-status.test.mjs"));
 

@@ -114,6 +114,25 @@ test("cloudflare deployment status reads GitHub secret names without values", ()
   assert.equal(result.checked, true);
 });
 
+test("cloudflare deployment status sanitizes CLI errors for JSON evidence", () => {
+  const result = readCloudflareTunnelInfo({
+    tunnel: "deep-oa-hr-api",
+    runner: () => ({
+      status: 1,
+      stderr: "\u001B[31mERROR\u001B[0m token=super-secret Bearer abc.def.ghi password=123"
+    })
+  });
+
+  assert.equal(result.checked, false);
+  assert.equal(result.error.includes("\u001B["), false);
+  assert.equal(result.error.includes("super-secret"), false);
+  assert.equal(result.error.includes("abc.def.ghi"), false);
+  assert.equal(result.error.includes("123"), false);
+  assert.match(result.error, /token=\[REDACTED\]/);
+  assert.match(result.error, /Bearer \[REDACTED\]/);
+  assert.match(result.error, /password=\[REDACTED\]/);
+});
+
 test("cloudflare deployment status parses wrangler tunnel info output", () => {
   const result = readCloudflareTunnelInfo({
     tunnel: "deep-oa-hr-api",
