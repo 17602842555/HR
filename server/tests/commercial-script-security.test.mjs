@@ -82,3 +82,14 @@ test("commercial signoff workflow materializes release inputs without uploading 
   assert.match(workflow, /commercial-signoff-validation/);
   assert.doesNotMatch(workflow, /path: \.env\.production/);
 });
+
+test("cloudflare deploy workflow verifies backend gateway after deploy", () => {
+  const workflow = readScript(".github/workflows/cloudflare-deploy.yml");
+
+  assert.match(workflow, /Deploy HR OA to Cloudflare/);
+  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
+  assert.match(workflow, /wrangler secret put API_ORIGIN/);
+  assert.match(workflow, /CLOUDFLARE_DEPLOYMENT_URL/);
+  assert.match(workflow, /npm run smoke:cloudflare -- --url "\$CLOUDFLARE_DEPLOYMENT_URL" --json/);
+  assert.match(workflow, /DEPLOYMENT_URL_READY/);
+});

@@ -6,6 +6,7 @@
     "dev:commercial": "node scripts/dev-commercial.mjs",
     "cf:dev": "npm run build && npx wrangler dev",
     "cf:deploy": "npm run build && npx wrangler deploy",
+    "smoke:cloudflare": "node scripts/cloudflare-smoke.mjs",
     "postgres:local": "node scripts/local-postgres.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",

@@ -332,9 +332,10 @@ Required GitHub repository secrets:
 CLOUDFLARE_API_TOKEN=<Cloudflare token with Workers deploy permission>
 CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
 API_ORIGIN=https://<approved-api-origin>
+CLOUDFLARE_DEPLOYMENT_URL=https://<worker-or-custom-domain>
 ```
 
-The GitHub Actions workflow deploys the Worker and writes `API_ORIGIN` as a Worker secret when all three values are configured. For local deployment, set the same Cloudflare Worker runtime secret manually:
+The GitHub Actions workflow deploys the Worker, writes `API_ORIGIN` as a Worker secret when all required Cloudflare values are configured, and runs `npm run smoke:cloudflare` against `CLOUDFLARE_DEPLOYMENT_URL` when that URL is present. The smoke check verifies `/api/edge/health`, backend `/api/health`, and the backend OpenAPI contract through the Cloudflare gateway. For local deployment, set the same Cloudflare Worker runtime secret manually:
 
 ```bash
 API_ORIGIN=https://<approved-api-origin>
@@ -346,6 +347,7 @@ Local deployment commands:
 npm run build
 npx wrangler secret put API_ORIGIN
 npm run cf:deploy
+npm run smoke:cloudflare -- --url https://<worker-or-custom-domain> --json
 ```
 
 Keep the existing Fastify/Prisma/PostgreSQL API as the commercial system of record unless the data layer is explicitly ported to Cloudflare D1/Hyperdrive/R2. The Worker is the Cloudflare edge backend/gateway: it adds security headers, hosts the frontend assets, and keeps browser traffic same-origin at `/api/*`. Production release evidence still requires the API origin, database, file storage, signoffs, and backup/restore drill to pass the commercial gate.
