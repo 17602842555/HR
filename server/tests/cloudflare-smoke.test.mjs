@@ -106,6 +106,29 @@ test("cloudflare smoke fails closed when API_ORIGIN is missing", async () => {
   assert.equal(report.hardBlockers.some((check) => check.name === "backend-health"), true);
 });
 
+test("cloudflare smoke fails closed when worker reports unsafe API_ORIGIN", async () => {
+  const fetchImpl = mockFetch({
+    "https://deep-oa-hr.example.workers.dev/api/edge/health": jsonResponse({
+      apiOriginConfigured: true,
+      apiOriginError: "api_origin_unsafe",
+      apiOriginValid: false,
+      ok: true,
+      service: "deep-oa-cloudflare-edge"
+    })
+  });
+
+  const report = await runCloudflareSmoke({
+    fetchImpl,
+    retryDelayMs: 1,
+    url: "https://deep-oa-hr.example.workers.dev"
+  });
+
+  assert.equal(report.ok, false);
+  assert.equal(report.hardBlockers.some((check) => check.name === "edge-api-origin"), true);
+  assert.equal(report.hardBlockers.some((check) => check.name === "backend-health"), true);
+  assert.equal(fetchImpl.calls.length, 1);
+});
+
 test("cloudflare smoke fails when backend proxy does not return the OA API", async () => {
   const report = await runCloudflareSmoke({
     fetchImpl: mockFetch({

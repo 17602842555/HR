@@ -324,12 +324,12 @@ Production frontend builds should set `VITE_REQUIRE_API=1` and keep `VITE_DEMO_F
 
 ## Cloudflare Worker Deployment
 
-The repository includes `wrangler.toml`, `cloudflare/worker.js`, and `.github/workflows/cloudflare-deploy.yml` so the frontend can be pushed to `17602842555/HR.git` and deployed as Cloudflare Worker static assets. The Worker serves the Vite `dist/` SPA and proxies `/api/*` to the configured backend origin through `API_ORIGIN`, while `/api/edge/health` verifies the edge gateway itself.
+The repository includes `wrangler.toml`, `cloudflare/worker.js`, and `.github/workflows/cloudflare-deploy.yml` so the frontend can be pushed to `17602842555/HR.git` and deployed as Cloudflare Worker static assets. The Worker serves the Vite `dist/` SPA and proxies `/api/*` to the configured backend origin through `API_ORIGIN`, while `/api/edge/health` verifies the edge gateway itself. The Worker also validates `API_ORIGIN` at runtime and fails closed for missing values, non-HTTPS origins, local/private addresses, or same-origin proxy loops, so a manual Secret mistake cannot silently proxy production traffic to an unsafe backend.
 
 Current Cloudflare setup created on 2026-05-30:
 
 - Worker deployed: `deep-oa-hr` at `https://deep-oa-hr.2445776963.workers.dev`, version `9ef44b70-abd0-4d3b-a9d7-b63791120478`.
-- Edge health passes at `/api/edge/health`; `/api/*` correctly returns `api_origin_not_configured` until `API_ORIGIN` is set to the approved backend Tunnel hostname.
+- Edge health passes at `/api/edge/health`; `/api/*` correctly returns `api_origin_not_configured` until `API_ORIGIN` is set to the approved backend Tunnel hostname. Runtime health reports `apiOriginValid=false` without leaking the configured hostname when the Worker rejects an unsafe origin.
 - GitHub repository secrets currently configured: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_DEPLOYMENT_URL`, `CLOUDFLARE_BACKEND_WEB_ORIGIN`, and `CLOUDFLARE_TUNNEL_TOKEN`.
 - Still required for GitHub auto-deploy and production release: durable `CLOUDFLARE_API_TOKEN`, production `API_ORIGIN`, production `.env.production`, production database/file-storage signoffs, and Cloudflare smoke through the final backend origin.
 
@@ -343,7 +343,7 @@ npm run doctor:cloudflare -- \
   --json
 ```
 
-This status command fails closed until required repository secrets are present, the Tunnel is active, and `npm run smoke:cloudflare` can prove both `/api/edge/health` and the backend `/api/health` / `/api/openapi.json` path through the Worker.
+This status command fails closed until required repository secrets are present, the Tunnel is active, the Worker reports a configured and valid API origin, and `npm run smoke:cloudflare` can prove both `/api/edge/health` and the backend `/api/health` / `/api/openapi.json` path through the Worker.
 
 Required GitHub repository secrets:
 
@@ -427,7 +427,7 @@ printf '%s' "$API_ORIGIN" | npx wrangler secret put API_ORIGIN
 npm run smoke:cloudflare -- --url "$CLOUDFLARE_DEPLOYMENT_URL" --json
 ```
 
-`API_ORIGIN` must be the backend tunnel hostname. Do not set it to the same origin as `CLOUDFLARE_DEPLOYMENT_URL`; that would make the Worker proxy `/api/*` back into itself.
+`API_ORIGIN` must be the backend tunnel hostname. Do not set it to the same origin as `CLOUDFLARE_DEPLOYMENT_URL`; that would make the Worker proxy `/api/*` back into itself. The runtime guard rejects that loop, rejects `http://`, localhost, loopback, RFC1918, link-local, and `.local` targets, and returns a redacted `503` response instead of attempting the backend fetch.
 
 Keep the existing Fastify/Prisma/PostgreSQL API as the commercial system of record unless the data layer is explicitly ported to Cloudflare D1/Hyperdrive/R2. The Worker is the Cloudflare edge backend/gateway: it adds security headers, hosts the frontend assets, and keeps browser traffic same-origin at `/api/*`. Production release evidence still requires the API origin, database, file storage, signoffs, and backup/restore drill to pass the commercial gate.
 

@@ -178,9 +178,11 @@ function checkDeploymentArtifacts() {
     ".env.example",
     ".env.production.example",
     ".dockerignore",
+    ".github/workflows/cloudflare-deploy.yml",
     ".github/workflows/commercial-ci.yml",
     ".github/workflows/commercial-drill.yml",
     ".github/workflows/commercial-signoff.yml",
+    "cloudflare/worker.js",
     "Dockerfile.api",
     "Dockerfile.web",
     "docs/API_CONTRACT.md",
@@ -189,6 +191,7 @@ function checkDeploymentArtifacts() {
     "docs/hr-data-signoff.example.json",
     "docs/openapi.json",
     "docs/production-secrets-signoff.example.json",
+    "docker-compose.cloudflare.yml",
     "docker-compose.yml",
     "docker-compose.prod.yml",
     "docker/nginx.conf",
@@ -207,6 +210,7 @@ function checkDeploymentArtifacts() {
     "scripts/commercial-release-gate.mjs",
     "scripts/commercial-smoke.mjs",
     "scripts/configure-cloudflare-secrets.mjs",
+    "scripts/cloudflare-smoke.mjs",
     "scripts/dev-commercial-core.mjs",
     "scripts/dev-commercial.mjs",
     "scripts/docker-api-entrypoint.sh",
@@ -229,11 +233,13 @@ function checkDeploymentArtifacts() {
     "scripts/validate-storage-signoff.mjs",
     "scripts/validate-drill-evidence.mjs",
     "scripts/validate-local-recovery-drill.mjs",
+    "scripts/validate-cloudflare-backend.mjs",
     "scripts/validate-supply-chain.mjs",
     "prisma/migrations/migration-lock.json",
     "server/src/modules/audit/audit-integrity.mjs",
     "server/tests/audit-integrity.test.mjs",
     "server/tests/cloudflare-secrets.test.mjs",
+    "server/tests/cloudflare-worker.test.mjs",
     "server/tests/commercial-script-security.test.mjs",
     "server/tests/local-postgres.test.mjs",
     "server/tests/materialize-release-inputs.test.mjs",
@@ -544,6 +550,35 @@ function checkDeploymentArtifacts() {
     "cloudflare deployment status reads GitHub secret names without values",
     "cloudflare deployment status parses wrangler tunnel info output"
   ].forEach((needle) => assertIncludes(cloudflareDeploymentStatusTests, needle, "server/tests/cloudflare-deployment-status.test.mjs"));
+
+  const cloudflareWorker = readText("cloudflare/worker.js");
+  [
+    "validateApiOrigin",
+    "api_origin_invalid",
+    "api_origin_unsafe",
+    "api_origin_loop",
+    "apiOriginValid",
+    "X-Request-Source",
+    "X-Forwarded-Host",
+    "X-Forwarded-Proto"
+  ].forEach((needle) => assertIncludes(cloudflareWorker, needle, "cloudflare/worker.js"));
+  assertNotIncludes(cloudflareWorker, "http://127.0.0.1", "cloudflare/worker.js");
+
+  const cloudflareWorkerTests = readText("server/tests/cloudflare-worker.test.mjs");
+  [
+    "cloudflare worker API origin validator accepts only safe HTTPS backend origins",
+    "cloudflare worker reports invalid API origin without leaking backend value",
+    "cloudflare worker rejects same-origin API proxy loops before fetching backend",
+    "cloudflare worker proxies valid backend origin with security headers"
+  ].forEach((needle) => assertIncludes(cloudflareWorkerTests, needle, "server/tests/cloudflare-worker.test.mjs"));
+
+  const cloudflareSmoke = readText("scripts/cloudflare-smoke.mjs");
+  [
+    "apiOriginValid",
+    "Cloudflare Worker API_ORIGIN is configured but invalid or unsafe.",
+    "backend-health",
+    "openapi-contract"
+  ].forEach((needle) => assertIncludes(cloudflareSmoke, needle, "scripts/cloudflare-smoke.mjs"));
 
   const materializeReleaseInputsTests = readText("server/tests/materialize-release-inputs.test.mjs");
   [
@@ -4632,6 +4667,7 @@ function main() {
       "commercial OpenAPI contract",
       "commercial doctor diagnostics",
       "Cloudflare deployment status doctor",
+      "Cloudflare Worker API origin runtime guard",
       "Docker nginx body/proxy settings",
       "Docker web API-required build args",
       "deployable brand boundary check",

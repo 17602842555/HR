@@ -158,6 +158,12 @@ function edgeHealthCheck(result, requireApiOrigin) {
       apiOriginConfigured: payload.apiOriginConfigured === true
     });
   }
+  if (payload.apiOriginValid === false) {
+    return status("fail", "edge-api-origin", "Cloudflare Worker API_ORIGIN is configured but invalid or unsafe.", {
+      apiOriginConfigured: payload.apiOriginConfigured === true,
+      apiOriginError: payload.apiOriginError || ""
+    });
+  }
   if (payload.apiOriginConfigured !== true) {
     return status("warn", "edge-api-origin", "Cloudflare Worker is deployed without API_ORIGIN; backend proxy smoke was skipped.", {
       apiOriginConfigured: false
@@ -227,7 +233,9 @@ export async function runCloudflareSmoke({
   const edgeCheck = edgeHealthCheck(edgeResult, requireApiOrigin);
   checks.push(edgeCheck);
 
-  const shouldCheckBackend = edgeResult.ok && edgeResult.payload?.apiOriginConfigured === true;
+  const shouldCheckBackend = edgeResult.ok
+    && edgeResult.payload?.apiOriginConfigured === true
+    && edgeResult.payload?.apiOriginValid !== false;
   if (shouldCheckBackend) {
     checks.push(backendHealthCheck(await fetchJsonWithRetries(fetchImpl, `${deploymentUrl}/api/health`, {
       retries,
