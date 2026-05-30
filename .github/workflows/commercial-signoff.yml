@@ -12,6 +12,9 @@ on:
           - staging
           - production
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   validate-release-signoffs:
     runs-on: ubuntu-latest

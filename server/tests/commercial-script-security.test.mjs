@@ -55,6 +55,7 @@ test("commercial drill workflow runs Docker drill and uploads evidence", () => {
   const workflow = readScript(".github/workflows/commercial-drill.yml");
 
   assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"/);
   assert.match(workflow, /FILE_STORAGE_DIR="\/app\/storage\/files"/);
   assert.match(workflow, /FILE_BACKUP_USE_LOCAL="0"/);
   assert.match(workflow, /npm run drill:commercial/);
@@ -69,6 +70,7 @@ test("commercial signoff workflow materializes release inputs without uploading 
   const workflow = readScript(".github/workflows/commercial-signoff.yml");
 
   assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"/);
   assert.match(workflow, /environment: \$\{\{ inputs\.target_environment \}\}/);
   assert.match(workflow, /PRODUCTION_ENV_B64: \$\{\{ secrets\.PRODUCTION_ENV_B64 \}\}/);
   assert.match(workflow, /umask 077/);
@@ -89,6 +91,7 @@ test("cloudflare deploy workflow verifies backend gateway after deploy", () => {
   const workflow = readScript(".github/workflows/cloudflare-deploy.yml");
 
   assert.match(workflow, /Deploy HR OA to Cloudflare/);
+  assert.match(workflow, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"/);
   assert.match(workflow, /cloudflare\/wrangler-action@v3/);
   assert.match(workflow, /wrangler secret put API_ORIGIN/);
   assert.match(workflow, /CLOUDFLARE_DEPLOYMENT_URL/);
@@ -101,6 +104,18 @@ test("cloudflare deploy workflow verifies backend gateway after deploy", () => {
   assert.match(workflow, /DEPLOYMENT_URL_READY/);
   assert.doesNotMatch(workflow, /actions\/upload-artifact@v4/);
   assert.doesNotMatch(workflow, /cat "\$backend_env"/);
+});
+
+test("commercial GitHub workflows opt into Node 24 action runtime", () => {
+  [
+    ".github/workflows/commercial-ci.yml",
+    ".github/workflows/commercial-drill.yml",
+    ".github/workflows/commercial-signoff.yml",
+    ".github/workflows/cloudflare-deploy.yml"
+  ].forEach((path) => {
+    const workflow = readScript(path);
+    assert.match(workflow, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"/, `${path} should avoid Node 20 action runtime deprecation`);
+  });
 });
 
 test("cloudflare compose exposes API through an outbound tunnel only", () => {

@@ -410,6 +410,7 @@ function checkDeploymentArtifacts() {
   [
     "name: commercial-drill",
     "workflow_dispatch:",
+    "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: \"true\"",
     "runs-on: ubuntu-latest",
     "cp .env.example .env",
     "FILE_STORAGE_DIR=\"/app/storage/files\"",
@@ -426,6 +427,7 @@ function checkDeploymentArtifacts() {
   [
     "name: commercial-signoff",
     "workflow_dispatch:",
+    "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: \"true\"",
     "environment: ${{ inputs.target_environment }}",
     "PRODUCTION_ENV_B64: ${{ secrets.PRODUCTION_ENV_B64 }}",
     "PRODUCTION_SECRETS_SIGNOFF_B64: ${{ secrets.PRODUCTION_SECRETS_SIGNOFF_B64 }}",
@@ -473,6 +475,7 @@ function checkDeploymentArtifacts() {
     "commercial drill evidence artifacts are private by default",
     "commercial drill workflow runs Docker drill and uploads evidence",
     "commercial signoff workflow materializes release inputs without uploading secrets",
+    "commercial GitHub workflows opt into Node 24 action runtime",
     "umask 077",
     "chmod 600",
     "chmod 700"
@@ -557,6 +560,7 @@ function checkDeploymentArtifacts() {
   const ciWorkflow = readText(".github/workflows/commercial-ci.yml");
   [
     "name: commercial-ci",
+    "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: \"true\"",
     "postgres:16-alpine",
     "oa_ci_password",
     "DATABASE_URL: postgresql://oa:oa_ci_password@127.0.0.1:5432/oa_commercial?schema=public",
