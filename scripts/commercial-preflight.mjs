@@ -883,8 +883,12 @@ function checkDeploymentArtifacts() {
     "AUTH_FAILED_LOGIN_MAX_KEYS must be a positive integer",
     "FILE_STORAGE_DRIVER must be local or s3",
     "OBJECT_STORAGE_ENDPOINT must be an HTTP(S) URL",
+    "Production WEB_ORIGIN must use https",
+    "Production WEB_ORIGIN must not use example.com",
+    "Production OBJECT_STORAGE_ENDPOINT must use https",
     "Production FILE_STORAGE_DIR must be explicitly configured",
     "Production FILE_STORAGE_DIR must be an absolute",
+    "Production FILE_STORAGE_DIR must not use temporary storage",
     "apiBodyLimitBytes",
     "requiredApiBodyLimitBytes",
     "strictIntFromEnv",
@@ -901,7 +905,10 @@ function checkDeploymentArtifacts() {
     "runtime rejects invalid import html size limit",
     "production runtime accepts S3 object storage without local volume signoff",
     "S3 object storage driver requires complete object storage config",
+    "production runtime rejects local http and template web origins",
+    "production runtime rejects insecure object storage endpoint",
     "production runtime requires explicit absolute file storage path",
+    "production runtime rejects temporary file storage path",
     "runtime rejects API body limit below upload and import requirements",
     "runtime rejects nonnumeric API body limit from environment"
   ].forEach((needle) => assertIncludes(envTests, needle, "server/tests/env.test.mjs"));

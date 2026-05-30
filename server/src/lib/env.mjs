@@ -8,6 +8,7 @@ const DEFAULT_COOKIE_MAX_AGE_SECONDS = 8 * 60 * 60;
 const DEFAULT_FILE_STORAGE_DIR = resolve(process.cwd(), ".local-files");
 const SUPPORTED_FILE_STORAGE_DRIVERS = new Set(["local", "s3"]);
 const MINIMUM_API_BODY_LIMIT_BYTES = 1024 * 1024;
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
 
 function intFromEnv(name, fallback) {
   const value = Number.parseInt(process.env[name] || "", 10);
@@ -47,6 +48,62 @@ function boolFromEnv(name, fallback = false) {
   const value = String(process.env[name] || "").trim().toLowerCase();
   if (!value) return fallback;
   return ["1", "true", "yes", "on"].includes(value);
+}
+
+function isTemplateHostname(hostname = "") {
+  const normalized = String(hostname || "").trim().toLowerCase();
+  return normalized === "example.com" || normalized.endsWith(".example.com");
+}
+
+function isTemporaryPath(path = "") {
+  const normalized = String(path || "").trim();
+  return normalized === "/tmp"
+    || normalized.startsWith("/tmp/")
+    || normalized === "/var/tmp"
+    || normalized.startsWith("/var/tmp/");
+}
+
+function parseRuntimeUrl(value, label) {
+  try {
+    return new URL(String(value || ""));
+  } catch {
+    throw new Error(`${label} must be a valid URL.`);
+  }
+}
+
+function validateProductionWebOrigins(config) {
+  if (!Array.isArray(config.webOrigin) || config.webOrigin.length === 0) {
+    throw new Error("Production WEB_ORIGIN must list at least one explicit HTTPS origin.");
+  }
+  config.webOrigin.forEach((origin) => {
+    if (String(origin || "").includes("*")) {
+      throw new Error("Production WEB_ORIGIN must list explicit origins; wildcard origin is not allowed.");
+    }
+    const parsed = parseRuntimeUrl(origin, "Production WEB_ORIGIN");
+    if (parsed.protocol !== "https:") {
+      throw new Error(`Production WEB_ORIGIN must use https: ${origin}`);
+    }
+    if (LOCAL_HOSTNAMES.has(parsed.hostname)) {
+      throw new Error(`Production WEB_ORIGIN must not point at local development hosts: ${origin}`);
+    }
+    if (isTemplateHostname(parsed.hostname)) {
+      throw new Error(`Production WEB_ORIGIN must not use example.com template hosts: ${origin}`);
+    }
+  });
+}
+
+function validateProductionObjectStorage(config) {
+  if (config.fileStorageDriver !== "s3") return;
+  const parsed = parseRuntimeUrl(config.objectStorage?.endpoint, "Production OBJECT_STORAGE_ENDPOINT");
+  if (parsed.protocol !== "https:") {
+    throw new Error("Production OBJECT_STORAGE_ENDPOINT must use https.");
+  }
+  if (LOCAL_HOSTNAMES.has(parsed.hostname)) {
+    throw new Error("Production OBJECT_STORAGE_ENDPOINT must not point at local development hosts.");
+  }
+  if (isTemplateHostname(parsed.hostname)) {
+    throw new Error("Production OBJECT_STORAGE_ENDPOINT must not use example.com template hosts.");
+  }
 }
 
 function validateRuntimeConfig(config) {
@@ -102,9 +159,8 @@ function validateRuntimeConfig(config) {
     throw new Error("Production JWT_SECRET must be a non-placeholder secret with at least 32 characters.");
   }
 
-  if (config.webOrigin.includes("*")) {
-    throw new Error("Production WEB_ORIGIN must list explicit origins; wildcard origin is not allowed.");
-  }
+  validateProductionWebOrigins(config);
+  validateProductionObjectStorage(config);
 
   if (config.runDbSeed && config.defaultAdminPassword === DEFAULT_ADMIN_PASSWORD) {
     throw new Error("Production seed cannot use the default admin password.");
@@ -117,6 +173,9 @@ function validateRuntimeConfig(config) {
   }
   if (!isAbsolute(config.fileStorageDir)) {
     throw new Error("Production FILE_STORAGE_DIR must be an absolute backed persistent volume path.");
+  }
+  if (isTemporaryPath(config.fileStorageDir)) {
+    throw new Error("Production FILE_STORAGE_DIR must not use temporary storage.");
   }
 }
 

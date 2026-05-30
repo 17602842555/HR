@@ -1588,7 +1588,7 @@ test("api responses include commercial security and trace headers", async () => 
     config: {
       isProduction: true,
       jwtSecret: "test-secret-with-at-least-32-characters",
-      webOrigin: ["https://oa.example.com"],
+      webOrigin: ["https://oa.company.cn"],
       fileStorageDir: productionFileStorageDir
     }
   });
@@ -5884,7 +5884,7 @@ test("production login cookie is secure and has explicit max age", async () => {
       cookieMaxAgeSeconds: 3600,
       isProduction: true,
       jwtSecret: "test-secret-with-at-least-32-characters",
-      webOrigin: ["https://oa.example.com"],
+      webOrigin: ["https://oa.company.cn"],
       fileStorageDir: productionFileStorageDir
     }
   });
@@ -5892,7 +5892,7 @@ test("production login cookie is secure and has explicit max age", async () => {
   const login = await app.inject({
     method: "POST",
     url: "/api/auth/login",
-    headers: { origin: "https://oa.example.com" },
+    headers: { origin: "https://oa.company.cn" },
     payload: {
       tenantCode: "default",
       email: "admin@oa.local",
