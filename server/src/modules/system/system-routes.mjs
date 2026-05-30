@@ -135,6 +135,30 @@ function summarizeSignoffDraft(kind, draft) {
   };
 }
 
+function safeSignoffReadinessSummary(readiness = {}) {
+  const items = Array.isArray(readiness?.items) ? readiness.items : [];
+  const safeItems = items.filter((item) => {
+    const id = String(item?.id || "");
+    const gapId = String(item?.gapId || "");
+    return Object.hasOwn(signoffDraftLabels, id) && /^GAP-\d{3}$/.test(gapId);
+  });
+  const relatedGapIds = [...new Set(safeItems.map((item) => String(item.gapId)))].sort();
+  const requiredActionCount = safeItems.reduce((sum, item) => {
+    return sum + (Array.isArray(item?.requiredActions) ? item.requiredActions.length : 0);
+  }, 0);
+  const validatorCommandCount = safeItems.reduce((sum, item) => {
+    return sum + (typeof item?.validatorCommand === "string" && item.validatorCommand.trim() ? 1 : 0);
+  }, 0);
+
+  return {
+    handoffItemCount: safeItems.length,
+    relatedGapIds,
+    requiredActionCount,
+    signoffReadinessStatus: String(readiness?.status || "missing").slice(0, 80),
+    validatorCommandCount
+  };
+}
+
 export async function loadSignoffDrafts(rootDir = process.cwd()) {
   const baseDir = resolve(rootDir, "reports", "commercial-evidence", "signoff-drafts");
   try {
@@ -142,6 +166,7 @@ export async function loadSignoffDrafts(rootDir = process.cwd()) {
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     const files = manifest?.files && typeof manifest.files === "object" ? manifest.files : {};
     const draftKinds = [];
+    const signoffReadiness = safeSignoffReadinessSummary(manifest?.signoffReadiness);
 
     for (const kind of ["hr", "secrets", "storage"]) {
       const draftPath = safeRelativeFile(rootDir, baseDir, files[kind]);
@@ -175,24 +200,34 @@ export async function loadSignoffDrafts(rootDir = process.cwd()) {
       available: true,
       draftCount: draftKinds.length,
       generatedAt: manifest.generatedAt || null,
+      handoffItemCount: signoffReadiness.handoffItemCount,
       kinds: draftKinds,
       nextCommandCount: Array.isArray(manifest.nextCommands) ? manifest.nextCommands.length : 0,
       openExceptionCount: draftKinds.reduce((sum, item) => sum + item.openExceptionCount, 0),
       pendingApprovalCount: draftKinds.reduce((sum, item) => sum + item.pendingApprovalCount, 0),
+      relatedGapIds: signoffReadiness.relatedGapIds,
       releaseEvidence: false,
-      status: "draft-only"
+      requiredActionCount: signoffReadiness.requiredActionCount,
+      signoffReadinessStatus: signoffReadiness.signoffReadinessStatus,
+      status: signoffReadiness.signoffReadinessStatus === "missing" ? "draft-only" : "draft-only:review-ready",
+      validatorCommandCount: signoffReadiness.validatorCommandCount
     };
   } catch {
     return {
       available: false,
       draftCount: 0,
       generatedAt: null,
+      handoffItemCount: 0,
       kinds: [],
       nextCommandCount: 0,
       openExceptionCount: 0,
       pendingApprovalCount: 0,
+      relatedGapIds: [],
       releaseEvidence: false,
-      status: "missing"
+      requiredActionCount: 0,
+      signoffReadinessStatus: "missing",
+      status: "missing",
+      validatorCommandCount: 0
     };
   }
 }

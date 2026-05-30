@@ -321,11 +321,15 @@ function createInitialState() {
         available: false,
         draftCount: 0,
         generatedAt: null,
+        handoffItemCount: 0,
         kinds: [],
         nextCommandCount: 0,
         openExceptionCount: 0,
         pendingApprovalCount: 0,
+        relatedGapIds: [],
         releaseEvidence: false,
+        requiredActionCount: 0,
+        signoffReadinessStatus: "missing",
         status: "missing"
       }
     },

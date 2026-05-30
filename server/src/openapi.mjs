@@ -630,11 +630,16 @@ export const openApiDocument = {
                   available: { type: "boolean" },
                   draftCount: { type: "integer" },
                   generatedAt: { type: ["string", "null"], format: "date-time" },
+                  handoffItemCount: { type: "integer" },
                   nextCommandCount: { type: "integer" },
                   openExceptionCount: { type: "integer" },
                   pendingApprovalCount: { type: "integer" },
+                  relatedGapIds: { type: "array", items: { type: "string" } },
                   releaseEvidence: { type: "boolean" },
+                  requiredActionCount: { type: "integer" },
+                  signoffReadinessStatus: { type: "string" },
                   status: { type: "string" },
+                  validatorCommandCount: { type: "integer" },
                   kinds: {
                     type: "array",
                     items: {

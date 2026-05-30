@@ -320,7 +320,74 @@ function draftFiles() {
   };
 }
 
+function countPendingApprovals(draft = {}) {
+  const approvals = Array.isArray(draft?.approvals) ? draft.approvals : [];
+  return approvals.filter((approval) => approval?.decision !== "approved").length;
+}
+
+function countOpenExceptions(draft = {}) {
+  return Array.isArray(draft?.openExceptions) ? draft.openExceptions.length : 0;
+}
+
+function buildDraftReviewItems({ drafts, files, rootDir }) {
+  const definitions = [
+    {
+      id: "secrets",
+      gapId: "GAP-003",
+      owner: "Security lead",
+      title: "Production secrets and Cloudflare backend origin signoff",
+      validatorCommand: "npm run validate:secrets-signoff -- <production-secrets-signoff.json> --env .env.production --json",
+      requiredActions: [
+        "Provide real production environment values through the approved secret store.",
+        "Configure Cloudflare API_ORIGIN and Tunnel evidence, then archive validate:cloudflare-backend output.",
+        "Replace pending Security/Deployment approvals and clear all production-secret exceptions."
+      ]
+    },
+    {
+      id: "storage",
+      gapId: "GAP-004",
+      owner: "Infrastructure lead",
+      title: "Attachment storage and restore-drill signoff",
+      validatorCommand: "npm run validate:storage-signoff -- <file-storage-signoff.json> --file-storage-dir <FILE_STORAGE_DIR> --environment production --json",
+      requiredActions: [
+        "Provision production attachment storage with independent backup or object replication.",
+        "Complete a restore drill and restored-attachment download smoke.",
+        "Replace pending Infrastructure/Security approvals and clear all storage exceptions."
+      ]
+    },
+    {
+      id: "hr",
+      gapId: "GAP-005",
+      owner: "Product lead",
+      title: "HR/Product personnel data signoff",
+      validatorCommand: "npm run validate:hr-signoff -- <hr-data-signoff.json> --source oa-dashboard.html --json",
+      requiredActions: [
+        "Confirm imported personnel counts and sensitive-field masking policy.",
+        "Confirm export ledger, export permission, and retention policies.",
+        "Replace pending HR/Product/Security approvals and clear all HR data exceptions."
+      ]
+    }
+  ];
+
+  return definitions.map((definition) => {
+    const draft = drafts?.[definition.id] || {};
+    return {
+      id: definition.id,
+      gapId: definition.gapId,
+      owner: definition.owner,
+      title: definition.title,
+      draftFile: relative(rootDir, files[definition.id]),
+      validatorCommand: definition.validatorCommand,
+      pendingApprovalCount: countPendingApprovals(draft),
+      openExceptionCount: countOpenExceptions(draft),
+      releaseEvidence: false,
+      requiredActions: definition.requiredActions
+    };
+  });
+}
+
 export function buildSignoffDraftManifest({
+  drafts,
   files,
   outputDir,
   rootDir,
@@ -335,6 +402,9 @@ export function buildSignoffDraftManifest({
   objectStorageRegion = "",
   generatedAt
 }) {
+  const reviewItems = buildDraftReviewItems({ drafts, files, rootDir });
+  const totalPendingApprovalCount = reviewItems.reduce((sum, item) => sum + item.pendingApprovalCount, 0);
+  const totalOpenExceptionCount = reviewItems.reduce((sum, item) => sum + item.openExceptionCount, 0);
   return {
     schemaVersion: 1,
     draft: true,
@@ -353,6 +423,14 @@ export function buildSignoffDraftManifest({
     },
     requiredSecretNames: productionSecretChecklist,
     files: Object.fromEntries(Object.entries(files).map(([key, filePath]) => [key, relative(rootDir, filePath)])),
+    signoffReadiness: {
+      releaseEvidence: false,
+      status: "draft-review-required",
+      totalOpenExceptionCount,
+      totalPendingApprovalCount,
+      itemCount: reviewItems.length,
+      items: reviewItems
+    },
     nextCommands: [
       "npm run validate:production-env -- .env.production --json",
       "npm run validate:secrets-signoff -- <production-secrets-signoff.json> --env .env.production --json",
@@ -389,6 +467,7 @@ export function generateSignoffDrafts(options = {}) {
     storage: buildStorageSignoffDraft({ envPath, fileStorageDir: options.fileStorageDir || "", now })
   };
   const manifest = buildSignoffDraftManifest({
+    drafts,
     files,
     outputDir: runDir,
     rootDir,

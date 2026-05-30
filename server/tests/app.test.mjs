@@ -1814,6 +1814,9 @@ test("system readiness API requires admin permission and redacts runtime secrets
     assert.equal(typeof readiness.signoffDrafts.available, "boolean");
     assert.equal(readiness.signoffDrafts.releaseEvidence, false);
     assert.equal(Array.isArray(readiness.signoffDrafts.kinds), true);
+    assert.equal(typeof readiness.signoffDrafts.handoffItemCount, "number");
+    assert.equal(Array.isArray(readiness.signoffDrafts.relatedGapIds), true);
+    assert.equal(typeof readiness.signoffDrafts.requiredActionCount, "number");
     if (readiness.signoffDrafts.available) {
       assert.equal(readiness.signoffDrafts.draftCount, 3);
       assert.ok(readiness.signoffDrafts.kinds.some((item) => item.id === "hr"));

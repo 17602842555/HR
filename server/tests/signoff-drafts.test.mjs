@@ -100,6 +100,19 @@ test("signoff draft generator writes non-release drafts from current source data
     assert.equal(manifest.source.backupDir, "/backups/postgres");
     assert.equal(manifest.source.fileBackupDir, "/backups/files");
     assert.equal(manifest.nextCommands.some((command) => command.includes("validate:hr-signoff")), true);
+    assert.equal(manifest.signoffReadiness.releaseEvidence, false);
+    assert.equal(manifest.signoffReadiness.status, "draft-review-required");
+    assert.equal(manifest.signoffReadiness.itemCount, 3);
+    assert.equal(manifest.signoffReadiness.totalPendingApprovalCount, 7);
+    assert.equal(manifest.signoffReadiness.totalOpenExceptionCount, 3);
+    assert.deepEqual(
+      manifest.signoffReadiness.items.map((item) => item.gapId).sort(),
+      ["GAP-003", "GAP-004", "GAP-005"]
+    );
+    assert.equal(manifest.signoffReadiness.items.some((item) => item.validatorCommand.includes("validate:secrets-signoff")), true);
+    assert.equal(manifest.signoffReadiness.items.some((item) => item.validatorCommand.includes("validate:storage-signoff")), true);
+    assert.equal(manifest.signoffReadiness.items.some((item) => item.validatorCommand.includes("validate:hr-signoff")), true);
+    assert.equal(manifest.signoffReadiness.items.every((item) => item.requiredActions.length >= 3), true);
     assert.equal(manifest.releaseUse.includes("Do not attach these draft files as release evidence"), true);
     assert.equal(modeOf(await stat(dir)), 0o700);
     assert.equal(modeOf(await stat(result.outputDir)), 0o700);

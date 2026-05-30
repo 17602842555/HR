@@ -164,11 +164,15 @@ export function Audit({ actions, state }) {
     available: false,
     draftCount: 0,
     generatedAt: null,
+    handoffItemCount: 0,
     kinds: [],
     nextCommandCount: 0,
     openExceptionCount: 0,
     pendingApprovalCount: 0,
+    relatedGapIds: [],
     releaseEvidence: false,
+    requiredActionCount: 0,
+    signoffReadinessStatus: "missing",
     status: "missing"
   };
   const hrDataReview = systemReadiness.hrDataReview || {
@@ -641,7 +645,7 @@ export function Audit({ actions, state }) {
             <strong>签署准备</strong>
             <span>
               {signoffDrafts.available
-                ? `草稿生成时间：${readinessTime(signoffDrafts.generatedAt)} · 后续验证命令 ${signoffDrafts.nextCommandCount || 0} 条`
+                ? `草稿生成时间：${readinessTime(signoffDrafts.generatedAt)} · 责任项 ${signoffDrafts.handoffItemCount || 0} 个 · 责任缺口 ${(signoffDrafts.relatedGapIds || []).join(" / ") || "未识别"} · 待办 ${signoffDrafts.requiredActionCount || 0} 项`
                 : "尚未生成签署草稿"}
             </span>
           </div>

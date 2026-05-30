@@ -53,6 +53,47 @@ test("signoff draft readiness summarizes manifest files without leaking paths", 
         secrets: "reports/commercial-evidence/signoff-drafts/signoff-drafts-test/production-secrets-signoff.draft.json",
         storage: "reports/commercial-evidence/signoff-drafts/signoff-drafts-test/file-storage-signoff.draft.json"
       },
+      signoffReadiness: {
+        releaseEvidence: false,
+        status: "draft-review-required",
+        totalOpenExceptionCount: 3,
+        totalPendingApprovalCount: 2,
+        itemCount: 4,
+        items: [
+          {
+            id: "secrets",
+            gapId: "GAP-003",
+            owner: "Security lead",
+            draftFile: "reports/commercial-evidence/signoff-drafts/signoff-drafts-test/production-secrets-signoff.draft.json",
+            validatorCommand: "npm run validate:secrets-signoff -- reviewed.json --json",
+            requiredActions: ["review secrets", "review origin"]
+          },
+          {
+            id: "storage",
+            gapId: "GAP-004",
+            owner: "Infrastructure lead",
+            draftFile: "reports/commercial-evidence/signoff-drafts/signoff-drafts-test/file-storage-signoff.draft.json",
+            validatorCommand: "npm run validate:storage-signoff -- reviewed.json --json",
+            requiredActions: ["restore drill", "download smoke", "owner approval"]
+          },
+          {
+            id: "hr",
+            gapId: "GAP-005",
+            owner: "Product lead",
+            draftFile: "reports/commercial-evidence/signoff-drafts/signoff-drafts-test/hr-data-signoff.draft.json",
+            validatorCommand: "npm run validate:hr-signoff -- reviewed.json --json",
+            requiredActions: ["review counts"]
+          },
+          {
+            id: "unknown",
+            gapId: "../secret",
+            owner: "Unsafe",
+            draftFile: "/tmp/unsafe.json",
+            validatorCommand: "cat /tmp/unsafe",
+            requiredActions: ["unsafe"]
+          }
+        ]
+      },
       nextCommands: ["npm run validate:hr-signoff -- reviewed.json --json"]
     });
 
@@ -63,12 +104,17 @@ test("signoff draft readiness summarizes manifest files without leaking paths", 
     assert.equal(summary.nextCommandCount, 1);
     assert.equal(summary.openExceptionCount, 3);
     assert.equal(summary.pendingApprovalCount, 2);
+    assert.equal(summary.handoffItemCount, 3);
+    assert.deepEqual(summary.relatedGapIds, ["GAP-003", "GAP-004", "GAP-005"]);
+    assert.equal(summary.requiredActionCount, 6);
+    assert.equal(summary.signoffReadinessStatus, "draft-review-required");
+    assert.equal(summary.validatorCommandCount, 3);
     assert.equal(summary.releaseEvidence, false);
     assert.deepEqual(summary.kinds.map((item) => item.id), ["hr", "secrets", "storage"]);
     assert.equal(summary.kinds.find((item) => item.id === "secrets").status, "草稿待复核");
     assert.doesNotMatch(
       JSON.stringify(summary),
-      /reports\/commercial-evidence|signoff-drafts-test|\.draft\.json|\/tmp\//
+      /reports\/commercial-evidence|signoff-drafts-test|\.draft\.json|\/tmp\/|validate:|reviewed\.json|unsafe/
     );
   } finally {
     await rm(root, { recursive: true, force: true });
