@@ -2,6 +2,10 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:2026.5.0
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       api:
         condition: service_healthy

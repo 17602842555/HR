@@ -295,6 +295,20 @@ function checkDeploymentArtifacts() {
     "replace-with-a-long-random-secret-before-deployment"
   ].forEach((needle) => assertNotIncludes(productionCompose, needle, "docker-compose.prod.yml"));
 
+  const cloudflareCompose = readText("docker-compose.cloudflare.yml");
+  [
+    "cloudflare/cloudflared:2026.5.0",
+    "restart: always",
+    "security_opt:",
+    "no-new-privileges:true",
+    "cap_drop:",
+    "- ALL",
+    "condition: service_healthy",
+    "--no-autoupdate",
+    "${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}"
+  ].forEach((needle) => assertIncludes(cloudflareCompose, needle, "docker-compose.cloudflare.yml"));
+  assertNotIncludes(cloudflareCompose, "ports:", "docker-compose.cloudflare.yml");
+
   const apiDockerfile = readText("Dockerfile.api");
   [
     "mkdir -p /app/storage/files",
@@ -4668,6 +4682,7 @@ function main() {
       "commercial doctor diagnostics",
       "Cloudflare deployment status doctor",
       "Cloudflare Worker API origin runtime guard",
+      "Cloudflare tunnel sidecar hardening",
       "Docker nginx body/proxy settings",
       "Docker web API-required build args",
       "deployable brand boundary check",

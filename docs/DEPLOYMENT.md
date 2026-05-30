@@ -389,7 +389,7 @@ npm run smoke:cloudflare -- --url https://<worker-or-custom-domain> --json
 
 ## Cloudflare Tunnel Backend Server
 
-Use `docker-compose.cloudflare.yml` together with `docker-compose.prod.yml` when the Fastify API should be exposed through Cloudflare without opening an inbound API port on the server. Create a remotely-managed Cloudflare Tunnel, set its public hostname to the backend API domain, and route that hostname to the compose service URL:
+Use `docker-compose.cloudflare.yml` together with `docker-compose.prod.yml` when the Fastify API should be exposed through Cloudflare without opening an inbound API port on the server. The `cloudflared` sidecar is outbound-only, waits for the API healthcheck, runs with `no-new-privileges`, and drops all Linux capabilities. Create a remotely-managed Cloudflare Tunnel, set its public hostname to the backend API domain, and route that hostname to the compose service URL:
 
 ```text
 http://api:8787

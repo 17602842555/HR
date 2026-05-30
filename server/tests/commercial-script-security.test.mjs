@@ -145,6 +145,8 @@ test("cloudflare compose exposes API through an outbound tunnel only", () => {
   assert.match(compose, /--no-autoupdate/);
   assert.match(compose, /CLOUDFLARE_TUNNEL_TOKEN is required/);
   assert.match(compose, /condition: service_healthy/);
+  assert.match(compose, /security_opt:\n\s+- no-new-privileges:true/);
+  assert.match(compose, /cap_drop:\n\s+- ALL/);
   assert.doesNotMatch(compose, /ports:/);
   assert.match(envExample, /CLOUDFLARE_TUNNEL_TOKEN=/);
   assert.match(envExample, /API_ORIGIN=https:\/\/api\.oa\.example\.com/);
