@@ -157,6 +157,21 @@ latest_file_backup() {
   ls -t "${backups[@]}" | head -n 1
 }
 
+relative_to_root() {
+  node - "$ROOT_DIR" "$1" <<'NODE'
+const path = require("node:path");
+const [rootDir, target] = process.argv.slice(2);
+const resolvedRoot = path.resolve(rootDir);
+const resolvedTarget = path.resolve(resolvedRoot, target);
+const relativePath = path.relative(resolvedRoot, resolvedTarget);
+if (relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath)) {
+  console.log(relativePath);
+} else {
+  console.log(target);
+}
+NODE
+}
+
 if [[ "$APP_ENV" == "production" && "${ALLOW_PRODUCTION_DRILL:-0}" != "1" ]]; then
   echo "Commercial drill is destructive. Set ALLOW_PRODUCTION_DRILL=1 only after production incident approval." >&2
   exit 65
@@ -210,6 +225,10 @@ write_ready_evidence "$COMMERCIAL_EVIDENCE_DIR/post-restore-ready.json"
 echo "Running post-restore commercial smoke."
 COMMERCIAL_SMOKE_EVIDENCE_FILE="$COMMERCIAL_EVIDENCE_DIR/post-restore-smoke.json" npm run smoke:commercial
 
+summary_backup_file="$(relative_to_root "$backup_file")"
+summary_file_backup="$(relative_to_root "$file_backup")"
+summary_evidence_dir="$(relative_to_root "$COMMERCIAL_EVIDENCE_DIR")"
+
 cat >"$COMMERCIAL_EVIDENCE_DIR/drill-summary.json" <<EOF
 {
   "ok": true,
@@ -218,14 +237,14 @@ cat >"$COMMERCIAL_EVIDENCE_DIR/drill-summary.json" <<EOF
   "finishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "apiBaseUrl": "$API_BASE_URL",
   "databaseUrl": "$(masked_database_url)",
-  "backupFile": "$backup_file",
-  "backupMeta": "$backup_file.meta",
-  "fileBackup": "$file_backup",
-  "fileBackupMeta": "$file_backup.meta",
-  "preRestoreReadyEvidence": "$COMMERCIAL_EVIDENCE_DIR/pre-restore-ready.json",
-  "postRestoreReadyEvidence": "$COMMERCIAL_EVIDENCE_DIR/post-restore-ready.json",
-  "preRestoreSmokeEvidence": "$COMMERCIAL_EVIDENCE_DIR/pre-restore-smoke.json",
-  "postRestoreSmokeEvidence": "$COMMERCIAL_EVIDENCE_DIR/post-restore-smoke.json"
+  "backupFile": "$summary_backup_file",
+  "backupMeta": "$summary_backup_file.meta",
+  "fileBackup": "$summary_file_backup",
+  "fileBackupMeta": "$summary_file_backup.meta",
+  "preRestoreReadyEvidence": "$summary_evidence_dir/pre-restore-ready.json",
+  "postRestoreReadyEvidence": "$summary_evidence_dir/post-restore-ready.json",
+  "preRestoreSmokeEvidence": "$summary_evidence_dir/pre-restore-smoke.json",
+  "postRestoreSmokeEvidence": "$summary_evidence_dir/post-restore-smoke.json"
 }
 EOF
 chmod 600 "$COMMERCIAL_EVIDENCE_DIR/drill-summary.json"

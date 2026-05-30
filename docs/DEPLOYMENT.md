@@ -198,7 +198,7 @@ Commercial Docker drill workflow:
 # Optional input `run_release_evidence=true` also writes a diagnostic evidence package after the drill.
 ```
 
-`.github/workflows/commercial-drill.yml` is a manual Docker-capable recovery drill for environments like GitHub-hosted Ubuntu runners where Docker Compose is available even if a local workstation does not have Docker. It uses Node 24-native GitHub actions, checks out the repo, installs dependencies, copies `.env.example` to `.env`, overrides file storage to the container volume path (`FILE_STORAGE_DIR="/app/storage/files"` and `FILE_BACKUP_USE_LOCAL="0"`), runs `npm run drill:commercial`, validates `commercial-evidence/latest-drill-summary.json` with `npm run validate:drill-evidence -- commercial-evidence/latest-drill-summary.json --json`, always tears down the compose stack with `docker compose down -v --remove-orphans`, and uploads `commercial-evidence`, `backups`, and `reports/commercial-evidence` as `commercial-drill-evidence`. This workflow provides the executable path for closing GAP-002 once its artifact is reviewed, but it is still local-demo drill evidence unless production/staging `.env.production`, signoffs, and release-gate evidence are also green.
+`.github/workflows/commercial-drill.yml` is a manual Docker-capable recovery drill for environments like GitHub-hosted Ubuntu runners where Docker Compose is available even if a local workstation does not have Docker. It uses Node 24-native GitHub actions, checks out the repo, installs dependencies, copies `.env.example` to `.env`, overrides file storage to the container volume path (`FILE_STORAGE_DIR="/app/storage/files"` and `FILE_BACKUP_USE_LOCAL="0"`), runs `npm run drill:commercial`, validates `commercial-evidence/latest-drill-summary.json` with `npm run validate:drill-evidence -- commercial-evidence/latest-drill-summary.json --json`, always tears down the compose stack with `docker compose down -v --remove-orphans`, and uploads `commercial-evidence`, `backups`, and `reports/commercial-evidence` as `commercial-drill-evidence`. Run `26677304350` passed on 2026-05-30 and uploaded artifact `7306216857`; the downloaded artifact also revalidates locally because the validator can replay GitHub runner artifact paths. This workflow mitigates the local Docker CLI blocker, but it is still local-demo drill evidence unless production/staging `.env.production`, signoffs, and release-gate evidence are also green.
 
 Migration integrity validation is deterministic and does not require a database:
 
@@ -268,7 +268,7 @@ cp .env.example .env
 npm run drill:commercial
 ```
 
-The drill first runs the static commercial gates (`preflight:commercial`, `brand:check`, and `contract:api`) before touching Docker or the database. It then runs `docker compose up --build -d`, waits for `/ready`, executes the commercial smoke test, creates an audited backup, restores the latest backup, reapplies migrations, waits for readiness again, and runs the smoke test a second time. It writes `pre-restore-ready.json`, `pre-restore-smoke.json`, `post-restore-ready.json`, `post-restore-smoke.json`, and `drill-summary.json` under a private `COMMERCIAL_EVIDENCE_DIR`, then refreshes `commercial-evidence/latest-drill-summary.json` with private file mode; the summary masks the database password before it is printed or archived. Validate the archived drill with `npm run validate:drill-evidence -- commercial-evidence/latest-drill-summary.json --json` so backup metadata, checksums, tar entry safety, backup freshness against RPO, total drill duration against RTO, pre/post readiness, and pre/post smoke are proven before release. It is destructive to the target database. It refuses to run with `APP_ENV=production` unless `ALLOW_PRODUCTION_DRILL=1` is set after incident approval.
+The drill first runs the static commercial gates (`preflight:commercial`, `brand:check`, and `contract:api`) before touching Docker or the database. It then runs `docker compose up --build -d`, waits for `/ready`, executes the commercial smoke test, creates an audited backup, restores the latest backup, reapplies migrations, waits for readiness again, and runs the smoke test a second time. It writes `pre-restore-ready.json`, `pre-restore-smoke.json`, `post-restore-ready.json`, `post-restore-smoke.json`, and `drill-summary.json` under a private `COMMERCIAL_EVIDENCE_DIR`, then refreshes `commercial-evidence/latest-drill-summary.json` with private file mode; the summary masks the database password before it is printed or archived and stores project-local relative paths where possible so downloaded artifacts can be revalidated. Validate the archived drill with `npm run validate:drill-evidence -- commercial-evidence/latest-drill-summary.json --json` so backup metadata, checksums, tar entry safety, backup freshness against RPO, total drill duration against RTO, pre/post readiness, and pre/post smoke are proven before release. It is destructive to the target database. It refuses to run with `APP_ENV=production` unless `ALLOW_PRODUCTION_DRILL=1` is set after incident approval.
 
 When Docker is unavailable on a development machine, run `npm run drill:local-recovery` against a disposable local PostgreSQL database and validate it with `npm run validate:local-recovery-drill`. That produces `commercial-evidence/latest-local-recovery-drill-summary.json` for engineering diagnosis only; the release gate and GAP-002 still require Docker compose drill evidence through `npm run drill:commercial` or the manual `commercial-drill` workflow.
 
@@ -326,6 +326,13 @@ Production frontend builds should set `VITE_REQUIRE_API=1` and keep `VITE_DEMO_F
 
 The repository includes `wrangler.toml`, `cloudflare/worker.js`, and `.github/workflows/cloudflare-deploy.yml` so the frontend can be pushed to `17602842555/HR.git` and deployed as Cloudflare Worker static assets. The Worker serves the Vite `dist/` SPA and proxies `/api/*` to the configured backend origin through `API_ORIGIN`, while `/api/edge/health` verifies the edge gateway itself.
 
+Current Cloudflare setup created on 2026-05-30:
+
+- Worker deployed: `deep-oa-hr` at `https://deep-oa-hr.2445776963.workers.dev`, version `9ef44b70-abd0-4d3b-a9d7-b63791120478`.
+- Edge health passes at `/api/edge/health`; `/api/*` correctly returns `api_origin_not_configured` until `API_ORIGIN` is set to the approved backend Tunnel hostname.
+- GitHub repository secrets currently configured: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_DEPLOYMENT_URL`, `CLOUDFLARE_BACKEND_WEB_ORIGIN`, and `CLOUDFLARE_TUNNEL_TOKEN`.
+- Still required for GitHub auto-deploy and production release: durable `CLOUDFLARE_API_TOKEN`, production `API_ORIGIN`, production `.env.production`, production database/file-storage signoffs, and Cloudflare smoke through the final backend origin.
+
 Required GitHub repository secrets:
 
 ```bash
@@ -375,6 +382,8 @@ Use `docker-compose.cloudflare.yml` together with `docker-compose.prod.yml` when
 ```text
 http://api:8787
 ```
+
+Current Tunnel created on 2026-05-30: `deep-oa-hr-api` (`399ce110-a343-43b5-81cd-333f5f86212c`). It is inactive until a server runs `cloudflared` with the repository `CLOUDFLARE_TUNNEL_TOKEN` and the Tunnel has a public hostname in Cloudflare. The current Cloudflare account has no DNS zone, so add a domain to Cloudflare or provide another approved HTTPS API hostname before setting `API_ORIGIN`.
 
 Required server-side production values:
 

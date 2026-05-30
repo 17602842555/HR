@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { basename, dirname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { validateTarArchive } from "./validate-file-backup.mjs";
 
@@ -19,6 +19,32 @@ const futureClockSkewMinutes = 5;
 
 function resolvePath(path, rootDir = process.cwd()) {
   return isAbsolute(path) ? path : resolve(rootDir, path);
+}
+
+function inferEvidenceRoot(summaryPath, fallbackRoot = process.cwd()) {
+  let dir = dirname(summaryPath);
+  while (dir && dir !== dirname(dir)) {
+    if (basename(dir) === "commercial-evidence") return dirname(dir);
+    dir = dirname(dir);
+  }
+  return fallbackRoot;
+}
+
+function remapKnownArtifactPath(path, evidenceRoot) {
+  const normalized = String(path || "").replaceAll("\\", "/");
+  for (const marker of ["/commercial-evidence/", "/backups/"]) {
+    const markerIndex = normalized.indexOf(marker);
+    if (markerIndex !== -1) {
+      return resolve(evidenceRoot, normalized.slice(markerIndex + 1));
+    }
+  }
+  return null;
+}
+
+function resolveEvidencePath(path, evidenceRoot = process.cwd()) {
+  if (!isAbsolute(path)) return resolve(evidenceRoot, path);
+  if (existsSync(path)) return path;
+  return remapKnownArtifactPath(path, evidenceRoot) || path;
 }
 
 function addError(errors, message, details = {}) {
@@ -184,6 +210,7 @@ function validateBackupArtifact({
   metadata,
   expectedArtifactType,
   errors,
+  evidenceRoot,
   label,
   inspectTar = false
 }) {
@@ -222,7 +249,7 @@ function validateBackupArtifact({
       });
     }
   }
-  if (metadata.backup_file && resolvePath(metadata.backup_file) !== artifactPath) {
+  if (metadata.backup_file && resolveEvidencePath(metadata.backup_file, evidenceRoot) !== artifactPath) {
     addError(errors, `${label} metadata backup_file does not match summary artifact`, {
       metadataBackupFile: metadata.backup_file,
       summaryArtifact: artifactPath
@@ -289,6 +316,7 @@ export function validateCommercialDrillEvidence(summaryPath = defaultDrillSummar
   const errors = [];
   const warnings = [];
   const resolvedSummaryPath = resolvePath(summaryPath, rootDir);
+  const evidenceRoot = inferEvidenceRoot(resolvedSummaryPath, rootDir);
 
   if (!existsSync(resolvedSummaryPath)) {
     return {
@@ -341,7 +369,7 @@ export function validateCommercialDrillEvidence(summaryPath = defaultDrillSummar
     if (!summary[field]) {
       addError(errors, `drill summary is missing ${field}`);
     } else {
-      paths[field] = resolvePath(summary[field], rootDir);
+      paths[field] = resolveEvidencePath(summary[field], evidenceRoot);
     }
   });
 
@@ -353,6 +381,7 @@ export function validateCommercialDrillEvidence(summaryPath = defaultDrillSummar
       metadata: dbMetadata,
       expectedArtifactType: "database",
       errors,
+      evidenceRoot,
       label: "database backup"
     });
     const timing = validateBackupTiming({ metadata: dbMetadata, errors, label: "database backup", finishedAt });
@@ -367,6 +396,7 @@ export function validateCommercialDrillEvidence(summaryPath = defaultDrillSummar
       metadata: fileMetadata,
       expectedArtifactType: "file_storage",
       errors,
+      evidenceRoot,
       label: "file storage backup",
       inspectTar: true
     });

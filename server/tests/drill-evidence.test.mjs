@@ -144,6 +144,104 @@ test("commercial drill evidence validator accepts a complete restore drill packa
   }
 });
 
+test("commercial drill evidence validator accepts downloaded GitHub artifact layout", async () => {
+  const root = await mkdtemp(join(tmpdir(), "oa-drill-artifact-"));
+  const storageDir = join(root, "storage");
+  const dbBackupDir = join(root, "backups", "postgres");
+  const fileBackupDir = join(root, "backups", "files");
+  const evidenceDir = join(root, "commercial-evidence", "drill-20260530T120000Z");
+  try {
+    await mkdir(storageDir, { recursive: true });
+    await mkdir(dbBackupDir, { recursive: true });
+    await mkdir(fileBackupDir, { recursive: true });
+    await mkdir(evidenceDir, { recursive: true });
+    await writeFile(join(storageDir, "attachment.txt"), "restored attachment");
+
+    const dbBackup = join(dbBackupDir, "oa_commercial-20260530-120000.dump");
+    await writeFile(dbBackup, "custom postgres dump bytes");
+    await writeMetadata(`${dbBackup}.meta`, {
+      created_at: "20260530-120000",
+      app_env: "development",
+      artifact_type: "database",
+      database: "oa_commercial",
+      service: "postgres",
+      backup_file: "backups/postgres/oa_commercial-20260530-120000.dump",
+      size_bytes: (await stat(dbBackup)).size,
+      sha256: await sha256(dbBackup),
+      rpo_target: "24h",
+      rto_target: "4h"
+    });
+
+    const fileBackup = join(fileBackupDir, "file-storage-development-20260530-120000.tar.gz");
+    const tar = spawnSync("tar", ["-czf", fileBackup, "-C", storageDir, "."], { encoding: "utf8" });
+    assert.equal(tar.status, 0, tar.stderr);
+    await writeMetadata(`${fileBackup}.meta`, {
+      created_at: "20260530-120000",
+      app_env: "development",
+      artifact_type: "file_storage",
+      storage_mode: "docker",
+      api_service: "api",
+      file_storage_dir: "/app/storage/files",
+      backup_file: "backups/files/file-storage-development-20260530-120000.tar.gz",
+      file_count: 1,
+      size_bytes: (await stat(fileBackup)).size,
+      sha256: await sha256(fileBackup),
+      rpo_target: "24h",
+      rto_target: "4h"
+    });
+
+    const readyPayload = {
+      kind: "api-readiness",
+      capturedAt: "2026-05-30T12:00:00.000Z",
+      baseUrl: "http://127.0.0.1:8787",
+      status: 200,
+      ok: true,
+      payload: { ok: true, service: "oa-api", database: "ok", fileStorage: "ok" }
+    };
+    const smokePayload = {
+      ok: true,
+      kind: "commercial-smoke",
+      runId: "test-run",
+      baseUrl: "http://127.0.0.1:8787",
+      tenantCode: "default",
+      startedAt: "2026-05-30T12:00:00.000Z",
+      finishedAt: "2026-05-30T12:02:00.000Z",
+      evidence: { auditRows: 10 }
+    };
+    await writeJson(join(evidenceDir, "pre-restore-ready.json"), readyPayload);
+    await writeJson(join(evidenceDir, "post-restore-ready.json"), readyPayload);
+    await writeJson(join(evidenceDir, "pre-restore-smoke.json"), smokePayload);
+    await writeJson(join(evidenceDir, "post-restore-smoke.json"), smokePayload);
+
+    const runnerEvidenceRoot = "/home/runner/work/HR/HR/commercial-evidence/drill-20260530T120000Z";
+    const summaryPath = join(root, "commercial-evidence", "latest-drill-summary.json");
+    await writeJson(summaryPath, {
+      ok: true,
+      kind: "commercial-drill",
+      startedAt: "2026-05-30T12:00:00Z",
+      finishedAt: "2026-05-30T12:03:00Z",
+      apiBaseUrl: "http://127.0.0.1:8787",
+      databaseUrl: "postgresql://oa:***@127.0.0.1:5432/oa_commercial?schema=public",
+      backupFile: "backups/postgres/oa_commercial-20260530-120000.dump",
+      backupMeta: "backups/postgres/oa_commercial-20260530-120000.dump.meta",
+      fileBackup: "backups/files/file-storage-development-20260530-120000.tar.gz",
+      fileBackupMeta: "backups/files/file-storage-development-20260530-120000.tar.gz.meta",
+      preRestoreReadyEvidence: `${runnerEvidenceRoot}/pre-restore-ready.json`,
+      postRestoreReadyEvidence: `${runnerEvidenceRoot}/post-restore-ready.json`,
+      preRestoreSmokeEvidence: `${runnerEvidenceRoot}/pre-restore-smoke.json`,
+      postRestoreSmokeEvidence: `${runnerEvidenceRoot}/post-restore-smoke.json`
+    });
+
+    const result = validateCommercialDrillEvidence(summaryPath);
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.errors, []);
+    assert.match(result.evidence.preRestoreSmokeEvidence, /commercial-evidence\/drill-20260530T120000Z\/pre-restore-smoke\.json$/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("commercial drill evidence validator rejects unmasked database passwords", async () => {
   const fixture = await createValidDrillFixture({
     summary: { databaseUrl: "postgresql://oa:oa_dev_password@127.0.0.1:5432/oa_commercial?schema=public" }

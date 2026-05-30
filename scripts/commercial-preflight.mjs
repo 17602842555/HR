@@ -1874,6 +1874,8 @@ function checkCommercialDrillEvidenceValidation() {
   const validator = readText("scripts/validate-drill-evidence.mjs");
   [
     "validateCommercialDrillEvidence",
+    "inferEvidenceRoot",
+    "remapKnownArtifactPath",
 	    "parseDrillEvidenceArgs",
 	    "allowedKinds = [\"commercial-drill\"]",
 	    "commercial-evidence/latest-drill-summary.json",
@@ -1903,6 +1905,7 @@ function checkCommercialDrillEvidenceValidation() {
   const tests = readText("server/tests/drill-evidence.test.mjs");
   [
     "commercial drill evidence validator accepts a complete restore drill package",
+    "commercial drill evidence validator accepts downloaded GitHub artifact layout",
     "commercial drill evidence validator rejects unmasked database passwords",
 	    "commercial drill evidence validator rejects checksum mismatches and missing files",
 	    "commercial drill evidence validator rejects failed readiness and smoke evidence",
@@ -1915,6 +1918,7 @@ function checkCommercialDrillEvidenceValidation() {
 
   const drill = readText("scripts/commercial-drill.sh");
   [
+    "relative_to_root",
 	    "preRestoreReadyEvidence",
 	    "postRestoreReadyEvidence",
 	    "startedAt",
