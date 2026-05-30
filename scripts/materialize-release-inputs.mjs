@@ -4,13 +4,15 @@ import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parse as parseDotenv } from "dotenv";
 import { redactEvidenceText } from "./commercial-evidence.mjs";
+import { parseProductionEnvText, validateProductionEnv } from "./validate-production-env.mjs";
 
 const defaultInputSpecs = Object.freeze([
   Object.freeze({
     envName: "PRODUCTION_ENV_B64",
     kind: "dotenv",
     outputPath: ".env.production",
-    required: true
+    required: true,
+    validateProduction: true
   }),
   Object.freeze({
     envName: "PRODUCTION_SECRETS_SIGNOFF_B64",
@@ -85,7 +87,7 @@ function decodeBase64Env(env, envName) {
   return text.endsWith("\n") ? text : `${text}\n`;
 }
 
-function validateDecodedContent({ envName, forbidExample = false, kind, text }) {
+function validateDecodedContent({ envName, forbidExample = false, kind, text, validateProduction = false }) {
   if (kind === "json") {
     try {
       const parsed = JSON.parse(text);
@@ -106,6 +108,12 @@ function validateDecodedContent({ envName, forbidExample = false, kind, text }) 
       }
     } catch (error) {
       throw new Error(`${envName} decoded content is not a valid dotenv file: ${error.message}`);
+    }
+    if (validateProduction) {
+      const report = validateProductionEnv(parseProductionEnvText(text));
+      if (!report.ok) {
+        throw new Error(`${envName} production env validation failed: ${report.errors.join("; ")}`);
+      }
     }
   } else {
     throw new Error(`Unsupported release input kind: ${kind}`);
@@ -188,7 +196,13 @@ export function materializeReleaseInputs({
   for (const spec of inputSpecs) {
     try {
       const text = decodeBase64Env(env, spec.envName);
-      validateDecodedContent({ envName: spec.envName, forbidExample: spec.forbidExample, kind: spec.kind, text });
+      validateDecodedContent({
+        envName: spec.envName,
+        forbidExample: spec.forbidExample,
+        kind: spec.kind,
+        text,
+        validateProduction: spec.validateProduction
+      });
       const outputPath = resolveInsideRoot(rootDir, spec.outputPath);
       decodedInputs.push({ spec, text, outputPath });
     } catch (error) {

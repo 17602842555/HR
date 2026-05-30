@@ -523,6 +523,8 @@ function checkDeploymentArtifacts() {
     "0o600",
     "0o700",
     "parseDotenv",
+    "validateProductionEnv",
+    "production env validation failed",
     "decodedInputs",
     "forbidExample",
     "example release inputs cannot be materialized",
@@ -650,6 +652,7 @@ function checkDeploymentArtifacts() {
     "release input materializer rejects missing and malformed release secrets",
     "release input materializer does not write partial files when validation fails",
     "release input materializer rejects example signoffs before writing files",
+    "release input materializer rejects invalid production env before writing files",
     "release input materializer accepts unpadded base64 but rejects invalid utf8",
     "release input materializer parser supports json flag"
   ].forEach((needle) => assertIncludes(materializeReleaseInputsTests, needle, "server/tests/materialize-release-inputs.test.mjs"));

@@ -16,9 +16,37 @@ function b64(value) {
   return Buffer.from(value).toString("base64");
 }
 
+function productionEnvText() {
+  return [
+    "APP_ENV=production",
+    "NODE_ENV=production",
+    "POSTGRES_DB=oa_commercial",
+    "POSTGRES_USER=oa",
+    "POSTGRES_PASSWORD=real_production_pg_secret_20260530",
+    "JWT_SECRET=real-production-jwt-secret-20260530-minimum-32-chars",
+    "COOKIE_MAX_AGE_SECONDS=28800",
+    "AUTH_FAILED_LOGIN_LIMIT=5",
+    "AUTH_FAILED_LOGIN_WINDOW_MS=600000",
+    "AUTH_FAILED_LOGIN_MAX_KEYS=10000",
+    "FILE_STORAGE_DRIVER=local",
+    "FILE_STORAGE_DIR=/srv/deep-oa/storage/files",
+    "BACKUP_DIR=/srv/deep-oa/backups/postgres",
+    "FILE_BACKUP_DIR=/srv/deep-oa/backups/files",
+    "FILE_MAX_UPLOAD_BYTES=5242880",
+    "IMPORT_MAX_HTML_BYTES=10485760",
+    "API_BODY_LIMIT_BYTES=10551296",
+    "WEB_ORIGIN=https://oa.company.test",
+    "TRUST_PROXY=1",
+    "RUN_DB_SEED=0",
+    "VITE_REQUIRE_API=1",
+    "VITE_DEMO_FALLBACK=0",
+    ""
+  ].join("\n");
+}
+
 function releaseInputEnv() {
   return {
-    PRODUCTION_ENV_B64: b64("APP_ENV=production\nNODE_ENV=production\nPOSTGRES_PASSWORD=real_secret_value\n"),
+    PRODUCTION_ENV_B64: b64(productionEnvText()),
     PRODUCTION_SECRETS_SIGNOFF_B64: b64(JSON.stringify({ schemaVersion: 1, kind: "secrets" })),
     HR_DATA_SIGNOFF_B64: b64(JSON.stringify({ schemaVersion: 1, kind: "hr" })),
     FILE_STORAGE_SIGNOFF_B64: b64(JSON.stringify({ schemaVersion: 1, kind: "storage" }))
@@ -125,6 +153,29 @@ test("release input materializer rejects example signoffs before writing files",
   }
 });
 
+test("release input materializer rejects invalid production env before writing files", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "oa-release-inputs-prod-env-"));
+  try {
+    const result = materializeReleaseInputs({
+      env: {
+        ...releaseInputEnv(),
+        PRODUCTION_ENV_B64: b64("APP_ENV=production\nNODE_ENV=production\nWEB_ORIGIN=http://127.0.0.1:5174\n")
+      },
+      rootDir: dir
+    });
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.written, []);
+    assert(result.errors.some((error) => error.includes("PRODUCTION_ENV_B64 production env validation failed")));
+    await assert.rejects(stat(join(dir, ".env.production")), { code: "ENOENT" });
+    await assert.rejects(stat(join(dir, "docs", "production-secrets-signoff.json")), { code: "ENOENT" });
+    await assert.rejects(stat(join(dir, "docs", "hr-data-signoff.json")), { code: "ENOENT" });
+    await assert.rejects(stat(join(dir, "docs", "file-storage-signoff.json")), { code: "ENOENT" });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("release input materializer accepts unpadded base64 but rejects invalid utf8", async () => {
   const dir = await mkdtemp(join(tmpdir(), "oa-release-inputs-base64-"));
   try {
@@ -162,7 +213,7 @@ test("release input materializer writes private validation manifest", async () =
     assert.equal(manifest.ok, true);
     assert.equal((await stat(manifestPath)).mode & 0o777, 0o600);
     assert.equal((await stat(join(dir, "reports/commercial-evidence/signoff-validation"))).mode & 0o777, 0o700);
-    assert.doesNotMatch(JSON.stringify(manifest), /real_secret_value/);
+    assert.doesNotMatch(JSON.stringify(manifest), /real_production_pg_secret/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -187,7 +238,7 @@ test("release input materializer CLI writes private output without shell redirec
     assert.equal(parsed.outputPath, "reports/commercial-evidence/signoff-validation/release-inputs.json");
     const manifestPath = join(dir, parsed.outputPath);
     assert.equal((await stat(manifestPath)).mode & 0o777, 0o600);
-    assert.doesNotMatch(await readFile(manifestPath, "utf8"), /real_secret_value/);
+    assert.doesNotMatch(await readFile(manifestPath, "utf8"), /real_production_pg_secret/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
