@@ -500,6 +500,20 @@ function checkDeploymentArtifacts() {
   );
   assertNotIncludes(signoffWorkflow, "path: .env.production", ".github/workflows/commercial-signoff.yml");
 
+  const cloudflareDeployWorkflow = readText(".github/workflows/cloudflare-deploy.yml");
+  [
+    "workflow_dispatch:",
+    "require_deploy:",
+    "REQUIRE_CLOUDFLARE_DEPLOY",
+    "Require Cloudflare deployment configuration",
+    "Cloudflare deployment was explicitly required",
+    "Use require_deploy=false only for a build-only workflow dry run",
+    "cloudflare/wrangler-action@v4",
+    "wrangler secret put API_ORIGIN",
+    "npm run validate:cloudflare-backend -- --env \"$backend_env\" --json",
+    "npm run smoke:cloudflare -- --url \"$CLOUDFLARE_DEPLOYMENT_URL\" --json"
+  ].forEach((needle) => assertIncludes(cloudflareDeployWorkflow, needle, ".github/workflows/cloudflare-deploy.yml"));
+
   const materializeReleaseInputs = readText("scripts/materialize-release-inputs.mjs");
   [
     "PRODUCTION_ENV_B64",

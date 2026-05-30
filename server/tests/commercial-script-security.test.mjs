@@ -115,6 +115,11 @@ test("cloudflare deploy workflow verifies backend gateway after deploy", () => {
   assert.match(workflow, /wrangler secret put API_ORIGIN/);
   assert.match(workflow, /CLOUDFLARE_DEPLOYMENT_URL/);
   assert.match(workflow, /CLOUDFLARE_TUNNEL_TOKEN/);
+  assert.match(workflow, /require_deploy:/);
+  assert.match(workflow, /REQUIRE_CLOUDFLARE_DEPLOY/);
+  assert.match(workflow, /Require Cloudflare deployment configuration/);
+  assert.match(workflow, /Cloudflare deployment was explicitly required/);
+  assert.match(workflow, /Use require_deploy=false only for a build-only workflow dry run/);
   assert.match(workflow, /mktemp/);
   assert.match(workflow, /umask 077/);
   assert.match(workflow, /trap 'rm -f "\$backend_env"' EXIT/);
