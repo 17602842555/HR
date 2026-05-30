@@ -4,7 +4,12 @@ import { basename, isAbsolute, resolve } from "node:path";
 import { parseProductionEnvText, validateProductionEnv } from "./validate-production-env.mjs";
 
 export const requiredApprovalRoles = Object.freeze(["Security owner", "Deployment owner"]);
-export const requiredManagedSecrets = Object.freeze(["POSTGRES_PASSWORD", "JWT_SECRET"]);
+export const requiredManagedSecrets = Object.freeze([
+  "POSTGRES_PASSWORD",
+  "JWT_SECRET",
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_TUNNEL_TOKEN"
+]);
 
 const placeholderFragments = Object.freeze([
   "example",
@@ -70,7 +75,18 @@ function findPlaintextSecretFields(value, path = []) {
   const findings = [];
   Object.entries(value).forEach(([key, child]) => {
     const normalized = key.toLowerCase().replaceAll(/[^a-z0-9]+/g, "");
-    if (["secretvalues", "plaintextsecrets", "postgrespassword", "jwtsecret", "defaultadminpassword", "passwordvalue"].includes(normalized)) {
+    if ([
+      "secretvalues",
+      "plaintextsecrets",
+      "postgrespassword",
+      "jwtsecret",
+      "defaultadminpassword",
+      "cloudflareapitoken",
+      "cloudflaretunneltoken",
+      "apitoken",
+      "tokenvalue",
+      "passwordvalue"
+    ].includes(normalized)) {
       findings.push([...path, key].join("."));
     }
     findings.push(...findPlaintextSecretFields(child, [...path, key]));

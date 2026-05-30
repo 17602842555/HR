@@ -76,7 +76,12 @@ test("signoff draft generator writes non-release drafts from current source data
     assert.deepEqual(secrets.originPolicy.approvedOrigins, ["https://oa.company.test"]);
     assert.equal(secretsText.includes("pg_real_random_secret_value_2026"), false);
     assert.equal(secretsText.includes("jwt_real_random_secret_value_2026_with_length"), false);
-    assert.deepEqual(secrets.secretStore.managedSecrets, ["POSTGRES_PASSWORD", "JWT_SECRET"]);
+    assert.deepEqual(secrets.secretStore.managedSecrets, [
+      "POSTGRES_PASSWORD",
+      "JWT_SECRET",
+      "CLOUDFLARE_API_TOKEN",
+      "CLOUDFLARE_TUNNEL_TOKEN"
+    ]);
 
     assert.equal(storage.draft, true);
     assert.equal(storage.storage.storageType, "backed-persistent-volume");

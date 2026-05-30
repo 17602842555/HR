@@ -8,7 +8,7 @@ import { requiredMaskedFields, sha256File } from "./validate-hr-signoff.mjs";
 import { requiredManagedSecrets } from "./validate-secrets-signoff.mjs";
 
 const defaultOutputDir = "reports/commercial-evidence/signoff-drafts";
-const productionSecretChecklist = Object.freeze(["POSTGRES_PASSWORD", "JWT_SECRET", "DEFAULT_ADMIN_PASSWORD"]);
+const productionSecretChecklist = Object.freeze([...requiredManagedSecrets, "DEFAULT_ADMIN_PASSWORD"]);
 
 function nowIso(now = new Date()) {
   return now.toISOString();

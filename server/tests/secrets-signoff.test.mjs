@@ -58,7 +58,7 @@ function validSecretsSignoff(overrides = {}, envText = validEnvText()) {
     secretStore: {
       provider: "Company Secret Manager",
       namespace: "oa/production",
-      managedSecrets: ["POSTGRES_PASSWORD", "JWT_SECRET"],
+      managedSecrets: ["POSTGRES_PASSWORD", "JWT_SECRET", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_TUNNEL_TOKEN"],
       injectedAtRuntime: true,
       noPlaintextInRepo: true,
       accessRestricted: true,
@@ -112,7 +112,7 @@ test("secrets signoff validator accepts reviewed secret store and origin evidenc
   assert.deepEqual(result.errors, []);
   assert.equal(result.summary.productionEnvValidated, true);
   assert.deepEqual(result.summary.approvedOrigins, ["https://oa.company.test"]);
-  assert.deepEqual(requiredManagedSecrets, ["POSTGRES_PASSWORD", "JWT_SECRET"]);
+  assert.deepEqual(requiredManagedSecrets, ["POSTGRES_PASSWORD", "JWT_SECRET", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_TUNNEL_TOKEN"]);
   assert.deepEqual(requiredApprovalRoles, ["Security owner", "Deployment owner"]);
 });
 
@@ -145,7 +145,7 @@ test("secrets signoff validator rejects invalid env checksum origin and secret s
     secretStore: {
       provider: "Company Secret Manager",
       namespace: "oa/production",
-      managedSecrets: ["POSTGRES_PASSWORD"],
+      managedSecrets: ["POSTGRES_PASSWORD", "CLOUDFLARE_API_TOKEN"],
       injectedAtRuntime: false,
       noPlaintextInRepo: false,
       accessRestricted: false,
@@ -175,6 +175,7 @@ test("secrets signoff validator rejects invalid env checksum origin and secret s
   assert(result.errors.some((error) => error.includes("accessRestricted")));
   assert(result.errors.some((error) => error.includes("nextRotationDueAt")));
   assert(result.errors.some((error) => error.includes("JWT_SECRET")));
+  assert(result.errors.some((error) => error.includes("CLOUDFLARE_TUNNEL_TOKEN")));
   assert(result.errors.some((error) => error.includes("approvedOrigins must match")));
   assert(result.errors.some((error) => error.includes("approvedOrigins must use https")));
 });
@@ -189,6 +190,7 @@ test("secrets signoff validator rejects plaintext secret fields and missing seed
     secretValues: {
       JWT_SECRET: "should-not-be-here"
     },
+    cloudflareApiToken: "cf-token-should-not-be-here",
     bootstrapSeedPolicy: {
       runDbSeed: true,
       defaultAdminPasswordManaged: false,

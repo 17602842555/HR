@@ -150,8 +150,6 @@ function productionEnvTemplate(storageDriver) {
 function secretChecklist(storageDriver, generatedAt) {
   const managedSecrets = [
     ...requiredManagedSecrets,
-    "CLOUDFLARE_API_TOKEN",
-    "CLOUDFLARE_TUNNEL_TOKEN",
     ...(storageDriver === "s3" ? ["OBJECT_STORAGE_ACCESS_KEY_ID", "OBJECT_STORAGE_SECRET_ACCESS_KEY"] : [])
   ];
   const cloudflareRepositorySecrets = [

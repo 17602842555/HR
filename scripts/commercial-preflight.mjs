@@ -1735,6 +1735,10 @@ function checkSecretsSignoffValidation() {
     "secretStore.noPlaintextInRepo must be true",
     "secretStore.managedSecrets must include",
     "JWT_SECRET",
+    "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_TUNNEL_TOKEN",
+    "cloudflareapitoken",
+    "cloudflaretunneltoken",
     "originPolicy.approvedOrigins must match WEB_ORIGIN",
     "production secrets signoff must not contain openExceptions"
   ].forEach((needle) => assertIncludes(validator, needle, "scripts/validate-secrets-signoff.mjs"));
@@ -1747,6 +1751,8 @@ function checkSecretsSignoffValidation() {
     "\"managedSecrets\"",
     "\"POSTGRES_PASSWORD\"",
     "\"JWT_SECRET\"",
+    "\"CLOUDFLARE_API_TOKEN\"",
+    "\"CLOUDFLARE_TUNNEL_TOKEN\"",
     "\"injectedAtRuntime\": true",
     "\"noPlaintextInRepo\": true",
     "\"approvedOrigins\"",
@@ -1760,6 +1766,8 @@ function checkSecretsSignoffValidation() {
     "secrets signoff validator rejects example release evidence and production exceptions",
     "secrets signoff validator rejects invalid env checksum origin and secret store controls",
     "secrets signoff validator rejects plaintext secret fields and missing seed secret",
+    "CLOUDFLARE_TUNNEL_TOKEN",
+    "cloudflareApiToken",
     "secrets signoff example validates only when example mode is allowed without env file",
     "secrets signoff CLI parser reads path env and output flags"
   ].forEach((needle) => assertIncludes(tests, needle, "server/tests/secrets-signoff.test.mjs"));
@@ -1771,6 +1779,8 @@ function checkSecretsSignoffValidation() {
   [
     "npm run validate:secrets-signoff",
     "docs/production-secrets-signoff.example.json",
+    "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_TUNNEL_TOKEN",
     "secrets signoff"
   ].forEach((needle) => assertIncludes(docs, needle, "secrets signoff docs"));
 }

@@ -121,7 +121,7 @@ cp docs/production-secrets-signoff.example.json docs/production-secrets-signoff.
 npm run validate:secrets-signoff -- docs/production-secrets-signoff.json --env .env.production --json
 ```
 
-This validation rejects example signoffs, plaintext secret fields, stale `.env.production` SHA-256 values, failed production env validation, missing managed `POSTGRES_PASSWORD` / `JWT_SECRET`, missing `DEFAULT_ADMIN_PASSWORD` management when production seeding is enabled, non-runtime secret injection, committed plaintext policy gaps, origin-policy mismatches against `WEB_ORIGIN`, weak rotation metadata, missing Security/Deployment approvals, and open production exceptions. Attach the passing JSON output and the reviewed signoff file to release evidence before closing GAP-003.
+This validation rejects example signoffs, plaintext secret fields, stale `.env.production` SHA-256 values, failed production env validation, missing managed `POSTGRES_PASSWORD` / `JWT_SECRET` / `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_TUNNEL_TOKEN`, missing `DEFAULT_ADMIN_PASSWORD` management when production seeding is enabled, non-runtime secret injection, committed plaintext policy gaps, origin-policy mismatches against `WEB_ORIGIN`, weak rotation metadata, missing Security/Deployment approvals, and open production exceptions. Attach the passing JSON output and the reviewed signoff file to release evidence before closing GAP-003.
 
 HR data signoff validation:
 
