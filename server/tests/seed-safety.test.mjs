@@ -62,6 +62,18 @@ test("seed safety requires absolute production file storage path", () => {
   );
 });
 
+test("seed safety rejects temporary production file storage path", () => {
+  assert.throws(
+    () => assertSeedSafety({
+      NODE_ENV: "production",
+      ALLOW_PRODUCTION_SEED: "1",
+      DEFAULT_ADMIN_PASSWORD: "StrongSeedPassword123",
+      FILE_STORAGE_DIR: "/tmp/oa-files"
+    }),
+    /temporary storage/
+  );
+});
+
 test("seed safety accepts reviewed production seed inputs", () => {
   assert.deepEqual(
     assertSeedSafety({
@@ -71,6 +83,53 @@ test("seed safety accepts reviewed production seed inputs", () => {
       FILE_STORAGE_DIR: "/var/lib/oa/files"
     }),
     { ok: true, production: true }
+  );
+});
+
+test("seed safety rejects unsafe S3 production seed storage config", () => {
+  assert.throws(
+    () => assertSeedSafety({
+      NODE_ENV: "production",
+      ALLOW_PRODUCTION_SEED: "1",
+      DEFAULT_ADMIN_PASSWORD: "StrongSeedPassword123",
+      FILE_STORAGE_DRIVER: "s3",
+      OBJECT_STORAGE_ENDPOINT: "http://s3.company.test",
+      OBJECT_STORAGE_BUCKET: "oa-prod-files",
+      OBJECT_STORAGE_REGION: "cn-east-1",
+      OBJECT_STORAGE_ACCESS_KEY_ID: "AKIAREALACCESS",
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: "object-secret-at-least-16"
+    }),
+    /OBJECT_STORAGE_ENDPOINT/
+  );
+
+  assert.throws(
+    () => assertSeedSafety({
+      NODE_ENV: "production",
+      ALLOW_PRODUCTION_SEED: "1",
+      DEFAULT_ADMIN_PASSWORD: "StrongSeedPassword123",
+      FILE_STORAGE_DRIVER: "s3",
+      OBJECT_STORAGE_ENDPOINT: "https://s3.example.com",
+      OBJECT_STORAGE_BUCKET: "oa-prod-files",
+      OBJECT_STORAGE_REGION: "cn-east-1",
+      OBJECT_STORAGE_ACCESS_KEY_ID: "AKIAREALACCESS",
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: "object-secret-at-least-16"
+    }),
+    /example\.com/
+  );
+
+  assert.throws(
+    () => assertSeedSafety({
+      NODE_ENV: "production",
+      ALLOW_PRODUCTION_SEED: "1",
+      DEFAULT_ADMIN_PASSWORD: "StrongSeedPassword123",
+      FILE_STORAGE_DRIVER: "s3",
+      OBJECT_STORAGE_ENDPOINT: "https://s3.company.test",
+      OBJECT_STORAGE_BUCKET: "oa-prod-files",
+      OBJECT_STORAGE_REGION: "cn-east-1",
+      OBJECT_STORAGE_ACCESS_KEY_ID: "placeholder-access",
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: "short"
+    }),
+    /non-placeholder OBJECT_STORAGE_ACCESS_KEY_ID/
   );
 });
 

@@ -2125,7 +2125,13 @@ function checkProductionSeedSafetyImplementation() {
     "validateNewPassword(adminPassword)",
     "Production seed DEFAULT_ADMIN_PASSWORD must satisfy password policy",
     "isAbsolute(env.FILE_STORAGE_DIR)",
-    "Production seed requires explicit absolute FILE_STORAGE_DIR"
+    "Production seed requires explicit absolute FILE_STORAGE_DIR",
+    "Production seed FILE_STORAGE_DIR must not use temporary storage",
+    "assertProductionObjectStorageSeedConfig",
+    "Production seed OBJECT_STORAGE_ENDPOINT must use https",
+    "Production seed OBJECT_STORAGE_ENDPOINT must not use example.com template hosts",
+    "Production seed requires non-placeholder ${key}",
+    "Production seed OBJECT_STORAGE_SECRET_ACCESS_KEY must be at least 16 characters"
   ].forEach((needle) => assertIncludes(seedSafety, needle, "scripts/seed-safety.mjs"));
 
   const seedScript = readText("scripts/seed.mjs");
@@ -2148,7 +2154,10 @@ function checkProductionSeedSafetyImplementation() {
     "seed safety blocks production default or missing admin password",
     "seed safety applies password policy to production bootstrap password",
     "seed safety requires absolute production file storage path",
-    "seed safety accepts reviewed production seed inputs"
+    "seed safety rejects temporary production file storage path",
+    "seed safety accepts reviewed production seed inputs",
+    "seed safety rejects unsafe S3 production seed storage config",
+    "seed safety accepts reviewed production seed with S3 object storage"
   ].forEach((needle) => assertIncludes(seedTests, needle, "server/tests/seed-safety.test.mjs"));
 
   const productionCompose = readText("docker-compose.prod.yml");
@@ -2161,14 +2170,18 @@ function checkProductionSeedSafetyImplementation() {
   [
     "ALLOW_PRODUCTION_SEED=0",
     "reviewed bootstrap seed is intentionally part of the cutover",
-    "The seed script refuses production seeding"
+    "The seed script refuses production seeding",
+    "temporary local file-storage paths",
+    "non-HTTPS or template object-storage endpoints"
   ].forEach((needle) => assertIncludes(deployment, needle, "docs/DEPLOYMENT.md"));
 
   const qa = readText("docs/QA_ACCEPTANCE_CHECKLIST.md");
   [
     "unapproved production seed runs",
     "scripts/seed.mjs` now refuses production seeding unless `ALLOW_PRODUCTION_SEED=1`",
-    "it no longer prints the bootstrap password"
+    "it no longer prints the bootstrap password",
+    "temporary local file-storage paths",
+    "unsafe S3 object-storage seed settings"
   ].forEach((needle) => assertIncludes(qa, needle, "docs/QA_ACCEPTANCE_CHECKLIST.md"));
 }
 

@@ -281,7 +281,7 @@ The compose stack starts:
 
 API container health uses `/ready`, which verifies the Fastify process, PostgreSQL connectivity, live append-only database triggers for audit/export/import ledgers, and file-storage readiness. `/health` remains a lightweight process liveness endpoint.
 
-For production, set `RUN_DB_SEED=0` unless the reviewed bootstrap seed is intentionally part of the cutover. If a production bootstrap seed is explicitly approved, set both `RUN_DB_SEED=1` and `ALLOW_PRODUCTION_SEED=1`, provide a non-default `DEFAULT_ADMIN_PASSWORD` that satisfies the password policy, and configure either `FILE_STORAGE_DIR` on the approved absolute persistent-volume path or complete `OBJECT_STORAGE_*` settings for `FILE_STORAGE_DRIVER=s3`. The seed script refuses production seeding without that approval and no longer prints the bootstrap password.
+For production, set `RUN_DB_SEED=0` unless the reviewed bootstrap seed is intentionally part of the cutover. If a production bootstrap seed is explicitly approved, set both `RUN_DB_SEED=1` and `ALLOW_PRODUCTION_SEED=1`, provide a non-default `DEFAULT_ADMIN_PASSWORD` that satisfies the password policy, and configure either `FILE_STORAGE_DIR` on the approved absolute persistent-volume path or complete `OBJECT_STORAGE_*` settings for `FILE_STORAGE_DRIVER=s3`. The seed script refuses production seeding without that approval, rejects temporary local file-storage paths plus non-HTTPS or template object-storage endpoints before opening Prisma, and no longer prints the bootstrap password.
 
 Runtime validation refuses to boot when:
 
