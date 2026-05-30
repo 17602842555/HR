@@ -13,6 +13,7 @@ const validEnv = Object.freeze({
   API_ORIGIN: "https://api.oa.example.cn",
   CLOUDFLARE_DEPLOYMENT_URL: "https://oa.example.cn",
   CLOUDFLARE_TUNNEL_TOKEN: "eyJhIjoiY2xvdWRmbGFyZS10dW5uZWwtdG9rZW4tZm9yLXRlc3RzIn0",
+  ALLOW_PRODUCTION_SEED: "1",
   DEFAULT_ADMIN_PASSWORD: "S3cure-admin-password-for-prod",
   RUN_DB_SEED: "1",
   TRUST_PROXY: "1",
@@ -67,6 +68,28 @@ test("cloudflare backend validator rejects example.com template origins", () => 
   assert.equal(report.errors.some((error) => error.includes("API_ORIGIN must not use example.com")), true);
   assert.equal(report.errors.some((error) => error.includes("CLOUDFLARE_DEPLOYMENT_URL must not use example.com")), true);
   assert.equal(report.errors.some((error) => error.includes("WEB_ORIGIN must not use example.com")), true);
+});
+
+test("cloudflare backend validator rejects unapproved weak production seed config", () => {
+  const report = validateCloudflareBackendEnv({
+    ...validEnv,
+    ALLOW_PRODUCTION_SEED: "0",
+    DEFAULT_ADMIN_PASSWORD: "NoDigitsAtAll"
+  });
+
+  assert.equal(report.ok, false);
+  assert.equal(report.errors.some((error) => error.includes("ALLOW_PRODUCTION_SEED")), true);
+  assert.equal(report.errors.some((error) => error.includes("DEFAULT_ADMIN_PASSWORD")), true);
+});
+
+test("cloudflare backend validator rejects placeholder tunnel tokens", () => {
+  const report = validateCloudflareBackendEnv({
+    ...validEnv,
+    CLOUDFLARE_TUNNEL_TOKEN: "placeholder-tunnel-token-that-is-long-enough"
+  });
+
+  assert.equal(report.ok, false);
+  assert.equal(report.errors.some((error) => error.includes("CLOUDFLARE_TUNNEL_TOKEN")), true);
 });
 
 test("cloudflare backend validator reads dotenv files", () => {

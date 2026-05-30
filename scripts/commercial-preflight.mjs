@@ -606,12 +606,17 @@ function checkDeploymentArtifacts() {
     "isExampleComOrigin",
     "API_ORIGIN must not use example.com template hosts.",
     "CLOUDFLARE_DEPLOYMENT_URL must not use example.com template hosts.",
-    "WEB_ORIGIN must not use example.com template hosts."
+    "WEB_ORIGIN must not use example.com template hosts.",
+    "hasWeakSeedPassword",
+    "RUN_DB_SEED=1 requires ALLOW_PRODUCTION_SEED=1",
+    "RUN_DB_SEED=1 requires a real DEFAULT_ADMIN_PASSWORD"
   ].forEach((needle) => assertIncludes(cloudflareBackendValidator, needle, "scripts/validate-cloudflare-backend.mjs"));
 
   const cloudflareBackendTests = readText("server/tests/cloudflare-backend.test.mjs");
   [
     "cloudflare backend validator rejects example.com template origins",
+    "cloudflare backend validator rejects unapproved weak production seed config",
+    "cloudflare backend validator rejects placeholder tunnel tokens",
     "API_ORIGIN must not use example.com",
     "CLOUDFLARE_DEPLOYMENT_URL must not use example.com",
     "WEB_ORIGIN must not use example.com"

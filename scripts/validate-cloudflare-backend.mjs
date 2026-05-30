@@ -4,11 +4,35 @@ import { pathToFileURL } from "node:url";
 import { parseDotenvText } from "./commercial-doctor-core.mjs";
 import { normalizeDeploymentUrl } from "./cloudflare-smoke.mjs";
 
+const placeholderFragments = Object.freeze([
+  "admin123456",
+  "changeme",
+  "change-me",
+  "change_before",
+  "dev-only-change-me",
+  "example",
+  "local-commercial-demo-secret",
+  "oa_dev_password",
+  "placeholder",
+  "replace-with",
+  "todo"
+]);
+
 function isPlaceholder(value) {
-  return !String(value || "").trim()
-    || /^(changeme|change-me|example|placeholder|todo|test|demo)$/i.test(String(value || "").trim())
-    || String(value || "").includes("<")
-    || String(value || "").includes("example.com");
+  const normalized = String(value || "").trim().toLowerCase();
+  return !normalized
+    || placeholderFragments.some((fragment) => normalized.includes(fragment))
+    || normalized.includes("<")
+    || normalized.includes("example.com");
+}
+
+function hasWeakSeedPassword(value) {
+  const password = String(value || "");
+  return isPlaceholder(password)
+    || password.length < 12
+    || password.trim() !== password
+    || !/[A-Za-z]/.test(password)
+    || !/\d/.test(password);
 }
 
 function originOf(value) {
@@ -83,8 +107,13 @@ export function validateCloudflareBackendEnv(env = {}) {
     warnings.push("Set TRUST_PROXY=1 only after the API is reachable exclusively through Cloudflare Tunnel or another trusted proxy that rewrites forwarded headers.");
   }
 
-  if (String(env.RUN_DB_SEED || "0").trim() === "1" && isPlaceholder(env.DEFAULT_ADMIN_PASSWORD)) {
-    errors.push("RUN_DB_SEED=1 requires a real DEFAULT_ADMIN_PASSWORD.");
+  if (String(env.RUN_DB_SEED || "0").trim() === "1") {
+    if (String(env.ALLOW_PRODUCTION_SEED || "0").trim() !== "1") {
+      errors.push("RUN_DB_SEED=1 requires ALLOW_PRODUCTION_SEED=1 after reviewed bootstrap approval.");
+    }
+    if (hasWeakSeedPassword(env.DEFAULT_ADMIN_PASSWORD)) {
+      errors.push("RUN_DB_SEED=1 requires a real DEFAULT_ADMIN_PASSWORD with at least 12 characters and letters and numbers.");
+    }
   }
 
   return {

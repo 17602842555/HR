@@ -414,7 +414,7 @@ npm run validate:production-env -- .env.production --json
 npm run validate:cloudflare-backend -- --env .env.production --json
 ```
 
-The Cloudflare backend validator fails closed for missing remotely-managed Tunnel tokens, non-HTTPS or local origins, Worker/API same-origin loops, wildcard web origins, and `example.com` template hosts in `API_ORIGIN`, `CLOUDFLARE_DEPLOYMENT_URL`, or `WEB_ORIGIN`.
+The Cloudflare backend validator fails closed for missing or placeholder remotely-managed Tunnel tokens, non-HTTPS or local origins, Worker/API same-origin loops, wildcard web origins, `example.com` template hosts in `API_ORIGIN`, `CLOUDFLARE_DEPLOYMENT_URL`, or `WEB_ORIGIN`, and unapproved or weak production bootstrap seed credentials when `RUN_DB_SEED=1`.
 
 Start the backend server with the tunnel sidecar:
 
