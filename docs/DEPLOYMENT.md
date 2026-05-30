@@ -94,7 +94,7 @@ npm run validate:production-env -- .env.production --json
 docker compose --env-file .env.production -f docker-compose.prod.yml up --build -d
 ```
 
-`docker-compose.prod.yml` runs with `APP_ENV=production`, `NODE_ENV=production`, `RUN_DB_SEED=0` by default, no host PostgreSQL port mapping, API-required frontend build args, and required Compose substitutions for `POSTGRES_PASSWORD`, `JWT_SECRET`, and `WEB_ORIGIN`. `Dockerfile.api` prepares `/app/storage/files`, assigns the application tree to the `node` user, and runs the API process as non-root; the production compose file also applies `no-new-privileges` and drops all Linux capabilities for the API service. Local-volume deployments should keep `FILE_STORAGE_DIR=/app/storage/files` unless the target host has explicitly prepared permissions for another absolute path. The production env file should be delivered through the deployment secret store; `.dockerignore` excludes `.env.*` files from Docker build context while preserving the checked-in example templates.
+`docker-compose.prod.yml` runs with `APP_ENV=production`, `NODE_ENV=production`, `RUN_DB_SEED=0` by default, no host PostgreSQL port mapping, API-required frontend build args, and required Compose substitutions for `POSTGRES_PASSWORD`, `JWT_SECRET`, and `WEB_ORIGIN`. `Dockerfile.api` prepares `/app/storage/files`, assigns the application tree to the `node` user, and runs the API process as non-root; the production compose file also applies `no-new-privileges` and drops all Linux capabilities for the API service. Local-volume deployments should keep `FILE_STORAGE_DIR=/app/storage/files` unless the target host has explicitly prepared permissions for another absolute path. S3-compatible deployments may omit `FILE_STORAGE_DIR`; Compose still mounts an inert default local volume at `/app/storage/files` so the container shape stays stable while attachments and imported source artifacts go through the object-storage adapter. The production env file should be delivered through the deployment secret store; `.dockerignore` excludes `.env.*` files from Docker build context while preserving the checked-in example templates.
 
 Production env file validation:
 
@@ -277,7 +277,7 @@ The compose stack starts:
 - `postgres`: PostgreSQL 16 with a persistent `postgres-data` volume.
 - `api`: Fastify API, `prisma migrate deploy`, optional bootstrap seed when `RUN_DB_SEED=1`, then `node server/src/index.mjs`.
 - `web`: nginx static frontend on `http://127.0.0.1:8080`, proxying `/api` to the API service.
-- `file-storage`: persistent local attachment volume mounted at `FILE_STORAGE_DIR` when `FILE_STORAGE_DRIVER=local`; S3-compatible deployments can leave the volume mounted but attachments and imported source artifacts are stored through the object-storage adapter.
+- `file-storage`: persistent local attachment volume mounted at `FILE_STORAGE_DIR` when `FILE_STORAGE_DRIVER=local`; when `FILE_STORAGE_DRIVER=s3`, Compose defaults the mount target to `/app/storage/files` if `FILE_STORAGE_DIR` is unset, but attachments and imported source artifacts are stored through the object-storage adapter.
 
 API container health uses `/ready`, which verifies the Fastify process, PostgreSQL connectivity, live append-only database triggers for audit/export/import ledgers, and file-storage readiness. `/health` remains a lightweight process liveness endpoint.
 

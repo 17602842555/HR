@@ -283,16 +283,17 @@ function checkDeploymentArtifacts() {
     "VITE_REQUIRE_API: \"1\"",
     "VITE_DEMO_FALLBACK: \"0\"",
     "FILE_STORAGE_DRIVER: ${FILE_STORAGE_DRIVER:-local}",
-    "FILE_STORAGE_DIR: ${FILE_STORAGE_DIR:?FILE_STORAGE_DIR is required}",
+    "FILE_STORAGE_DIR: ${FILE_STORAGE_DIR:-/app/storage/files}",
     "OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-}",
     "OBJECT_STORAGE_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:-}",
-    "file-storage:${FILE_STORAGE_DIR:?FILE_STORAGE_DIR is required}"
+    "file-storage:${FILE_STORAGE_DIR:-/app/storage/files}"
   ].forEach((needle) => assertIncludes(productionCompose, needle, "docker-compose.prod.yml"));
   [
     "- \"5432:5432\"",
     "oa_dev_password",
     "admin123456",
-    "replace-with-a-long-random-secret-before-deployment"
+    "replace-with-a-long-random-secret-before-deployment",
+    "${FILE_STORAGE_DIR:?FILE_STORAGE_DIR is required}"
   ].forEach((needle) => assertNotIncludes(productionCompose, needle, "docker-compose.prod.yml"));
 
   const cloudflareCompose = readText("docker-compose.cloudflare.yml");
