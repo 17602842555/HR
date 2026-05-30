@@ -120,6 +120,7 @@ function checkPackageScripts() {
     "candidate:commercial",
     "ci:commercial",
     "configure:cloudflare",
+    "configure:cloudflare-tunnel",
     "contract:api",
     "db:deploy",
     "db:generate",
@@ -582,6 +583,34 @@ function checkDeploymentArtifacts() {
     "CLOUDFLARE_ACCOUNT_ID",
     "CLOUDFLARE_API_TOKEN"
   ].forEach((needle) => assertIncludes(cloudflareSecretTests, needle, "server/tests/cloudflare-secrets.test.mjs"));
+
+  const cloudflareTunnelConfig = readText("scripts/configure-cloudflare-tunnel.mjs");
+  [
+    "parseCloudflareTunnelConfigArgs",
+    "buildCloudflareTunnelIngressPlan",
+    "readCloudflareTunnelConfigurationRaw",
+    "applyCloudflareTunnelIngressPlan",
+    "runCloudflareTunnelConfig",
+    "PUT /accounts/{account_id}/cfd_tunnel/{tunnel_id}/configurations",
+    "https://api.cloudflare.com/client/v4/accounts",
+    "http://api:8787",
+    "http_status:404",
+    "CLOUDFLARE_API_TOKEN",
+    "Cloudflare Tunnel Write",
+    "Authorization: `Bearer ${apiToken}`"
+  ].forEach((needle) => assertIncludes(cloudflareTunnelConfig, needle, "scripts/configure-cloudflare-tunnel.mjs"));
+
+  const cloudflareTunnelConfigTests = readText("server/tests/cloudflare-tunnel-config.test.mjs");
+  [
+    "cloudflare tunnel config parser supports env api origin backend service apply and json flags",
+    "cloudflare tunnel config plan upserts API hostname preserves other routes and adds catch all",
+    "cloudflare tunnel config plan refuses unsafe placeholders and apply without inspected config",
+    "cloudflare tunnel config dry run can produce a minimal plan without Cloudflare credentials",
+    "cloudflare tunnel config reads existing configuration without leaking token",
+    "cloudflare tunnel config read fails closed and sanitizes token errors",
+    "cloudflare tunnel config apply sends PUT body without leaking token into report",
+    "cloudflare tunnel config run reads env file, preserves existing config, and dry-runs by default"
+  ].forEach((needle) => assertIncludes(cloudflareTunnelConfigTests, needle, "server/tests/cloudflare-tunnel-config.test.mjs"));
 
   const cloudflareDeploymentStatus = readText("scripts/cloudflare-deployment-status.mjs");
   [
@@ -1761,6 +1790,7 @@ function checkProductionEnvPreparation() {
 		    "validate:production-env",
 	    "validate:cloudflare-backend",
 	    "configure:cloudflare",
+	    "configure:cloudflare-tunnel",
 	    "validate:secrets-signoff",
 	    "CLOUDFLARE_TUNNEL_TOKEN",
 	    "cloudflareRepositorySecrets",

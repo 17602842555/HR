@@ -198,6 +198,7 @@ function secretChecklist(storageDriver, generatedAt) {
       "npm run validate:production-env -- .env.production --json",
       "npm run validate:cloudflare-backend -- --env .env.production --json",
       "npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --json",
+      "npm run configure:cloudflare-tunnel -- --env .env.production --tunnel <tunnel-uuid> --json",
       "npm run signoff:drafts -- --env .env.production --json",
       "npm run validate:secrets-signoff -- <production-secrets-signoff.json> --env .env.production --json"
     ]
@@ -220,6 +221,7 @@ function readmeText({ generatedAt, storageDriver, targetEnvPath }) {
     "npm run validate:production-env -- .env.production --json",
     "npm run validate:cloudflare-backend -- --env .env.production --json",
     "npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --json",
+    "npm run configure:cloudflare-tunnel -- --env .env.production --tunnel <tunnel-uuid> --json",
     "npm run signoff:drafts -- --env .env.production --json",
     "npm run validate:secrets-signoff -- <production-secrets-signoff.json> --env .env.production --json",
     "```",

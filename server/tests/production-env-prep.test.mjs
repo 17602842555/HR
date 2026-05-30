@@ -57,6 +57,7 @@ test("production env prep writes a no-plaintext local storage package", async ()
     assert.equal(checklist.cloudflareRepositorySecrets.find((item) => item.key === "CLOUDFLARE_API_TOKEN").neverPrintValue, true);
     assert.equal(checklist.nextCommands.some((command) => command.includes("validate:cloudflare-backend")), true);
     assert.equal(checklist.nextCommands.some((command) => command.includes("configure:cloudflare")), true);
+    assert.equal(checklist.nextCommands.some((command) => command.includes("configure:cloudflare-tunnel")), true);
     assert.equal(checklist.nextCommands.some((command) => command.includes("validate:secrets-signoff")), true);
 
     assert.equal(manifest.kind, "production-env-preparation");
@@ -72,6 +73,7 @@ test("production env prep writes a no-plaintext local storage package", async ()
     assert.match(readme, /not release evidence/i);
     assert.match(readme, /validate:cloudflare-backend/);
     assert.match(readme, /configure:cloudflare/);
+    assert.match(readme, /configure:cloudflare-tunnel/);
 
     const validation = validateProductionEnv(parseProductionEnvText(envTemplate));
     assert.equal(validation.ok, false);
