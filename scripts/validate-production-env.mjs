@@ -15,6 +15,17 @@ const placeholderFragments = [
   "replace-with",
   "todo"
 ];
+const localHostnames = new Set([
+  "localhost",
+  "127.0.0.1",
+  "0.0.0.0",
+  "::1",
+  "[::1]",
+  "::ffff:7f00:1",
+  "[::ffff:7f00:1]",
+  "::ffff:127.0.0.1",
+  "[::ffff:127.0.0.1]"
+]);
 
 export const requiredProductionEnvKeys = Object.freeze([
   "APP_ENV",
@@ -52,6 +63,10 @@ function hasPlaceholder(value) {
   return placeholderFragments.some((fragment) => normalized.includes(fragment));
 }
 
+function isLocalHostname(hostname = "") {
+  return localHostnames.has(String(hostname || "").trim().toLowerCase());
+}
+
 function positiveInteger(env, key, errors) {
   const value = String(env[key] ?? "").trim();
   if (!/^\d+$/.test(value) || Number.parseInt(value, 10) <= 0) {
@@ -87,7 +102,7 @@ function validateHttpsEndpoint(value, label, errors) {
   if (parsed.protocol !== "https:") {
     errors.push(label === "OBJECT_STORAGE_ENDPOINT" ? "OBJECT_STORAGE_ENDPOINT must use https in production." : `${label} must use https in production.`);
   }
-  if (["localhost", "127.0.0.1", "0.0.0.0"].includes(parsed.hostname)) {
+  if (isLocalHostname(parsed.hostname)) {
     errors.push(`${label} must not point at local development hosts.`);
   }
   if (parsed.hostname === "example.com" || parsed.hostname.endsWith(".example.com")) {
@@ -149,7 +164,7 @@ export function validateProductionEnv(env) {
       return;
     }
     if (parsed.protocol !== "https:") errors.push(`WEB_ORIGIN must use https in production: ${origin}`);
-    if (["localhost", "127.0.0.1", "0.0.0.0"].includes(parsed.hostname)) {
+    if (isLocalHostname(parsed.hostname)) {
       errors.push(`WEB_ORIGIN must not point at local development hosts in production: ${origin}`);
     }
     if (parsed.hostname === "oa.example.com" || parsed.hostname.endsWith(".example.com")) {

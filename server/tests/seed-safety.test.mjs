@@ -131,6 +131,21 @@ test("seed safety rejects unsafe S3 production seed storage config", () => {
     }),
     /non-placeholder OBJECT_STORAGE_ACCESS_KEY_ID/
   );
+
+  assert.throws(
+    () => assertSeedSafety({
+      NODE_ENV: "production",
+      ALLOW_PRODUCTION_SEED: "1",
+      DEFAULT_ADMIN_PASSWORD: "StrongSeedPassword123",
+      FILE_STORAGE_DRIVER: "s3",
+      OBJECT_STORAGE_ENDPOINT: "https://[::1]:9000",
+      OBJECT_STORAGE_BUCKET: "oa-prod-files",
+      OBJECT_STORAGE_REGION: "cn-east-1",
+      OBJECT_STORAGE_ACCESS_KEY_ID: "AKIAREALACCESS",
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: "object-secret-at-least-16"
+    }),
+    /local development hosts/
+  );
 });
 
 test("seed safety accepts reviewed production seed with S3 object storage", () => {

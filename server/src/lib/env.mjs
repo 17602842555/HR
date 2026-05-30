@@ -8,7 +8,17 @@ const DEFAULT_COOKIE_MAX_AGE_SECONDS = 8 * 60 * 60;
 const DEFAULT_FILE_STORAGE_DIR = resolve(process.cwd(), ".local-files");
 const SUPPORTED_FILE_STORAGE_DRIVERS = new Set(["local", "s3"]);
 const MINIMUM_API_BODY_LIMIT_BYTES = 1024 * 1024;
-const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
+const LOCAL_HOSTNAMES = new Set([
+  "localhost",
+  "127.0.0.1",
+  "0.0.0.0",
+  "::1",
+  "[::1]",
+  "::ffff:7f00:1",
+  "[::ffff:7f00:1]",
+  "::ffff:127.0.0.1",
+  "[::ffff:127.0.0.1]"
+]);
 
 function intFromEnv(name, fallback) {
   const value = Number.parseInt(process.env[name] || "", 10);
@@ -55,6 +65,10 @@ function isTemplateHostname(hostname = "") {
   return normalized === "example.com" || normalized.endsWith(".example.com");
 }
 
+function isLocalHostname(hostname = "") {
+  return LOCAL_HOSTNAMES.has(String(hostname || "").trim().toLowerCase());
+}
+
 function isTemporaryPath(path = "") {
   const normalized = String(path || "").trim();
   return normalized === "/tmp"
@@ -83,7 +97,7 @@ function validateProductionWebOrigins(config) {
     if (parsed.protocol !== "https:") {
       throw new Error(`Production WEB_ORIGIN must use https: ${origin}`);
     }
-    if (LOCAL_HOSTNAMES.has(parsed.hostname)) {
+    if (isLocalHostname(parsed.hostname)) {
       throw new Error(`Production WEB_ORIGIN must not point at local development hosts: ${origin}`);
     }
     if (isTemplateHostname(parsed.hostname)) {
@@ -98,7 +112,7 @@ function validateProductionObjectStorage(config) {
   if (parsed.protocol !== "https:") {
     throw new Error("Production OBJECT_STORAGE_ENDPOINT must use https.");
   }
-  if (LOCAL_HOSTNAMES.has(parsed.hostname)) {
+  if (isLocalHostname(parsed.hostname)) {
     throw new Error("Production OBJECT_STORAGE_ENDPOINT must not point at local development hosts.");
   }
   if (isTemplateHostname(parsed.hostname)) {

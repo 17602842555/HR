@@ -977,6 +977,9 @@ function checkDeploymentArtifacts() {
     "FILE_STORAGE_DRIVER must be local or s3",
     "OBJECT_STORAGE_ENDPOINT must be an HTTP(S) URL",
     "Production WEB_ORIGIN must use https",
+    "isLocalHostname",
+    "[::1]",
+    "::ffff:7f00:1",
     "Production WEB_ORIGIN must not use example.com",
     "Production OBJECT_STORAGE_ENDPOINT must use https",
     "Production FILE_STORAGE_DIR must be explicitly configured",
@@ -998,8 +1001,9 @@ function checkDeploymentArtifacts() {
     "runtime rejects invalid import html size limit",
     "production runtime accepts S3 object storage without local volume signoff",
     "S3 object storage driver requires complete object storage config",
-    "production runtime rejects local http and template web origins",
+    "production runtime rejects local http template and IPv6 loopback web origins",
     "production runtime rejects insecure object storage endpoint",
+    "production runtime rejects local IPv6 object storage endpoint",
     "production runtime requires explicit absolute file storage path",
     "production runtime rejects temporary file storage path",
     "runtime rejects API body limit below upload and import requirements",
@@ -1622,6 +1626,9 @@ function checkProductionEnvValidation() {
     "must not use temporary storage",
     "must not point inside the application container directory",
     "OBJECT_STORAGE_ENDPOINT must use https",
+    "isLocalHostname",
+    "[::1]",
+    "::ffff:7f00:1",
     "OBJECT_STORAGE_SECRET_ACCESS_KEY must be at least 16 characters",
     "VITE_REQUIRE_API must be 1",
     "VITE_DEMO_FALLBACK must be 0",
@@ -1635,6 +1642,7 @@ function checkProductionEnvValidation() {
     "production env validator accepts S3 object storage config",
     "production env validator rejects incomplete S3 object storage config",
     "production env validator rejects template secrets example origins and demo fallback",
+    "production env validator rejects IPv6 loopback object storage endpoints",
     "production env validator rejects app-local durable backup paths",
     "production env validator checks body limit and production seed approval",
     "production env parser reads dotenv syntax"
@@ -1643,7 +1651,7 @@ function checkProductionEnvValidation() {
   const deployment = readText("docs/DEPLOYMENT.md");
   [
     "npm run validate:production-env -- .env.production --json",
-    "rejects blank secrets, template domains, local origins, relative local-volume storage, unsafe backup directories, incomplete S3-compatible object storage settings",
+    "rejects blank secrets, template domains, local origins including IPv4 and IPv6 loopback addresses, relative local-volume storage, unsafe backup directories, incomplete S3-compatible object storage settings",
     "run before `docker compose -f docker-compose.prod.yml up`"
   ].forEach((needle) => assertIncludes(deployment, needle, "docs/DEPLOYMENT.md"));
 
@@ -1651,7 +1659,7 @@ function checkProductionEnvValidation() {
   [
     "Production env file validation",
     "npm run validate:production-env -- .env.production --json",
-    "template secrets, example domains, local origins, relative local-volume paths, unsafe backup directories"
+    "template secrets, example domains, local origins including IPv4 and IPv6 loopback addresses, relative local-volume paths, unsafe backup directories"
   ].forEach((needle) => assertIncludes(qa, needle, "docs/QA_ACCEPTANCE_CHECKLIST.md"));
 
   const plan = readText("docs/COMMERCIALIZATION_PLAN.md");
@@ -2128,6 +2136,9 @@ function checkProductionSeedSafetyImplementation() {
     "Production seed requires explicit absolute FILE_STORAGE_DIR",
     "Production seed FILE_STORAGE_DIR must not use temporary storage",
     "assertProductionObjectStorageSeedConfig",
+    "isLocalHostname",
+    "[::1]",
+    "::ffff:7f00:1",
     "Production seed OBJECT_STORAGE_ENDPOINT must use https",
     "Production seed OBJECT_STORAGE_ENDPOINT must not use example.com template hosts",
     "Production seed requires non-placeholder ${key}",

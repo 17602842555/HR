@@ -84,7 +84,7 @@ test("production env validator rejects template secrets example origins and demo
   const result = validateProductionEnv(validProductionEnv({
     POSTGRES_PASSWORD: "",
     JWT_SECRET: "local-commercial-demo-secret-change-before-production-20260530",
-    WEB_ORIGIN: "https://oa.example.com,http://127.0.0.1:5174",
+    WEB_ORIGIN: "https://oa.example.com,http://127.0.0.1:5174,https://[::1]:5174",
     FILE_STORAGE_DIR: ".local-files",
     BACKUP_DIR: "backups/postgres",
     FILE_BACKUP_DIR: "/tmp/oa-files",
@@ -104,6 +104,21 @@ test("production env validator rejects template secrets example origins and demo
   assert(result.errors.some((error) => error.includes("DEFAULT_ADMIN_PASSWORD")));
   assert(result.errors.some((error) => error.includes("VITE_REQUIRE_API")));
   assert(result.errors.some((error) => error.includes("VITE_DEMO_FALLBACK")));
+});
+
+test("production env validator rejects IPv6 loopback object storage endpoints", () => {
+  const result = validateProductionEnv(validProductionEnv({
+    FILE_STORAGE_DRIVER: "s3",
+    FILE_STORAGE_DIR: "",
+    OBJECT_STORAGE_ENDPOINT: "https://[::1]:9000",
+    OBJECT_STORAGE_BUCKET: "oa-prod-files",
+    OBJECT_STORAGE_REGION: "cn-east-1",
+    OBJECT_STORAGE_ACCESS_KEY_ID: "AKIAREALACCESS",
+    OBJECT_STORAGE_SECRET_ACCESS_KEY: "object-secret-at-least-16"
+  }));
+
+  assert.equal(result.ok, false);
+  assert(result.errors.some((error) => error.includes("local development hosts")));
 });
 
 test("production env validator rejects app-local durable backup paths", () => {

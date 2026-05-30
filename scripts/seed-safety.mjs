@@ -2,7 +2,17 @@ import { isAbsolute } from "node:path";
 import { validateNewPassword } from "../server/src/modules/auth/password-policy.mjs";
 
 export const defaultSeedAdminPassword = "admin123456";
-const localHostnames = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
+const localHostnames = new Set([
+  "localhost",
+  "127.0.0.1",
+  "0.0.0.0",
+  "::1",
+  "[::1]",
+  "::ffff:7f00:1",
+  "[::ffff:7f00:1]",
+  "::ffff:127.0.0.1",
+  "[::ffff:127.0.0.1]"
+]);
 const placeholderFragments = Object.freeze([
   "changeme",
   "change-me",
@@ -29,6 +39,10 @@ function isTemporaryPath(path = "") {
     || normalized.startsWith("/var/tmp/");
 }
 
+function isLocalHostname(hostname = "") {
+  return localHostnames.has(String(hostname || "").trim().toLowerCase());
+}
+
 function assertProductionObjectStorageSeedConfig(env) {
   ["OBJECT_STORAGE_ENDPOINT", "OBJECT_STORAGE_BUCKET", "OBJECT_STORAGE_REGION", "OBJECT_STORAGE_ACCESS_KEY_ID", "OBJECT_STORAGE_SECRET_ACCESS_KEY"].forEach((key) => {
     if (!String(env[key] || "").trim()) {
@@ -48,7 +62,7 @@ function assertProductionObjectStorageSeedConfig(env) {
   if (endpoint.protocol !== "https:") {
     throw new Error("Production seed OBJECT_STORAGE_ENDPOINT must use https.");
   }
-  if (localHostnames.has(endpoint.hostname)) {
+  if (isLocalHostname(endpoint.hostname)) {
     throw new Error("Production seed OBJECT_STORAGE_ENDPOINT must not point at local development hosts.");
   }
   if (endpoint.hostname === "example.com" || endpoint.hostname.endsWith(".example.com")) {

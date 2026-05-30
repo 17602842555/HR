@@ -42,8 +42,8 @@ test("production runtime rejects wildcard web origin", () => {
   );
 });
 
-test("production runtime rejects local http and template web origins", () => {
-  for (const origin of ["http://oa.company.cn", "https://127.0.0.1:5174", "https://oa.example.com"]) {
+test("production runtime rejects local http template and IPv6 loopback web origins", () => {
+  for (const origin of ["http://oa.company.cn", "https://127.0.0.1:5174", "https://[::1]:5174", "https://[::ffff:127.0.0.1]:5174", "https://oa.example.com"]) {
     assert.throws(
       () => loadEnv({
         isProduction: true,
@@ -136,6 +136,26 @@ test("production runtime rejects insecure object storage endpoint", () => {
       }
     }),
     /OBJECT_STORAGE_ENDPOINT/
+  );
+});
+
+test("production runtime rejects local IPv6 object storage endpoint", () => {
+  assert.throws(
+    () => loadEnv({
+      isProduction: true,
+      jwtSecret: strongSecret,
+      webOrigin: [productionWebOrigin],
+      fileStorageDriver: "s3",
+      objectStorage: {
+        accessKeyId: "AKIAREALACCESS",
+        bucket: "oa-prod-files",
+        endpoint: "https://[::1]:9000",
+        prefix: "prod",
+        region: "cn-east-1",
+        secretAccessKey: "object-secret-at-least-16"
+      }
+    }),
+    /local development hosts/
   );
 });
 
