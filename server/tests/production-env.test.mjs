@@ -145,6 +145,17 @@ test("production env validator checks body limit and production seed approval", 
   assert(result.errors.some((error) => error.includes("ALLOW_PRODUCTION_SEED")));
 });
 
+test("production env validator rejects weak production seed password", () => {
+  const result = validateProductionEnv(validProductionEnv({
+    RUN_DB_SEED: "1",
+    ALLOW_PRODUCTION_SEED: "1",
+    DEFAULT_ADMIN_PASSWORD: "NoDigitsAtAll"
+  }));
+
+  assert.equal(result.ok, false);
+  assert(result.errors.some((error) => error.includes("DEFAULT_ADMIN_PASSWORD")));
+});
+
 test("production env parser reads dotenv syntax without mutating process env", () => {
   const parsed = parseProductionEnvText(`
 APP_ENV=production

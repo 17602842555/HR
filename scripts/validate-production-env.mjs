@@ -63,6 +63,15 @@ function hasPlaceholder(value) {
   return placeholderFragments.some((fragment) => normalized.includes(fragment));
 }
 
+function hasWeakSeedPassword(value) {
+  const password = String(value || "");
+  return hasPlaceholder(password)
+    || password.length < 12
+    || password.trim() !== password
+    || !/[A-Za-z]/.test(password)
+    || !/\d/.test(password);
+}
+
 function isLocalHostname(hostname = "") {
   return localHostnames.has(String(hostname || "").trim().toLowerCase());
 }
@@ -225,8 +234,8 @@ export function validateProductionEnv(env) {
   if (runDbSeed && !boolValue(env.ALLOW_PRODUCTION_SEED)) {
     errors.push("RUN_DB_SEED=1 requires ALLOW_PRODUCTION_SEED=1 after an explicit production bootstrap approval.");
   }
-  if (runDbSeed && (hasPlaceholder(env.DEFAULT_ADMIN_PASSWORD) || String(env.DEFAULT_ADMIN_PASSWORD || "").length < 12)) {
-    errors.push("DEFAULT_ADMIN_PASSWORD must be a non-placeholder password with at least 12 characters when RUN_DB_SEED=1.");
+  if (runDbSeed && hasWeakSeedPassword(env.DEFAULT_ADMIN_PASSWORD)) {
+    errors.push("DEFAULT_ADMIN_PASSWORD must be non-placeholder, at least 12 characters, and include letters and numbers when RUN_DB_SEED=1.");
   }
   if (!isBlank(env.DEFAULT_ADMIN_PASSWORD) && hasPlaceholder(env.DEFAULT_ADMIN_PASSWORD)) {
     errors.push("DEFAULT_ADMIN_PASSWORD must not contain default or placeholder values.");

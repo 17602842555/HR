@@ -1644,6 +1644,8 @@ function checkProductionEnvValidation() {
     "VITE_REQUIRE_API must be 1",
     "VITE_DEMO_FALLBACK must be 0",
     "ALLOW_PRODUCTION_SEED=1",
+    "hasWeakSeedPassword",
+    "include letters and numbers when RUN_DB_SEED=1",
     "API_BODY_LIMIT_BYTES must be at least"
   ].forEach((needle) => assertIncludes(validator, needle, "scripts/validate-production-env.mjs"));
 
@@ -1656,6 +1658,7 @@ function checkProductionEnvValidation() {
     "production env validator rejects IPv6 loopback object storage endpoints",
     "production env validator rejects app-local durable backup paths",
     "production env validator checks body limit and production seed approval",
+    "production env validator rejects weak production seed password",
     "production env parser reads dotenv syntax"
   ].forEach((needle) => assertIncludes(validatorTests, needle, "server/tests/production-env.test.mjs"));
 
