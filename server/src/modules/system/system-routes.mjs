@@ -654,7 +654,7 @@ function releaseGateSummary({ dependencies, gaps, gapActionReport, gapSourceAvai
     warnings.push("GAP 责任人闭环报告仅用于动作分派，不能替代正式发布证据");
   }
   if (!latestEvidence?.available) {
-    blockers.push("缺少最新商业证据包 reports/commercial-evidence/latest.json");
+    blockers.push("缺少最新商业证据包");
   } else {
     if (latestEvidence.releaseCandidateReady !== true) blockers.push("最新商业证据摘要未达到 releaseCandidateReady");
     if (latestEvidence.releaseEvidence !== true) blockers.push("最新商业证据包不是可接受的生产发布证据");
