@@ -26,14 +26,28 @@ const runtimeOverrideKeys = Object.freeze([
   "WEB_ORIGIN"
 ]);
 
+const placeholderFragments = Object.freeze([
+  "admin123456",
+  "changeme",
+  "change-me",
+  "change_before",
+  "dev-only-change-me",
+  "example",
+  "local-commercial-demo-secret",
+  "oa_dev_password",
+  "placeholder",
+  "replace-with",
+  "todo"
+]);
+
 function isPresent(value) {
   return Boolean(String(value || "").trim());
 }
 
 function isPlaceholder(value) {
-  const normalized = String(value || "").trim();
+  const normalized = String(value || "").trim().toLowerCase();
   return !normalized
-    || /^(changeme|change-me|example|placeholder|todo|test|demo)$/i.test(normalized)
+    || placeholderFragments.some((fragment) => normalized.includes(fragment))
     || normalized.includes("<")
     || normalized.includes("example.com");
 }

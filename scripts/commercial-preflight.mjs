@@ -549,6 +549,7 @@ function checkDeploymentArtifacts() {
     "buildCloudflareSecretPlan",
     "applyCloudflareSecretPlan",
     "validateCloudflareBackendEnv",
+    "placeholderFragments",
     "\"gh\", [\"secret\", \"set\"",
     "input: value",
     "secretValues"
@@ -559,6 +560,7 @@ function checkDeploymentArtifacts() {
     "cloudflare secret plan validates backend values and redacts secret material",
     "cloudflare secret apply writes GitHub secrets through stdin",
     "cloudflare secret plan rejects unsafe production configuration",
+    "cloudflare secret plan rejects placeholder deploy token fragments",
     "CLOUDFLARE_ACCOUNT_ID",
     "CLOUDFLARE_API_TOKEN"
   ].forEach((needle) => assertIncludes(cloudflareSecretTests, needle, "server/tests/cloudflare-secrets.test.mjs"));

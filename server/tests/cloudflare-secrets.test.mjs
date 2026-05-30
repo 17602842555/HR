@@ -91,6 +91,19 @@ test("cloudflare secret plan rejects unsafe production configuration", () => {
   assert.equal(plan.errors.some((error) => error.includes("CLOUDFLARE_API_TOKEN")), true);
 });
 
+test("cloudflare secret plan rejects placeholder deploy token fragments", () => {
+  const plan = buildCloudflareSecretPlan({
+    fileEnv: {
+      ...validEnv,
+      CLOUDFLARE_API_TOKEN: "placeholder-cloudflare-workers-token-that-is-long-enough"
+    },
+    repo: "17602842555/HR"
+  });
+
+  assert.equal(plan.ok, false);
+  assert.equal(plan.errors.some((error) => error.includes("CLOUDFLARE_API_TOKEN")), true);
+});
+
 test("cloudflare secret apply writes GitHub secrets through stdin", () => {
   const plan = buildCloudflareSecretPlan({
     fileEnv: validEnv,
