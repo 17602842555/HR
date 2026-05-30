@@ -26,11 +26,14 @@ test("commercial CI evidence artifacts are private by default", () => {
 
 test("API production image runs as non-root with writable storage path", () => {
   const dockerfile = readScript("Dockerfile.api");
+  const compose = readScript("docker-compose.prod.yml");
 
   assert.match(dockerfile, /mkdir -p \/app\/storage\/files/);
   assert.match(dockerfile, /chown -R node:node \/app/);
   assert.match(dockerfile, /USER node/);
   assert.match(dockerfile, /CMD \["sh", "scripts\/docker-api-entrypoint\.sh"\]/);
+  assert.match(compose, /security_opt:\n\s+- no-new-privileges:true/);
+  assert.match(compose, /cap_drop:\n\s+- ALL/);
 });
 
 test("commercial drill evidence artifacts are private by default", () => {

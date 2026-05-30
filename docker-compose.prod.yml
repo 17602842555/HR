@@ -19,6 +19,10 @@ services:
       context: .
       dockerfile: Dockerfile.api
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       postgres:
         condition: service_healthy
