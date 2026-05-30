@@ -419,7 +419,9 @@ function checkDeploymentArtifacts() {
     "npm run validate:drill-evidence -- commercial-evidence/latest-drill-summary.json --json",
     "npm run evidence:commercial -- --full",
     "docker compose down -v --remove-orphans",
-    "actions/upload-artifact@v4",
+    "actions/checkout@v6",
+    "actions/setup-node@v6",
+    "actions/upload-artifact@v7",
     "commercial-drill-evidence"
   ].forEach((needle) => assertIncludes(drillWorkflow, needle, ".github/workflows/commercial-drill.yml"));
 
@@ -440,6 +442,9 @@ function checkDeploymentArtifacts() {
     "npm run validate:secrets-signoff -- docs/production-secrets-signoff.json --env .env.production --json",
     "npm run validate:hr-signoff -- docs/hr-data-signoff.json --source oa-dashboard.html --json",
     "npm run validate:storage-signoff -- \"${args[@]}\"",
+    "actions/checkout@v6",
+    "actions/setup-node@v6",
+    "actions/upload-artifact@v7",
     "commercial-signoff-validation"
   ].forEach((needle) => assertIncludes(signoffWorkflow, needle, ".github/workflows/commercial-signoff.yml"));
   assert(
@@ -475,7 +480,7 @@ function checkDeploymentArtifacts() {
     "commercial drill evidence artifacts are private by default",
     "commercial drill workflow runs Docker drill and uploads evidence",
     "commercial signoff workflow materializes release inputs without uploading secrets",
-    "commercial GitHub workflows opt into Node 24 action runtime",
+    "commercial GitHub workflows use Node 24 action runtime",
     "umask 077",
     "chmod 600",
     "chmod 700"
@@ -570,7 +575,9 @@ function checkDeploymentArtifacts() {
     "npm run ci:commercial",
     "VITE_REQUIRE_API: \"1\"",
     "VITE_DEMO_FALLBACK: \"0\"",
-    "actions/upload-artifact@v4",
+    "actions/checkout@v6",
+    "actions/setup-node@v6",
+    "actions/upload-artifact@v7",
     "if: always()",
     "commercial-ci-artifacts",
     "commercial-evidence"

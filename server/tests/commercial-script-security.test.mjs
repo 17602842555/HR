@@ -61,7 +61,9 @@ test("commercial drill workflow runs Docker drill and uploads evidence", () => {
   assert.match(workflow, /npm run drill:commercial/);
   assert.match(workflow, /npm run validate:drill-evidence -- commercial-evidence\/latest-drill-summary\.json --json/);
   assert.match(workflow, /docker compose down -v --remove-orphans/);
-  assert.match(workflow, /actions\/upload-artifact@v4/);
+  assert.match(workflow, /actions\/checkout@v6/);
+  assert.match(workflow, /actions\/setup-node@v6/);
+  assert.match(workflow, /actions\/upload-artifact@v7/);
   assert.match(workflow, /commercial-drill-evidence/);
   assert.doesNotMatch(workflow, /ALLOW_PRODUCTION_DRILL: "1"/);
 });
@@ -92,7 +94,9 @@ test("cloudflare deploy workflow verifies backend gateway after deploy", () => {
 
   assert.match(workflow, /Deploy HR OA to Cloudflare/);
   assert.match(workflow, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"/);
-  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
+  assert.match(workflow, /actions\/checkout@v6/);
+  assert.match(workflow, /actions\/setup-node@v6/);
+  assert.match(workflow, /cloudflare\/wrangler-action@v4/);
   assert.match(workflow, /wrangler secret put API_ORIGIN/);
   assert.match(workflow, /CLOUDFLARE_DEPLOYMENT_URL/);
   assert.match(workflow, /CLOUDFLARE_TUNNEL_TOKEN/);
@@ -102,11 +106,11 @@ test("cloudflare deploy workflow verifies backend gateway after deploy", () => {
   assert.match(workflow, /npm run validate:cloudflare-backend -- --env "\$backend_env" --json/);
   assert.match(workflow, /npm run smoke:cloudflare -- --url "\$CLOUDFLARE_DEPLOYMENT_URL" --json/);
   assert.match(workflow, /DEPLOYMENT_URL_READY/);
-  assert.doesNotMatch(workflow, /actions\/upload-artifact@v4/);
+  assert.doesNotMatch(workflow, /actions\/upload-artifact@/);
   assert.doesNotMatch(workflow, /cat "\$backend_env"/);
 });
 
-test("commercial GitHub workflows opt into Node 24 action runtime", () => {
+test("commercial GitHub workflows use Node 24 action runtime", () => {
   [
     ".github/workflows/commercial-ci.yml",
     ".github/workflows/commercial-drill.yml",
@@ -115,6 +119,9 @@ test("commercial GitHub workflows opt into Node 24 action runtime", () => {
   ].forEach((path) => {
     const workflow = readScript(path);
     assert.match(workflow, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"/, `${path} should avoid Node 20 action runtime deprecation`);
+    assert.match(workflow, /actions\/checkout@v6/);
+    assert.match(workflow, /actions\/setup-node@v6/);
+    assert.doesNotMatch(workflow, /actions\/checkout@v4|actions\/setup-node@v4|actions\/upload-artifact@v4|cloudflare\/wrangler-action@v3/);
   });
 });
 

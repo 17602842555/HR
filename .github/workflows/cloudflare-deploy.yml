@@ -24,10 +24,10 @@ jobs:
       CLOUDFLARE_BACKEND_WEB_ORIGIN: ${{ secrets.CLOUDFLARE_BACKEND_WEB_ORIGIN || vars.CLOUDFLARE_BACKEND_WEB_ORIGIN || secrets.CLOUDFLARE_DEPLOYMENT_URL || vars.CLOUDFLARE_DEPLOYMENT_URL }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -67,7 +67,7 @@ jobs:
 
       - name: Deploy Worker with assets
         if: ${{ env.CLOUDFLARE_READY == 'true' }}
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
