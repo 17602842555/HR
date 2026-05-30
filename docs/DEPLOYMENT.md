@@ -65,6 +65,19 @@ DATABASE_URL="postgresql://oa:oa_dev_password@127.0.0.1:55432/oa_commercial?sche
 
 This is a project-local PostgreSQL cluster for development machines where Docker is not available. It still uses PostgreSQL and Prisma, writes `.local-postgres/.env.local-postgres` with API-required frontend flags, and keeps the cluster under `.local-postgres/`. It is not production evidence and does not close the Docker restore-drill gap; release still requires target-environment smoke, reviewed production secrets, signoffs, and backup/restore drill evidence.
 
+When only the backend should keep running behind an already-open Vite window, use the managed local API service:
+
+```bash
+npm run postgres:local -- start
+npm run db:deploy
+RUN_DB_SEED=1 npm run db:seed
+npm run api:local -- start --json
+npm run api:local -- status --json
+npm run api:local -- stop --json
+```
+
+`npm run api:local` uses the macOS `screen` command to run `node server/src/index.mjs` in a detached `deep-oa-api` session. It sources `.env.example`, `.env`, then `.local-postgres/.env.local-postgres`, so the project-local PostgreSQL URL wins over stale demo defaults unless `LOCAL_API_ENV_FILES` is set explicitly. The managed API writes `.local-files/api-local-service.pid` and `.local-files/api-local-service.log`; `stop` uses the pid file before closing the screen session, so the backend does not remain bound to `8787` after the screen socket is gone. Each start/status/stop writes a private `0600` `reports/commercial-evidence/local-api-service.json` manifest with the health URL, managed pid, screen-session state, and redacted project paths. This is an operator convenience for local backend availability; it is not production service supervision and does not close the Cloudflare, production-secret, signoff, or Docker drill gaps.
+
 `npm run doctor:commercial -- --json` selects database diagnostics in this order: explicit `DATABASE_URL` or `POSTGRES_*` environment variables, a running `npm run dev:commercial` manifest, `.local-postgres/.env.local-postgres`, then the default `127.0.0.1:5432`. This keeps old blocked dev manifests from hiding a working project-local PostgreSQL cluster on `55432`.
 
 Docker-free local recovery drill:

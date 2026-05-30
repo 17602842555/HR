@@ -114,6 +114,7 @@ function permissionCodeCoversRoute(code, required) {
 function checkPackageScripts() {
   const pkg = readJson("package.json");
   const requiredScripts = [
+    "api:local",
     "backup:files",
     "brand:check",
     "build",
@@ -219,6 +220,7 @@ function checkDeploymentArtifacts() {
     "scripts/generate-sbom.mjs",
     "scripts/generate-signoff-drafts.mjs",
     "scripts/local-postgres.mjs",
+    "scripts/local-api-service.mjs",
     "scripts/materialize-release-inputs.mjs",
     "scripts/prepare-hr-data-review.mjs",
     "scripts/prune-backups.sh",
@@ -243,6 +245,7 @@ function checkDeploymentArtifacts() {
     "server/tests/cloudflare-worker.test.mjs",
     "server/tests/commercial-script-security.test.mjs",
     "server/tests/local-postgres.test.mjs",
+    "server/tests/local-api-service.test.mjs",
     "server/tests/materialize-release-inputs.test.mjs",
     "server/tests/migration-lock.test.mjs",
     "server/tests/sbom.test.mjs",
