@@ -119,6 +119,7 @@ function checkPackageScripts() {
     "build",
     "candidate:commercial",
     "ci:commercial",
+    "configure:cloudflare",
     "contract:api",
     "db:deploy",
     "db:generate",
@@ -204,6 +205,7 @@ function checkDeploymentArtifacts() {
     "scripts/commercial-release-dossier.mjs",
     "scripts/commercial-release-gate.mjs",
     "scripts/commercial-smoke.mjs",
+    "scripts/configure-cloudflare-secrets.mjs",
     "scripts/dev-commercial-core.mjs",
     "scripts/dev-commercial.mjs",
     "scripts/docker-api-entrypoint.sh",
@@ -230,6 +232,7 @@ function checkDeploymentArtifacts() {
     "prisma/migrations/migration-lock.json",
     "server/src/modules/audit/audit-integrity.mjs",
     "server/tests/audit-integrity.test.mjs",
+    "server/tests/cloudflare-secrets.test.mjs",
     "server/tests/commercial-script-security.test.mjs",
     "server/tests/local-postgres.test.mjs",
     "server/tests/materialize-release-inputs.test.mjs",
@@ -485,6 +488,26 @@ function checkDeploymentArtifacts() {
     "chmod 600",
     "chmod 700"
   ].forEach((needle) => assertIncludes(scriptSecurityTests, needle, "server/tests/commercial-script-security.test.mjs"));
+
+  const cloudflareSecretConfig = readText("scripts/configure-cloudflare-secrets.mjs");
+  [
+    "parseCloudflareSecretArgs",
+    "buildCloudflareSecretPlan",
+    "applyCloudflareSecretPlan",
+    "validateCloudflareBackendEnv",
+    "\"gh\", [\"secret\", \"set\"",
+    "input: value",
+    "secretValues"
+  ].forEach((needle) => assertIncludes(cloudflareSecretConfig, needle, "scripts/configure-cloudflare-secrets.mjs"));
+
+  const cloudflareSecretTests = readText("server/tests/cloudflare-secrets.test.mjs");
+  [
+    "cloudflare secret plan validates backend values and redacts secret material",
+    "cloudflare secret apply writes GitHub secrets through stdin",
+    "cloudflare secret plan rejects unsafe production configuration",
+    "CLOUDFLARE_ACCOUNT_ID",
+    "CLOUDFLARE_API_TOKEN"
+  ].forEach((needle) => assertIncludes(cloudflareSecretTests, needle, "server/tests/cloudflare-secrets.test.mjs"));
 
   const materializeReleaseInputsTests = readText("server/tests/materialize-release-inputs.test.mjs");
   [

@@ -337,6 +337,22 @@ CLOUDFLARE_TUNNEL_TOKEN=<remotely-managed tunnel token for backend API>
 CLOUDFLARE_BACKEND_WEB_ORIGIN=https://<worker-or-custom-domain> # optional override, defaults to deployment URL
 ```
 
+Prepare and validate those repository secrets without printing secret values:
+
+```bash
+# Keep CLOUDFLARE_API_TOKEN outside the checked-in env file when possible.
+CLOUDFLARE_API_TOKEN=<Cloudflare token with Workers deploy permission> \
+CLOUDFLARE_ACCOUNT_ID=<32-character account id> \
+npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --json
+
+# Apply only after the dry-run JSON is ok=true.
+CLOUDFLARE_API_TOKEN=<Cloudflare token with Workers deploy permission> \
+CLOUDFLARE_ACCOUNT_ID=<32-character account id> \
+npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --apply
+```
+
+`configure:cloudflare` validates the backend tunnel origin, frontend deployment origin, tunnel token, Cloudflare account id, and deploy token before it writes anything. When `--apply` is used it calls `gh secret set` with each value over stdin, so token material is not placed in shell arguments or command logs.
+
 The GitHub Actions workflow uses Node 24-native GitHub and Cloudflare actions, deploys the Worker, writes `API_ORIGIN` as a Worker secret when all required Cloudflare values are configured, validates the backend Tunnel/server environment with a temporary private env file when `CLOUDFLARE_TUNNEL_TOKEN` is present, and runs `npm run smoke:cloudflare` against `CLOUDFLARE_DEPLOYMENT_URL` when that URL is present. The smoke check verifies `/api/edge/health`, backend `/api/health`, and the backend OpenAPI contract through the Cloudflare gateway. For local deployment, set the same Cloudflare Worker runtime secret manually:
 
 ```bash
