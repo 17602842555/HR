@@ -14,18 +14,21 @@ const defaultInputSpecs = Object.freeze([
   }),
   Object.freeze({
     envName: "PRODUCTION_SECRETS_SIGNOFF_B64",
+    forbidExample: true,
     kind: "json",
     outputPath: "docs/production-secrets-signoff.json",
     required: true
   }),
   Object.freeze({
     envName: "HR_DATA_SIGNOFF_B64",
+    forbidExample: true,
     kind: "json",
     outputPath: "docs/hr-data-signoff.json",
     required: true
   }),
   Object.freeze({
     envName: "FILE_STORAGE_SIGNOFF_B64",
+    forbidExample: true,
     kind: "json",
     outputPath: "docs/file-storage-signoff.json",
     required: true
@@ -82,12 +85,15 @@ function decodeBase64Env(env, envName) {
   return text.endsWith("\n") ? text : `${text}\n`;
 }
 
-function validateDecodedContent({ envName, kind, text }) {
+function validateDecodedContent({ envName, forbidExample = false, kind, text }) {
   if (kind === "json") {
     try {
       const parsed = JSON.parse(text);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("top-level JSON must be an object");
+      }
+      if (forbidExample && parsed.example === true) {
+        throw new Error("example release inputs cannot be materialized");
       }
     } catch (error) {
       throw new Error(`${envName} decoded content is not a valid JSON object: ${error.message}`);
@@ -182,7 +188,7 @@ export function materializeReleaseInputs({
   for (const spec of inputSpecs) {
     try {
       const text = decodeBase64Env(env, spec.envName);
-      validateDecodedContent({ envName: spec.envName, kind: spec.kind, text });
+      validateDecodedContent({ envName: spec.envName, forbidExample: spec.forbidExample, kind: spec.kind, text });
       const outputPath = resolveInsideRoot(rootDir, spec.outputPath);
       decodedInputs.push({ spec, text, outputPath });
     } catch (error) {

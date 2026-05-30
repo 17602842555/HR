@@ -102,6 +102,29 @@ test("release input materializer does not write partial files when validation fa
   }
 });
 
+test("release input materializer rejects example signoffs before writing files", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "oa-release-inputs-example-"));
+  try {
+    const result = materializeReleaseInputs({
+      env: {
+        ...releaseInputEnv(),
+        PRODUCTION_SECRETS_SIGNOFF_B64: b64(JSON.stringify({ example: true, schemaVersion: 1, kind: "secrets" }))
+      },
+      rootDir: dir
+    });
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.written, []);
+    assert(result.errors.some((error) => error.includes("example release inputs")));
+    await assert.rejects(stat(join(dir, ".env.production")), { code: "ENOENT" });
+    await assert.rejects(stat(join(dir, "docs", "production-secrets-signoff.json")), { code: "ENOENT" });
+    await assert.rejects(stat(join(dir, "docs", "hr-data-signoff.json")), { code: "ENOENT" });
+    await assert.rejects(stat(join(dir, "docs", "file-storage-signoff.json")), { code: "ENOENT" });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("release input materializer accepts unpadded base64 but rejects invalid utf8", async () => {
   const dir = await mkdtemp(join(tmpdir(), "oa-release-inputs-base64-"));
   try {

@@ -524,6 +524,8 @@ function checkDeploymentArtifacts() {
     "0o700",
     "parseDotenv",
     "decodedInputs",
+    "forbidExample",
+    "example release inputs cannot be materialized",
     "writeMaterializeReleaseInputsResult",
     "outputPath",
     "does not round-trip cleanly as UTF-8",
@@ -647,6 +649,7 @@ function checkDeploymentArtifacts() {
     "release input materializer CLI writes private output without shell redirection",
     "release input materializer rejects missing and malformed release secrets",
     "release input materializer does not write partial files when validation fails",
+    "release input materializer rejects example signoffs before writing files",
     "release input materializer accepts unpadded base64 but rejects invalid utf8",
     "release input materializer parser supports json flag"
   ].forEach((needle) => assertIncludes(materializeReleaseInputsTests, needle, "server/tests/materialize-release-inputs.test.mjs"));
