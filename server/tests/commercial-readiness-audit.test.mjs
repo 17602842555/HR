@@ -8,6 +8,7 @@ function greenChecks() {
     { id: "brand", required: true, exitCode: 0 },
     { id: "contract", required: true, exitCode: 0 },
     { id: "production-env", required: false, exitCode: 0 },
+    { id: "cloudflare-backend", required: false, exitCode: 0 },
     { id: "secrets-signoff", required: false, exitCode: 0 },
     { id: "hr-signoff", required: false, exitCode: 0 },
     { id: "storage-signoff", required: false, exitCode: 0 },

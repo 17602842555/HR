@@ -130,6 +130,7 @@ function sanitizeTargetProfile(profile) {
       target: databaseTarget
     },
     signoffChecks: {
+      cloudflareBackend: signoffChecks.cloudflareBackend === true,
       productionEnv: signoffChecks.productionEnv === true,
       secrets: signoffChecks.secrets === true,
       hr: signoffChecks.hr === true,
@@ -224,6 +225,7 @@ function targetProfileLines(profile) {
   if (!profile) return ["- Target Profile: missing"];
   const signoffChecks = profile.signoffChecks || {};
   const signoffText = [
+    `cloudflare-backend=${boolText(signoffChecks.cloudflareBackend)}`,
     `production-env=${boolText(signoffChecks.productionEnv)}`,
     `secrets=${boolText(signoffChecks.secrets)}`,
     `hr=${boolText(signoffChecks.hr)}`,

@@ -23,6 +23,7 @@ function passingEvidence(overrides = {}) {
     { id: "hr-review-prep", required: true, exitCode: 0 },
     { id: "evidence-permissions", required: true, exitCode: 0 },
     { id: "production-env", required: false, exitCode: 0 },
+    { id: "cloudflare-backend", required: false, exitCode: 0 },
     { id: "secrets-signoff", required: false, exitCode: 0 },
     { id: "hr-signoff", required: false, exitCode: 0 },
     { id: "storage-signoff", required: false, exitCode: 0 },
@@ -57,6 +58,7 @@ function passingEvidence(overrides = {}) {
       productionEvidenceReady: true,
       productionRuntime: true,
       signoffChecks: {
+        cloudflareBackend: true,
         drillEvidence: true,
         hr: true,
         productionEnv: true,
@@ -96,7 +98,7 @@ test("commercial release gate passes fully green release evidence", () => {
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.failures, []);
-  assert.equal(result.summary.checkCount, 19);
+  assert.equal(result.summary.checkCount, 20);
   assert.equal(result.summary.openGapCount, 0);
   assert.equal(result.summary.evidenceMode, "full");
   assert.equal(result.summary.maxEvidenceAgeHours, 24);
@@ -181,6 +183,7 @@ test("commercial release gate blocks open gaps doctor blockers and missing e2e",
       { id: "hr-review-prep", required: true, exitCode: 0 },
       { id: "evidence-permissions", required: true, exitCode: 0 },
       { id: "production-env", required: false, exitCode: 0 },
+      { id: "cloudflare-backend", required: false, exitCode: 0 },
       { id: "secrets-signoff", required: false, exitCode: 0 },
       { id: "hr-signoff", required: false, exitCode: 0 },
       { id: "storage-signoff", required: false, exitCode: 0 },
@@ -276,6 +279,22 @@ test("commercial release gate blocks missing or failing production env evidence"
   }));
   assert.equal(failing.ok, false);
   assert(failing.failures.some((failure) => failure.includes("warning check is failing: production-env")));
+});
+
+test("commercial release gate blocks missing or failing Cloudflare backend evidence", () => {
+  const missing = releaseGate(passingEvidence({
+    checks: passingEvidence().checks.filter((check) => check.id !== "cloudflare-backend")
+  }));
+  assert.equal(missing.ok, false);
+  assert(missing.failures.some((failure) => failure.includes("missing required release check: cloudflare-backend")));
+
+  const failing = releaseGate(passingEvidence({
+    checks: passingEvidence().checks.map((check) => (
+      check.id === "cloudflare-backend" ? { ...check, exitCode: 1 } : check
+    ))
+  }));
+  assert.equal(failing.ok, false);
+  assert(failing.failures.some((failure) => failure.includes("warning check is failing: cloudflare-backend")));
 });
 
 test("commercial release gate blocks missing or failing HR review preparation evidence", () => {

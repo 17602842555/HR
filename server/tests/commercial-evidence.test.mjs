@@ -57,6 +57,7 @@ test("commercial evidence selects heavy and e2e checks from flags", () => {
   assert.equal(quick.includes("supply-chain"), true);
   assert.equal(quick.includes("sbom"), true);
   assert.equal(quick.includes("hr-review-prep"), true);
+  assert.equal(quick.includes("cloudflare-backend"), true);
   assert.equal(quick.includes("secrets-signoff"), true);
   assert.equal(quick.includes("hr-signoff"), true);
   assert.equal(quick.includes("storage-signoff"), true);
@@ -68,6 +69,7 @@ test("commercial evidence selects heavy and e2e checks from flags", () => {
   assert.equal(fullWithE2e.includes("supply-chain"), true);
   assert.equal(fullWithE2e.includes("sbom"), true);
   assert.equal(fullWithE2e.includes("hr-review-prep"), true);
+  assert.equal(fullWithE2e.includes("cloudflare-backend"), true);
   assert.equal(fullWithE2e.includes("secrets-signoff"), true);
   assert.equal(fullWithE2e.includes("hr-signoff"), true);
   assert.equal(fullWithE2e.includes("storage-signoff"), true);
@@ -88,6 +90,7 @@ test("commercial evidence summary keeps doctor blockers visible without failing 
       { id: "sbom", required: true, exitCode: 0 },
       { id: "hr-review-prep", required: true, exitCode: 0 },
       { id: "production-env", required: false, exitCode: 1 },
+      { id: "cloudflare-backend", required: false, exitCode: 1 },
       { id: "secrets-signoff", required: false, exitCode: 1 },
       { id: "hr-signoff", required: false, exitCode: 1 },
       { id: "storage-signoff", required: false, exitCode: 1 },
@@ -125,7 +128,7 @@ test("commercial evidence summary keeps doctor blockers visible without failing 
   assert(report.summary.releaseBlockers.some((blocker) => blocker.includes("Evidence mode must be full")));
   assert(report.summary.releaseBlockers.some((blocker) => blocker.includes("E2E evidence is missing")));
   assert(report.summary.releaseBlockers.some((blocker) => blocker.includes("canRunDockerDrill")));
-  assert.deepEqual(report.summary.warningChecks.map((check) => check.id), ["production-env", "secrets-signoff", "hr-signoff", "storage-signoff", "drill-evidence", "doctor"]);
+  assert.deepEqual(report.summary.warningChecks.map((check) => check.id), ["production-env", "cloudflare-backend", "secrets-signoff", "hr-signoff", "storage-signoff", "drill-evidence", "doctor"]);
   assert.deepEqual(report.summary.diagnosticChecks, [{ id: "local-recovery-evidence", exitCode: 66 }]);
   assert.equal(report.summary.openGapCount, 1);
   assert.equal(report.summary.readiness.canRunDockerDrill, false);
@@ -142,6 +145,7 @@ test("commercial evidence target profile distinguishes local CI from production 
   };
   const checks = [
     { id: "production-env", exitCode: 1 },
+    { id: "cloudflare-backend", exitCode: 1 },
     { id: "secrets-signoff", exitCode: 1 },
     { id: "storage-signoff", exitCode: 1 },
     { id: "hr-signoff", exitCode: 1 },
@@ -178,6 +182,7 @@ test("commercial evidence target profile reads project-local PostgreSQL env when
     const profile = buildTargetProfile({
       checks: [
         { id: "production-env", exitCode: 1 },
+        { id: "cloudflare-backend", exitCode: 1 },
         { id: "secrets-signoff", exitCode: 1 },
         { id: "storage-signoff", exitCode: 1 },
         { id: "hr-signoff", exitCode: 1 },
@@ -217,6 +222,7 @@ test("commercial evidence target profile marks production release evidence only 
   };
   const checks = [
     { id: "production-env", exitCode: 0 },
+    { id: "cloudflare-backend", exitCode: 0 },
     { id: "secrets-signoff", exitCode: 0 },
     { id: "storage-signoff", exitCode: 0 },
     { id: "hr-signoff", exitCode: 0 },
@@ -241,6 +247,7 @@ test("commercial evidence summary marks release candidate ready only for full pr
     { id: "contract", required: true, exitCode: 0 },
     { id: "hr-review-prep", required: true, exitCode: 0 },
     { id: "production-env", required: false, exitCode: 0 },
+    { id: "cloudflare-backend", required: false, exitCode: 0 },
     { id: "secrets-signoff", required: false, exitCode: 0 },
     { id: "hr-signoff", required: false, exitCode: 0 },
     { id: "storage-signoff", required: false, exitCode: 0 },
@@ -304,6 +311,7 @@ test("commercial evidence summary fails when required checks fail", () => {
       { id: "preflight", required: true, exitCode: 1 },
       { id: "hr-review-prep", required: true, exitCode: 0 },
       { id: "production-env", required: false, exitCode: 1 },
+      { id: "cloudflare-backend", required: false, exitCode: 1 },
       { id: "secrets-signoff", required: false, exitCode: 1 },
       { id: "hr-signoff", required: false, exitCode: 1 },
       { id: "storage-signoff", required: false, exitCode: 1 },
@@ -318,7 +326,7 @@ test("commercial evidence summary fails when required checks fail", () => {
   assert.equal(summary.releaseCandidateReady, false);
   assert(summary.releaseBlockers.some((blocker) => blocker.includes("Required check failed: preflight")));
   assert.deepEqual(summary.requiredFailed, [{ id: "preflight", exitCode: 1 }]);
-  assert.deepEqual(summary.warningChecks.map((check) => check.id), ["production-env", "secrets-signoff", "hr-signoff", "storage-signoff", "drill-evidence", "doctor"]);
+  assert.deepEqual(summary.warningChecks.map((check) => check.id), ["production-env", "cloudflare-backend", "secrets-signoff", "hr-signoff", "storage-signoff", "drill-evidence", "doctor"]);
   assert.deepEqual(summary.diagnosticChecks, [{ id: "local-recovery-evidence", exitCode: 66 }]);
 });
 
@@ -494,6 +502,7 @@ test("commercial evidence artifact inventory tracks release automation scripts",
     "scripts/generate-signoff-drafts.mjs",
     "scripts/materialize-release-inputs.mjs",
     "scripts/prepare-hr-data-review.mjs",
+    "scripts/validate-cloudflare-backend.mjs",
     "scripts/validate-evidence-permissions.mjs",
     "scripts/validate-local-recovery-drill.mjs"
   ].forEach((path) => {
@@ -512,6 +521,9 @@ test("commercial evidence artifact inventory tracks release automation scripts",
   assert("reports/commercial-evidence/signoff-validation/secrets-signoff.json" in artifacts.files);
   assert("reports/commercial-evidence/signoff-validation/hr-signoff.json" in artifacts.files);
   assert("reports/commercial-evidence/signoff-validation/storage-signoff.json" in artifacts.files);
+  assert("docker-compose.cloudflare.yml" in artifacts.files);
+  assert("cloudflare/worker.js" in artifacts.files);
+  assert(".github/workflows/cloudflare-deploy.yml" in artifacts.files);
   assert("reports/commercial-evidence/sbom/latest-spdx.json" in artifacts.files);
   assert("reports/commercial-evidence/latest-gap-report.json" in artifacts.files);
   assert("reports/commercial-evidence/latest-gap-report.md" in artifacts.files);

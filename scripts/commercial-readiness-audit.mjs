@@ -20,8 +20,8 @@ export const gapClosureRules = Object.freeze({
     readinessFlags: Object.freeze(["canRunDockerDrill"])
   }),
   "GAP-003": Object.freeze({
-    label: "Production secrets and origin signoff",
-    checks: Object.freeze(["production-env", "secrets-signoff"]),
+    label: "Production secrets, origin, and Cloudflare backend signoff",
+    checks: Object.freeze(["production-env", "cloudflare-backend", "secrets-signoff"]),
     readinessFlags: Object.freeze([])
   }),
   "GAP-004": Object.freeze({

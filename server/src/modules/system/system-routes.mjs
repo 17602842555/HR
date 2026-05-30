@@ -437,6 +437,7 @@ function summarizeTargetProfile(profile = {}) {
     productionEvidenceReady: profile.productionEvidenceReady === true,
     productionRuntime: profile.productionRuntime === true,
     signoffChecks: {
+      cloudflareBackend: profile.signoffChecks?.cloudflareBackend === true,
       drillEvidence: profile.signoffChecks?.drillEvidence === true,
       hr: profile.signoffChecks?.hr === true,
       productionEnv: profile.signoffChecks?.productionEnv === true,

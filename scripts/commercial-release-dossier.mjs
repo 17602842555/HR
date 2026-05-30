@@ -91,12 +91,21 @@ function readinessLines(readiness) {
 function targetProfileLines(profile) {
   if (!profile) return ["- Target profile: missing"];
   const database = profile.database || {};
+  const signoffChecks = profile.signoffChecks || {};
   const databaseTarget = database.configured !== true
     ? "unconfigured"
     : database.isLocal === true
       ? "local-postgresql"
       : "non-local-postgresql";
   const warningCount = Array.isArray(profile.warnings) ? profile.warnings.length : 0;
+  const signoffText = [
+    `cloudflare-backend=${signoffChecks.cloudflareBackend === true ? "yes" : "no"}`,
+    `production-env=${signoffChecks.productionEnv === true ? "yes" : "no"}`,
+    `secrets=${signoffChecks.secrets === true ? "yes" : "no"}`,
+    `hr=${signoffChecks.hr === true ? "yes" : "no"}`,
+    `storage=${signoffChecks.storage === true ? "yes" : "no"}`,
+    `drill=${signoffChecks.drillEvidence === true ? "yes" : "no"}`
+  ].join(", ");
   return [
     `- evidenceClass: ${profile.evidenceClass || "unknown"}`,
     `- appEnv/nodeEnv: ${profile.appEnv || "unset"} / ${profile.nodeEnv || "unset"}`,
@@ -109,6 +118,7 @@ function targetProfileLines(profile) {
     `- E2E included: ${profile.e2eIncluded === true ? "yes" : "no"}`,
     `- API-required frontend: ${profile.viteRequireApi === "1" ? "yes" : "no"}`,
     `- demo fallback: ${profile.viteDemoFallback === "1" ? "enabled" : "disabled"}`,
+    `- signoffChecks: ${signoffText}`,
     `- profile warning count: ${warningCount}`
   ];
 }

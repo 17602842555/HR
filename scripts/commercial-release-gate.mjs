@@ -15,6 +15,7 @@ const baseRequiredChecks = [
   "hr-review-prep",
   "evidence-permissions",
   "production-env",
+  "cloudflare-backend",
   "secrets-signoff",
   "hr-signoff",
   "storage-signoff",

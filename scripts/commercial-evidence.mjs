@@ -18,6 +18,7 @@ export const commercialEvidenceChecks = Object.freeze([
   { id: "contract", command: "node", args: ["scripts/export-openapi.mjs", "--check"], required: true },
   { id: "hr-review-prep", command: "npm", args: ["run", "prepare:hr-review", "--", "--json"], required: true, parseJson: true },
   { id: "production-env", command: "npm", args: ["run", "validate:production-env", "--", ".env.production", "--json"], required: false, allowFailure: true, parseJson: true },
+  { id: "cloudflare-backend", command: "npm", args: ["run", "validate:cloudflare-backend", "--", "--json"], required: false, allowFailure: true, parseJson: true },
   { id: "secrets-signoff", command: "npm", args: ["run", "validate:secrets-signoff", "--", "--json"], required: false, allowFailure: true, parseJson: true },
   { id: "hr-signoff", command: "npm", args: ["run", "validate:hr-signoff", "--", "--json"], required: false, allowFailure: true, parseJson: true },
   { id: "storage-signoff", command: "npm", args: ["run", "validate:storage-signoff", "--", "--json"], required: false, allowFailure: true, parseJson: true },
@@ -224,13 +225,13 @@ export function buildTargetProfile({
   const appEnv = String(targetEnv.APP_ENV || "").trim() || "";
   const nodeEnv = String(targetEnv.NODE_ENV || "").trim() || "";
   const isProductionRuntime = appEnv === "production" || nodeEnv === "production";
-  const productionEvidenceReady = ["production-env", "secrets-signoff", "storage-signoff", "hr-signoff", "drill-evidence"]
+  const productionEvidenceReady = ["production-env", "cloudflare-backend", "secrets-signoff", "storage-signoff", "hr-signoff", "drill-evidence"]
     .every((id) => checkPassed(checks, id));
   const evidenceClass = isProductionRuntime && productionEvidenceReady ? "production-release-evidence" : "local-or-ci-validation";
   const warnings = [];
 
   if (database.isLocal) warnings.push("DATABASE_URL points at a local PostgreSQL host; this is not production database evidence.");
-  if (!productionEvidenceReady) warnings.push("Production env, signoff, storage, HR, or drill evidence is not fully green.");
+  if (!productionEvidenceReady) warnings.push("Production env, Cloudflare backend, signoff, storage, HR, or drill evidence is not fully green.");
   if (targetEnv.VITE_DEMO_FALLBACK === "1") warnings.push("VITE_DEMO_FALLBACK is enabled; production frontend evidence requires it disabled.");
 
   return {
@@ -243,6 +244,7 @@ export function buildTargetProfile({
     productionEvidenceReady,
     productionRuntime: isProductionRuntime,
     signoffChecks: {
+      cloudflareBackend: checkPassed(checks, "cloudflare-backend"),
       drillEvidence: checkPassed(checks, "drill-evidence"),
       hr: checkPassed(checks, "hr-signoff"),
       productionEnv: checkPassed(checks, "production-env"),
@@ -276,11 +278,12 @@ export function collectArtifacts(rootDir = process.cwd()) {
     "scripts/commercial-release-dossier.mjs",
     "scripts/commercial-release-gate.mjs",
     "scripts/materialize-release-inputs.mjs",
-	    "scripts/generate-signoff-drafts.mjs",
-	    "scripts/generate-sbom.mjs",
-	    "scripts/prepare-hr-data-review.mjs",
-	    "scripts/validate-evidence-permissions.mjs",
-	    "scripts/validate-file-backup.mjs",
+    "scripts/generate-signoff-drafts.mjs",
+    "scripts/generate-sbom.mjs",
+    "scripts/prepare-hr-data-review.mjs",
+    "scripts/validate-evidence-permissions.mjs",
+    "scripts/validate-file-backup.mjs",
+    "scripts/validate-cloudflare-backend.mjs",
     "scripts/validate-hr-signoff.mjs",
     "scripts/validate-storage-signoff.mjs",
     "scripts/validate-drill-evidence.mjs",
@@ -289,10 +292,10 @@ export function collectArtifacts(rootDir = process.cwd()) {
     "scripts/validate-production-env.mjs",
     "scripts/validate-secrets-signoff.mjs",
     "scripts/validate-supply-chain.mjs",
-	    "reports/commercial-evidence/sbom/latest-spdx.json",
-	    "reports/commercial-evidence/production-env-prep/latest-manifest.json",
-	    "reports/commercial-evidence/signoff-drafts/latest-manifest.json",
-	    "docs/openapi.json",
+    "reports/commercial-evidence/sbom/latest-spdx.json",
+    "reports/commercial-evidence/production-env-prep/latest-manifest.json",
+    "reports/commercial-evidence/signoff-drafts/latest-manifest.json",
+    "docs/openapi.json",
     "prisma/migrations/migration-lock.json",
     "docs/KNOWN_GAPS.md",
     "docs/production-secrets-signoff.json",
@@ -317,6 +320,10 @@ export function collectArtifacts(rootDir = process.cwd()) {
     ".github/workflows/commercial-ci.yml",
     ".github/workflows/commercial-drill.yml",
     ".github/workflows/commercial-signoff.yml",
+    ".github/workflows/cloudflare-deploy.yml",
+    "cloudflare/worker.js",
+    "docker-compose.cloudflare.yml",
+    "wrangler.toml",
     ".env.production.example",
     "docker-compose.yml",
     "docker-compose.prod.yml",
