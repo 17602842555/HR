@@ -86,6 +86,36 @@ test("production runtime accepts explicit strong secrets", () => {
   assert.equal(config.cookieMaxAgeSeconds, 28800);
 });
 
+test("runtime treats APP_ENV production as production", () => {
+  const previousEnv = {
+    APP_ENV: process.env.APP_ENV,
+    FILE_STORAGE_DIR: process.env.FILE_STORAGE_DIR,
+    JWT_SECRET: process.env.JWT_SECRET,
+    NODE_ENV: process.env.NODE_ENV,
+    WEB_ORIGIN: process.env.WEB_ORIGIN
+  };
+
+  process.env.APP_ENV = "production";
+  process.env.FILE_STORAGE_DIR = productionFileStorageDir;
+  process.env.JWT_SECRET = strongSecret;
+  process.env.NODE_ENV = "development";
+  process.env.WEB_ORIGIN = productionWebOrigin;
+
+  try {
+    const config = loadEnv();
+    assert.equal(config.isProduction, true);
+    assert.equal(config.fileStorageDir, productionFileStorageDir);
+  } finally {
+    Object.entries(previousEnv).forEach(([key, value]) => {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    });
+  }
+});
+
 test("production runtime accepts S3 object storage without local volume signoff", () => {
   const config = loadEnv({
     isProduction: true,

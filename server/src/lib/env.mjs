@@ -73,6 +73,10 @@ function boolFromEnv(name, fallback = false) {
   return ["1", "true", "yes", "on"].includes(value);
 }
 
+function isProductionEnv() {
+  return process.env.NODE_ENV === "production" || process.env.APP_ENV === "production";
+}
+
 function isTemplateHostname(hostname = "") {
   const normalized = String(hostname || "").trim().toLowerCase();
   return normalized === "example.com" || normalized.endsWith(".example.com");
@@ -258,7 +262,7 @@ export function loadEnv(overrides = {}) {
     webOrigin: originsFromEnv(),
     trustProxy: boolFromEnv("TRUST_PROXY", false),
     runDbSeed: boolFromEnv("RUN_DB_SEED", false),
-    isProduction: process.env.NODE_ENV === "production",
+    isProduction: isProductionEnv(),
     ...overrides
   };
   if (config.apiBodyLimitBytes === null || config.apiBodyLimitBytes === undefined) {
