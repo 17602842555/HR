@@ -55,6 +55,14 @@ jobs:
           npm run validate:production-env -- .env.production --json \
             | tee reports/commercial-evidence/signoff-validation/production-env.json
 
+      - name: Validate Cloudflare backend
+        if: always()
+        run: |
+          set -euo pipefail
+          umask 077
+          npm run validate:cloudflare-backend -- --env .env.production --json \
+            | tee reports/commercial-evidence/signoff-validation/cloudflare-backend.json
+
       - name: Validate secrets signoff
         if: always()
         run: |

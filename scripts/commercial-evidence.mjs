@@ -313,6 +313,7 @@ export function collectArtifacts(rootDir = process.cwd()) {
     "reports/commercial-evidence/latest-owner-handoff.md",
     "reports/commercial-evidence/signoff-validation/release-inputs.json",
     "reports/commercial-evidence/signoff-validation/production-env.json",
+    "reports/commercial-evidence/signoff-validation/cloudflare-backend.json",
     "reports/commercial-evidence/signoff-validation/secrets-signoff.json",
     "reports/commercial-evidence/signoff-validation/hr-signoff.json",
     "reports/commercial-evidence/signoff-validation/storage-signoff.json",

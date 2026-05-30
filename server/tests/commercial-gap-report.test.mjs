@@ -133,11 +133,12 @@ test("commercial gap report groups release blockers by owner with commands", () 
   assert.equal(report.targetProfile.database.target, "local-postgresql");
   assert.equal(report.targetProfile.database.source, "local-postgres-env");
   assert.equal("host" in report.targetProfile.database, false);
-  assert(report.owners.some((owner) => (
-    owner.owner === "Security lead"
-    && owner.validationCommands.includes("npm run validate:production-env -- .env.production --json")
-    && owner.validationCommands.some((command) => command.includes("validate:secrets-signoff"))
-  )));
+	  assert(report.owners.some((owner) => (
+	    owner.owner === "Security lead"
+	    && owner.validationCommands.includes("npm run validate:production-env -- .env.production --json")
+	    && owner.validationCommands.includes("npm run validate:cloudflare-backend -- --env .env.production --json")
+	    && owner.validationCommands.some((command) => command.includes("validate:secrets-signoff"))
+	  )));
   assert(report.gaps.find((gap) => gap.id === "GAP-004").validationCommands.includes("npm run restore:files -- <file-storage-backup.tar.gz> --yes"));
 });
 

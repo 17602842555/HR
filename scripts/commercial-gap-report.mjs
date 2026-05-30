@@ -38,10 +38,12 @@ export const gapActionCatalog = Object.freeze({
   "GAP-003": Object.freeze({
     primaryActions: Object.freeze([
       "Create a real .env.production through the approved secret store.",
+      "Provision the Cloudflare Tunnel backend token and production API origin through the same secret-managed release path.",
       "Replace example secrets/origins and collect Security plus Deployment approvals."
     ]),
     validationCommands: Object.freeze([
       "npm run validate:production-env -- .env.production --json",
+      "npm run validate:cloudflare-backend -- --env .env.production --json",
       "npm run validate:secrets-signoff -- <signoff.json> --env .env.production --json",
       "npm run doctor:commercial -- --json"
     ])

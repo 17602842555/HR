@@ -518,6 +518,7 @@ test("commercial evidence artifact inventory tracks release automation scripts",
   assert("reports/commercial-evidence/signoff-drafts/latest-manifest.json" in artifacts.files);
   assert("reports/commercial-evidence/signoff-validation/release-inputs.json" in artifacts.files);
   assert("reports/commercial-evidence/signoff-validation/production-env.json" in artifacts.files);
+  assert("reports/commercial-evidence/signoff-validation/cloudflare-backend.json" in artifacts.files);
   assert("reports/commercial-evidence/signoff-validation/secrets-signoff.json" in artifacts.files);
   assert("reports/commercial-evidence/signoff-validation/hr-signoff.json" in artifacts.files);
   assert("reports/commercial-evidence/signoff-validation/storage-signoff.json" in artifacts.files);

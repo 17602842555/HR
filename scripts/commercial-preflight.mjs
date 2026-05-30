@@ -434,17 +434,18 @@ function checkDeploymentArtifacts() {
     "umask 077",
     "npm run prepare:release-inputs -- --json --output reports/commercial-evidence/signoff-validation/release-inputs.json",
     "npm run validate:production-env -- .env.production --json",
+    "npm run validate:cloudflare-backend -- --env .env.production --json",
     "npm run validate:secrets-signoff -- docs/production-secrets-signoff.json --env .env.production --json",
     "npm run validate:hr-signoff -- docs/hr-data-signoff.json --source oa-dashboard.html --json",
     "npm run validate:storage-signoff -- \"${args[@]}\"",
     "commercial-signoff-validation"
   ].forEach((needle) => assertIncludes(signoffWorkflow, needle, ".github/workflows/commercial-signoff.yml"));
   assert(
-    countMatches(signoffWorkflow, /umask 077/g) === 5,
+    countMatches(signoffWorkflow, /umask 077/g) === 6,
     ".github/workflows/commercial-signoff.yml must set private umask before each release-input and validator output"
   );
   assert(
-    countMatches(signoffWorkflow, /set -euo pipefail/g) === 5,
+    countMatches(signoffWorkflow, /set -euo pipefail/g) === 6,
     ".github/workflows/commercial-signoff.yml must fail closed for each release-input and validator step"
   );
   assertNotIncludes(signoffWorkflow, "path: .env.production", ".github/workflows/commercial-signoff.yml");
@@ -1050,6 +1051,7 @@ function checkCommercialEvidenceAutomation() {
     "reports/commercial-evidence/signoff-drafts/latest-manifest.json",
     "reports/commercial-evidence/signoff-validation/release-inputs.json",
     "reports/commercial-evidence/signoff-validation/production-env.json",
+    "reports/commercial-evidence/signoff-validation/cloudflare-backend.json",
     "reports/commercial-evidence/signoff-validation/secrets-signoff.json",
     "reports/commercial-evidence/signoff-validation/hr-signoff.json",
     "reports/commercial-evidence/signoff-validation/storage-signoff.json",
@@ -4412,6 +4414,7 @@ function checkSystemReadinessImplementation() {
     "buildReleaseClosurePlan",
     "artifactSummary.missingReleaseArtifactCount",
     "production-secrets-signoff",
+    "Cloudflare 后端验证输出",
     "summary.releaseCandidateReady",
     "summary.releaseBlockerCount",
     "summary.e2eIncluded",

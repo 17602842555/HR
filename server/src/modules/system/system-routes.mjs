@@ -81,8 +81,8 @@ const closureDefinitions = Object.freeze({
   },
   "GAP-003": {
     category: "生产环境与密钥",
-    relatedCheckIds: ["production-env", "secrets-signoff", "doctor"],
-    nextAction: "提交真实生产环境配置和 Security/Deployment 签署证据，再运行生产环境与密钥校验。"
+    relatedCheckIds: ["production-env", "cloudflare-backend", "secrets-signoff", "doctor"],
+    nextAction: "提交真实生产环境、Cloudflare Tunnel 和 Security/Deployment 签署证据，再运行生产环境、后端隧道与密钥校验。"
   },
   "GAP-004": {
     category: "文件存储与恢复",
@@ -103,6 +103,7 @@ const evidenceArtifactCatalog = Object.freeze([
   { id: "production-env-prep", label: "生产环境准备包", path: "reports/commercial-evidence/production-env-prep/latest-manifest.json", phase: "signoff-prep", releaseRequired: false },
   { id: "signoff-drafts", label: "签署草稿包", path: "reports/commercial-evidence/signoff-drafts/latest-manifest.json", phase: "signoff-prep", releaseRequired: false },
   { id: "production-secrets-signoff", label: "生产密钥正式签署", path: "docs/production-secrets-signoff.json", phase: "release-signoff", releaseRequired: true },
+  { id: "cloudflare-backend-validation", label: "Cloudflare 后端验证输出", path: "reports/commercial-evidence/signoff-validation/cloudflare-backend.json", phase: "release-signoff", releaseRequired: true },
   { id: "hr-data-signoff", label: "HR/Product 正式签署", path: "docs/hr-data-signoff.json", phase: "release-signoff", releaseRequired: true },
   { id: "file-storage-signoff", label: "文件存储正式签署", path: "docs/file-storage-signoff.json", phase: "release-signoff", releaseRequired: true },
   { id: "docker-drill", label: "Docker 恢复演练证据", path: "commercial-evidence/latest-drill-summary.json", phase: "drill", releaseRequired: true },
@@ -114,7 +115,7 @@ const evidenceArtifactCatalog = Object.freeze([
 const releaseArtifactIdsByGap = Object.freeze({
   "GAP-001": ["migration-lock", "openapi-contract", "sbom"],
   "GAP-002": ["docker-drill"],
-  "GAP-003": ["production-secrets-signoff", "signoff-validation"],
+  "GAP-003": ["production-secrets-signoff", "cloudflare-backend-validation", "signoff-validation"],
   "GAP-004": ["file-storage-signoff", "docker-drill", "signoff-validation"],
   "GAP-005": ["hr-review-prep", "hr-data-signoff", "signoff-validation"]
 });

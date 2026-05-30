@@ -72,10 +72,12 @@ test("commercial signoff workflow materializes release inputs without uploading 
   assert.match(workflow, /environment: \$\{\{ inputs\.target_environment \}\}/);
   assert.match(workflow, /PRODUCTION_ENV_B64: \$\{\{ secrets\.PRODUCTION_ENV_B64 \}\}/);
   assert.match(workflow, /umask 077/);
-  assert.equal(countMatches(workflow, /umask 077/g), 5);
-  assert.equal(countMatches(workflow, /set -euo pipefail/g), 5);
+  assert.equal(countMatches(workflow, /umask 077/g), 6);
+  assert.equal(countMatches(workflow, /set -euo pipefail/g), 6);
   assert.match(workflow, /npm run prepare:release-inputs -- --json --output reports\/commercial-evidence\/signoff-validation\/release-inputs\.json/);
   assert.match(workflow, /npm run validate:production-env -- \.env\.production --json/);
+  assert.match(workflow, /npm run validate:cloudflare-backend -- --env \.env\.production --json/);
+  assert.match(workflow, /reports\/commercial-evidence\/signoff-validation\/cloudflare-backend\.json/);
   assert.match(workflow, /npm run validate:secrets-signoff -- docs\/production-secrets-signoff\.json --env \.env\.production --json/);
   assert.match(workflow, /npm run validate:hr-signoff -- docs\/hr-data-signoff\.json --source oa-dashboard\.html --json/);
   assert.match(workflow, /npm run validate:storage-signoff -- "\$\{args\[@\]\}"/);

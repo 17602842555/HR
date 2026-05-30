@@ -305,6 +305,7 @@ test("latest commercial evidence readiness summarizes target profile without lea
         productionEvidenceReady: true,
         productionRuntime: true,
         signoffChecks: {
+          cloudflareBackend: true,
           drillEvidence: true,
           hr: true,
           productionEnv: true,
@@ -317,6 +318,7 @@ test("latest commercial evidence readiness summarizes target profile without lea
       },
       checks: [
         { id: "preflight", required: true, exitCode: 0, command: `${root}/scripts/commercial-preflight.mjs` },
+        { id: "cloudflare-backend", required: false, exitCode: 0, command: "npm run validate:cloudflare-backend -- --env .env.production --json" },
         { id: "secrets-signoff", required: false, exitCode: 0, command: "npm run validate:secrets-signoff -- docs/production-secrets-signoff.json" }
       ],
       artifacts: {
@@ -327,6 +329,7 @@ test("latest commercial evidence readiness summarizes target profile without lea
           "reports/commercial-evidence/sbom/latest-spdx.json": { exists: true, sha256: "c".repeat(64) },
           "reports/commercial-evidence/hr-data-review/latest-manifest.json": { exists: true, sha256: "d".repeat(64) },
           "docs/production-secrets-signoff.json": { exists: true, sha256: "e".repeat(64) },
+          "reports/commercial-evidence/signoff-validation/cloudflare-backend.json": { exists: true, sha256: "5".repeat(64) },
           "docs/hr-data-signoff.json": { exists: true, sha256: "f".repeat(64) },
           "docs/file-storage-signoff.json": { exists: true, sha256: "1".repeat(64) },
           "commercial-evidence/latest-drill-summary.json": { exists: true, sha256: "2".repeat(64) },
@@ -359,7 +362,7 @@ test("latest commercial evidence readiness summarizes target profile without lea
     assert.equal(summary.artifactSummary.migrationCount, 1);
     assert.equal(summary.artifactSummary.missingReleaseArtifactCount, 0);
     assert.equal(summary.artifactSummary.items.some((item) => item.label === "Docker 恢复演练证据" && item.present), true);
-    assert.deepEqual(summary.checks.map((check) => check.id), ["preflight", "secrets-signoff"]);
+    assert.deepEqual(summary.checks.map((check) => check.id), ["preflight", "cloudflare-backend", "secrets-signoff"]);
     assert.doesNotMatch(
       JSON.stringify(summary),
       /\/tmp\/|reports\/commercial-evidence|commercial-preflight|production-secrets-signoff|latest-drill-summary|super-secret-password|postgres\.internal|oa_prod|oa\.example\.internal|--secret|[a-f0-9]{64}/
@@ -463,6 +466,7 @@ test("release closure plan maps open gaps to safe owner actions without leaking 
       { id: "drill-evidence", status: "failed" },
       { id: "doctor", status: "failed" },
       { id: "production-env", status: "failed" },
+      { id: "cloudflare-backend", status: "failed" },
       { id: "secrets-signoff", status: "failed" },
       { id: "hr-signoff", status: "failed" },
       { id: "e2e", status: "pass" }
@@ -473,6 +477,7 @@ test("release closure plan maps open gaps to safe owner actions without leaking 
   assert.equal(plan.find((item) => item.id === "GAP-001").releaseBlocking, false);
   assert.equal(plan.find((item) => item.id === "GAP-002").category, "Docker 恢复演练");
   assert.equal(plan.find((item) => item.id === "GAP-002").failedCheckCount, 2);
+  assert.equal(plan.find((item) => item.id === "GAP-003").relatedCheckIds.includes("cloudflare-backend"), true);
   assert.equal(plan.find((item) => item.id === "GAP-003").relatedCheckIds.includes("secrets-signoff"), true);
   assert.equal(plan.find((item) => item.id === "GAP-005").evidenceStatus, "证据未通过");
   assert.doesNotMatch(
@@ -492,6 +497,7 @@ test("owner evidence checklist maps release artifacts to responsible gaps withou
       { id: "drill-evidence", status: "failed" },
       { id: "doctor", status: "failed" },
       { id: "production-env", status: "failed" },
+      { id: "cloudflare-backend", status: "failed" },
       { id: "secrets-signoff", status: "failed" },
       { id: "hr-signoff", status: "failed" }
     ]
@@ -501,6 +507,7 @@ test("owner evidence checklist maps release artifacts to responsible gaps withou
       items: [
         { label: "HR 脱敏审阅包", present: true, releaseRequired: true, status: "已归档" },
         { label: "生产密钥正式签署", present: false, releaseRequired: true, status: "缺失" },
+        { label: "Cloudflare 后端验证输出", present: false, releaseRequired: true, status: "缺失" },
         { label: "HR/Product 正式签署", present: false, releaseRequired: true, status: "缺失" },
         { label: "Docker 恢复演练证据", present: false, releaseRequired: true, status: "缺失" },
         { label: "受保护签署验证输出", present: false, releaseRequired: true, status: "缺失" }
@@ -510,11 +517,15 @@ test("owner evidence checklist maps release artifacts to responsible gaps withou
 
   assert.deepEqual(checklist.map((item) => item.id), ["GAP-002", "GAP-003", "GAP-005"]);
   assert.equal(checklist.find((item) => item.id === "GAP-002").missingArtifactCount, 1);
-  assert.equal(checklist.find((item) => item.id === "GAP-003").missingArtifactCount, 2);
+  assert.equal(checklist.find((item) => item.id === "GAP-003").missingArtifactCount, 3);
   assert.equal(checklist.find((item) => item.id === "GAP-005").presentArtifactCount, 1);
   assert.equal(checklist.find((item) => item.id === "GAP-005").releaseBlocking, true);
   assert.equal(
     checklist.find((item) => item.id === "GAP-003").artifacts.some((artifact) => artifact.label === "生产密钥正式签署" && artifact.status === "缺失"),
+    true
+  );
+  assert.equal(
+    checklist.find((item) => item.id === "GAP-003").artifacts.some((artifact) => artifact.label === "Cloudflare 后端验证输出" && artifact.status === "缺失"),
     true
   );
   assert.doesNotMatch(
