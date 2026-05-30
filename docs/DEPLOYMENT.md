@@ -331,9 +331,10 @@ Required GitHub repository secrets:
 ```bash
 CLOUDFLARE_API_TOKEN=<Cloudflare token with Workers deploy permission>
 CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
+API_ORIGIN=https://<approved-api-origin>
 ```
 
-Required Cloudflare Worker runtime secret or variable:
+The GitHub Actions workflow deploys the Worker and writes `API_ORIGIN` as a Worker secret when all three values are configured. For local deployment, set the same Cloudflare Worker runtime secret manually:
 
 ```bash
 API_ORIGIN=https://<approved-api-origin>

@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_READY: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+      API_ORIGIN_READY: ${{ secrets.API_ORIGIN != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,8 +42,20 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
 
+      - name: Configure API origin secret
+        if: ${{ env.CLOUDFLARE_READY == 'true' && env.API_ORIGIN_READY == 'true' }}
+        run: printf '%s' "$API_ORIGIN" | npx wrangler secret put API_ORIGIN
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          API_ORIGIN: ${{ secrets.API_ORIGIN }}
+
+      - name: Cloudflare API origin not configured
+        if: ${{ env.CLOUDFLARE_READY == 'true' && env.API_ORIGIN_READY != 'true' }}
+        run: echo "Worker deployed, but API_ORIGIN is not configured. /api/* will return 503 until the backend origin secret is set."
+
       - name: Cloudflare secrets not configured
         if: ${{ env.CLOUDFLARE_READY != 'true' }}
         run: |
           echo "Cloudflare deploy skipped."
-          echo "Configure CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets, then rerun this workflow."
+          echo "Configure CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, and API_ORIGIN repository secrets, then rerun this workflow."
