@@ -38,10 +38,25 @@ test("production env prep writes a no-plaintext local storage package", async ()
     assert.match(envTemplate, /^BACKUP_DIR=$/m);
     assert.match(envTemplate, /^FILE_STORAGE_DIR=$/m);
     assert.match(envTemplate, /^FILE_BACKUP_DIR=$/m);
+    assert.match(envTemplate, /^CLOUDFLARE_ACCOUNT_ID=$/m);
+    assert.match(envTemplate, /^CLOUDFLARE_API_TOKEN=$/m);
+    assert.match(envTemplate, /^CLOUDFLARE_TUNNEL_TOKEN=$/m);
+    assert.match(envTemplate, /^API_ORIGIN=$/m);
+    assert.match(envTemplate, /^CLOUDFLARE_DEPLOYMENT_URL=$/m);
+    assert.match(envTemplate, /^CLOUDFLARE_BACKEND_WEB_ORIGIN=$/m);
 
     assert.equal(checklist.noPlaintextSecretValues, true);
-    assert.deepEqual(checklist.managedSecrets.map((item) => item.key), ["POSTGRES_PASSWORD", "JWT_SECRET"]);
+    assert.deepEqual(checklist.managedSecrets.map((item) => item.key), [
+      "POSTGRES_PASSWORD",
+      "JWT_SECRET",
+      "CLOUDFLARE_API_TOKEN",
+      "CLOUDFLARE_TUNNEL_TOKEN"
+    ]);
     assert.equal(checklist.conditionalSecrets[0].key, "DEFAULT_ADMIN_PASSWORD");
+    assert.equal(checklist.cloudflareRepositorySecrets.map((item) => item.key).includes("API_ORIGIN"), true);
+    assert.equal(checklist.cloudflareRepositorySecrets.find((item) => item.key === "CLOUDFLARE_API_TOKEN").neverPrintValue, true);
+    assert.equal(checklist.nextCommands.some((command) => command.includes("validate:cloudflare-backend")), true);
+    assert.equal(checklist.nextCommands.some((command) => command.includes("configure:cloudflare")), true);
     assert.equal(checklist.nextCommands.some((command) => command.includes("validate:secrets-signoff")), true);
 
     assert.equal(manifest.kind, "production-env-preparation");
@@ -49,10 +64,14 @@ test("production env prep writes a no-plaintext local storage package", async ()
     assert.equal(manifest.storageDriver, "local");
     assert.equal(manifest.templateValidationSummary.ok, false);
     assert.equal(manifest.templateValidationSummary.expectedToFailUntilFilled, true);
+    assert.equal(manifest.cloudflareBackendValidationSummary.ok, false);
+    assert.equal(manifest.cloudflareBackendValidationSummary.expectedToFailUntilFilled, true);
     assert.equal(manifest.requiredEnvKeys.includes("POSTGRES_PASSWORD"), true);
     assert.equal(manifest.requiredEnvKeys.includes("BACKUP_DIR"), true);
     assert.equal(manifest.files.envTemplate.endsWith(".env.production.template"), true);
     assert.match(readme, /not release evidence/i);
+    assert.match(readme, /validate:cloudflare-backend/);
+    assert.match(readme, /configure:cloudflare/);
 
     const validation = validateProductionEnv(parseProductionEnvText(envTemplate));
     assert.equal(validation.ok, false);

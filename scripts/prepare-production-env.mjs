@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { requiredManagedSecrets } from "./validate-secrets-signoff.mjs";
 import { requiredProductionEnvKeys, validateProductionEnv } from "./validate-production-env.mjs";
+import { validateCloudflareBackendEnv } from "./validate-cloudflare-backend.mjs";
 
 const defaultOutputDir = "reports/commercial-evidence/production-env-prep";
 const supportedStorageDrivers = new Set(["local", "s3"]);
@@ -71,7 +72,13 @@ function productionEnvTemplate(storageDriver) {
     TRUST_PROXY: "0",
     WEB_PORT: "8080",
     VITE_REQUIRE_API: "1",
-    VITE_DEMO_FALLBACK: "0"
+    VITE_DEMO_FALLBACK: "0",
+    CLOUDFLARE_ACCOUNT_ID: "",
+    CLOUDFLARE_API_TOKEN: "",
+    CLOUDFLARE_TUNNEL_TOKEN: "",
+    API_ORIGIN: "",
+    CLOUDFLARE_DEPLOYMENT_URL: "",
+    CLOUDFLARE_BACKEND_WEB_ORIGIN: ""
   };
 
   return [
@@ -128,6 +135,14 @@ function productionEnvTemplate(storageDriver) {
     renderEnvLine("WEB_PORT", values.WEB_PORT),
     renderEnvLine("VITE_REQUIRE_API", values.VITE_REQUIRE_API),
     renderEnvLine("VITE_DEMO_FALLBACK", values.VITE_DEMO_FALLBACK),
+    "",
+    "# Cloudflare deployment. Keep token values in the managed secret store and GitHub repository secrets.",
+    renderEnvLine("CLOUDFLARE_ACCOUNT_ID", values.CLOUDFLARE_ACCOUNT_ID),
+    renderEnvLine("CLOUDFLARE_API_TOKEN", values.CLOUDFLARE_API_TOKEN),
+    renderEnvLine("CLOUDFLARE_TUNNEL_TOKEN", values.CLOUDFLARE_TUNNEL_TOKEN),
+    renderEnvLine("API_ORIGIN", values.API_ORIGIN),
+    renderEnvLine("CLOUDFLARE_DEPLOYMENT_URL", values.CLOUDFLARE_DEPLOYMENT_URL),
+    renderEnvLine("CLOUDFLARE_BACKEND_WEB_ORIGIN", values.CLOUDFLARE_BACKEND_WEB_ORIGIN),
     ""
   ].join("\n");
 }
@@ -135,7 +150,17 @@ function productionEnvTemplate(storageDriver) {
 function secretChecklist(storageDriver, generatedAt) {
   const managedSecrets = [
     ...requiredManagedSecrets,
+    "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_TUNNEL_TOKEN",
     ...(storageDriver === "s3" ? ["OBJECT_STORAGE_ACCESS_KEY_ID", "OBJECT_STORAGE_SECRET_ACCESS_KEY"] : [])
+  ];
+  const cloudflareRepositorySecrets = [
+    "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_ACCOUNT_ID",
+    "API_ORIGIN",
+    "CLOUDFLARE_DEPLOYMENT_URL",
+    "CLOUDFLARE_TUNNEL_TOKEN",
+    "CLOUDFLARE_BACKEND_WEB_ORIGIN"
   ];
   return {
     schemaVersion: 1,
@@ -158,6 +183,12 @@ function secretChecklist(storageDriver, generatedAt) {
         neverCommit: true
       }
     ],
+    cloudflareRepositorySecrets: cloudflareRepositorySecrets.map((key) => ({
+      key,
+      requiredForCloudflareDeploy: true,
+      writeWith: "npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --apply --json",
+      neverPrintValue: key.includes("TOKEN")
+    })),
     originControls: {
       key: "WEB_ORIGIN",
       requiresHttps: true,
@@ -167,6 +198,8 @@ function secretChecklist(storageDriver, generatedAt) {
     },
     nextCommands: [
       "npm run validate:production-env -- .env.production --json",
+      "npm run validate:cloudflare-backend -- --env .env.production --json",
+      "npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --json",
       "npm run signoff:drafts -- --env .env.production --json",
       "npm run validate:secrets-signoff -- <production-secrets-signoff.json> --env .env.production --json"
     ]
@@ -187,6 +220,8 @@ function readmeText({ generatedAt, storageDriver, targetEnvPath }) {
     "",
     "```bash",
     "npm run validate:production-env -- .env.production --json",
+    "npm run validate:cloudflare-backend -- --env .env.production --json",
+    "npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --json",
     "npm run signoff:drafts -- --env .env.production --json",
     "npm run validate:secrets-signoff -- <production-secrets-signoff.json> --env .env.production --json",
     "```",
@@ -196,7 +231,7 @@ function readmeText({ generatedAt, storageDriver, targetEnvPath }) {
   ].join("\n");
 }
 
-function buildManifest({ files, generatedAt, outputDir, rootDir, storageDriver, targetEnvPath, templateValidation }) {
+function buildManifest({ cloudflareBackendValidation, files, generatedAt, outputDir, rootDir, storageDriver, targetEnvPath, templateValidation }) {
   return {
     schemaVersion: 1,
     draft: true,
@@ -213,10 +248,18 @@ function buildManifest({ files, generatedAt, outputDir, rootDir, storageDriver, 
       errorCount: templateValidation.errors.length,
       warnings: templateValidation.warnings
     },
+    cloudflareBackendValidationSummary: {
+      ok: cloudflareBackendValidation.ok,
+      expectedToFailUntilFilled: true,
+      errorCount: cloudflareBackendValidation.errors.length,
+      warnings: cloudflareBackendValidation.warnings
+    },
     files: Object.fromEntries(Object.entries(files).map(([key, filePath]) => [key, relative(rootDir, filePath)])),
     releaseUse: "Preparation package only. It is not release evidence until a real .env.production and reviewed signoff files pass validators.",
     nextCommands: [
       "npm run validate:production-env -- .env.production --json",
+      "npm run validate:cloudflare-backend -- --env .env.production --json",
+      "npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --json",
       "npm run validate:secrets-signoff -- <production-secrets-signoff.json> --env .env.production --json",
       "npm run evidence:commercial -- --full --strict-readiness"
     ]
@@ -250,7 +293,9 @@ export function prepareProductionEnv(options = {}) {
       return [line.slice(0, index), line.slice(index + 1)];
     }));
   const templateValidation = validateProductionEnv(templateEnv);
+  const cloudflareBackendValidation = validateCloudflareBackendEnv(templateEnv);
   const manifest = buildManifest({
+    cloudflareBackendValidation,
     files,
     generatedAt,
     outputDir: runDir,
