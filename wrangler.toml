@@ -3,6 +3,9 @@ main = "cloudflare/worker.js"
 compatibility_date = "2026-05-30"
 compatibility_flags = ["nodejs_compat"]
 
+[secrets]
+required = [ "API_ORIGIN" ]
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"

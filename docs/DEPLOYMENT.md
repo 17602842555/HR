@@ -324,7 +324,7 @@ Production frontend builds should set `VITE_REQUIRE_API=1` and keep `VITE_DEMO_F
 
 ## Cloudflare Worker Deployment
 
-The repository includes `wrangler.toml`, `cloudflare/worker.js`, and `.github/workflows/cloudflare-deploy.yml` so the frontend can be pushed to `17602842555/HR.git` and deployed as Cloudflare Worker static assets. The Worker serves the Vite `dist/` SPA and proxies `/api/*` to the configured backend origin through `API_ORIGIN`, while `/api/edge/health` verifies the edge gateway itself. The Worker also validates `API_ORIGIN` at runtime and fails closed for missing values, non-HTTPS origins, local/private addresses, or same-origin proxy loops, so a manual Secret mistake cannot silently proxy production traffic to an unsafe backend.
+The repository includes `wrangler.toml`, `cloudflare/worker.js`, and `.github/workflows/cloudflare-deploy.yml` so the frontend can be pushed to `17602842555/HR.git` and deployed as Cloudflare Worker static assets. The Worker serves the Vite `dist/` SPA and proxies `/api/*` to the configured backend origin through `API_ORIGIN`, while `/api/edge/health` verifies the edge gateway itself. `wrangler.toml` declares `API_ORIGIN` under `[secrets].required`, so Wrangler deploys fail before publication if the Worker secret is not configured. The Worker also validates `API_ORIGIN` at runtime and fails closed for missing values, non-HTTPS origins, local/private addresses, or same-origin proxy loops, so a manual Secret mistake cannot silently proxy production traffic to an unsafe backend.
 
 Current Cloudflare setup created on 2026-05-30:
 
@@ -372,7 +372,7 @@ npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --ap
 
 `configure:cloudflare` validates the backend tunnel origin, frontend deployment origin, tunnel token, Cloudflare account id, and deploy token before it writes anything. When `--apply` is used it calls `gh secret set` with each value over stdin, so token material is not placed in shell arguments or command logs.
 
-The GitHub Actions workflow uses Node 24-native GitHub and Cloudflare actions, deploys the Worker, writes `API_ORIGIN` as a Worker secret when all required Cloudflare values are configured, validates the backend Tunnel/server environment with a temporary private env file when `CLOUDFLARE_TUNNEL_TOKEN` is present, and runs `npm run smoke:cloudflare` against `CLOUDFLARE_DEPLOYMENT_URL` when that URL is present. Push-triggered runs remain build-only when Cloudflare secrets are missing, but manual `workflow_dispatch` runs default to `require_deploy=true` and fail if `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `API_ORIGIN`, `CLOUDFLARE_DEPLOYMENT_URL`, or `CLOUDFLARE_TUNNEL_TOKEN` are not configured. Use `require_deploy=false` only for an intentional build-only dry run. The smoke check verifies `/api/edge/health`, backend `/api/health`, and the backend OpenAPI contract through the Cloudflare gateway. For local deployment, set the same Cloudflare Worker runtime secret manually:
+The GitHub Actions workflow uses Node 24-native GitHub and Cloudflare actions, writes `API_ORIGIN` into a temporary private `.cloudflare-worker-secrets.env` file, deploys the Worker with `wrangler deploy --secrets-file .cloudflare-worker-secrets.env`, validates the backend Tunnel/server environment with a temporary private env file when `CLOUDFLARE_TUNNEL_TOKEN` is present, removes the temporary Worker secrets file, and runs `npm run smoke:cloudflare` against `CLOUDFLARE_DEPLOYMENT_URL` when that URL is present. Push-triggered runs remain build-only when Cloudflare secrets are missing, but manual `workflow_dispatch` runs default to `require_deploy=true` and fail if `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `API_ORIGIN`, `CLOUDFLARE_DEPLOYMENT_URL`, or `CLOUDFLARE_TUNNEL_TOKEN` are not configured. Use `require_deploy=false` only for an intentional build-only dry run. The smoke check verifies `/api/edge/health`, backend `/api/health`, and the backend OpenAPI contract through the Cloudflare gateway. For local deployment, use the same required Cloudflare Worker runtime secret:
 
 ```bash
 API_ORIGIN=https://<approved-api-origin>
@@ -382,8 +382,10 @@ Local deployment commands:
 
 ```bash
 npm run build
-npx wrangler secret put API_ORIGIN
-npm run cf:deploy
+umask 077
+printf 'API_ORIGIN="%s"\n' "$API_ORIGIN" > .cloudflare-worker-secrets.env
+npx wrangler deploy --secrets-file .cloudflare-worker-secrets.env
+rm -f .cloudflare-worker-secrets.env
 npm run smoke:cloudflare -- --url https://<worker-or-custom-domain> --json
 ```
 
@@ -422,10 +424,13 @@ Start the backend server with the tunnel sidecar:
 docker compose -f docker-compose.prod.yml -f docker-compose.cloudflare.yml --env-file .env.production up -d --build postgres api cloudflared
 ```
 
-After the tunnel reports healthy, set the Worker secret and smoke the public gateway:
+After the tunnel reports healthy, deploy or redeploy the Worker with the required API-origin secret and smoke the public gateway:
 
 ```bash
-printf '%s' "$API_ORIGIN" | npx wrangler secret put API_ORIGIN
+umask 077
+printf 'API_ORIGIN="%s"\n' "$API_ORIGIN" > .cloudflare-worker-secrets.env
+npx wrangler deploy --secrets-file .cloudflare-worker-secrets.env
+rm -f .cloudflare-worker-secrets.env
 npm run smoke:cloudflare -- --url "$CLOUDFLARE_DEPLOYMENT_URL" --json
 ```
 

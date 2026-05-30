@@ -508,11 +508,19 @@ function checkDeploymentArtifacts() {
     "Require Cloudflare deployment configuration",
     "Cloudflare deployment was explicitly required",
     "Use require_deploy=false only for a build-only workflow dry run",
+    "Prepare Cloudflare Worker secrets file",
     "cloudflare/wrangler-action@v4",
-    "wrangler secret put API_ORIGIN",
+    "deploy --secrets-file .cloudflare-worker-secrets.env",
+    "wrangler.toml requires the API_ORIGIN Worker secret",
     "npm run validate:cloudflare-backend -- --env \"$backend_env\" --json",
     "npm run smoke:cloudflare -- --url \"$CLOUDFLARE_DEPLOYMENT_URL\" --json"
   ].forEach((needle) => assertIncludes(cloudflareDeployWorkflow, needle, ".github/workflows/cloudflare-deploy.yml"));
+
+  const wranglerConfig = readText("wrangler.toml");
+  [
+    "[secrets]",
+    "required = [ \"API_ORIGIN\" ]"
+  ].forEach((needle) => assertIncludes(wranglerConfig, needle, "wrangler.toml"));
 
   const materializeReleaseInputs = readText("scripts/materialize-release-inputs.mjs");
   [

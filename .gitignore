@@ -14,5 +14,6 @@ reports/
 .env.*
 !.env.example
 !.env.production.example
+.cloudflare-worker-secrets.env
 .DS_Store
 *.log
