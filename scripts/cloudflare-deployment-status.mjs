@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { runCloudflareSmoke } from "./cloudflare-smoke.mjs";
 
+const cloudflareTunnelApiBaseUrl = "https://api.cloudflare.com/client/v4/accounts";
+
 export const requiredCloudflareGithubSecrets = Object.freeze([
   "CLOUDFLARE_API_TOKEN",
   "CLOUDFLARE_ACCOUNT_ID",
@@ -37,7 +39,9 @@ function sanitizeMessage(value = "") {
 
 export function parseCloudflareDeploymentStatusArgs(argv = process.argv.slice(2), env = process.env) {
   const options = {
+    accountId: env.CLOUDFLARE_ACCOUNT_ID || "",
     allowMissingApiOrigin: boolFlag(env.CLOUDFLARE_STATUS_ALLOW_MISSING_API_ORIGIN),
+    apiToken: env.CLOUDFLARE_API_TOKEN || "",
     json: boolFlag(env.CLOUDFLARE_STATUS_JSON),
     repo: env.GITHUB_REPOSITORY || "",
     retries: parsePositiveInt(env.CLOUDFLARE_SMOKE_RETRIES, 2),
@@ -53,6 +57,9 @@ export function parseCloudflareDeploymentStatusArgs(argv = process.argv.slice(2)
       options.json = true;
     } else if (arg === "--allow-missing-api-origin") {
       options.allowMissingApiOrigin = true;
+    } else if (arg === "--account-id") {
+      options.accountId = argv[index + 1] || "";
+      index += 1;
     } else if (arg === "--repo") {
       options.repo = argv[index + 1] || "";
       index += 1;
@@ -157,6 +164,116 @@ export function readCloudflareTunnelInfo({ runner = spawnSync, tunnel } = {}) {
   };
 }
 
+function readCloudflareApiErrors(payload, fallback) {
+  const errors = Array.isArray(payload?.errors) ? payload.errors : [];
+  const messages = errors
+    .map((error) => error?.message)
+    .filter(Boolean)
+    .map((message) => sanitizeMessage(message));
+  return messages.length ? messages.join("; ") : fallback;
+}
+
+function normalizeCloudflareApiTunnel(result = {}) {
+  return {
+    configSource: result.config_src || "",
+    connsActiveAt: result.conns_active_at || "",
+    connsInactiveAt: result.conns_inactive_at || "",
+    createdAt: result.created_at || "",
+    deletedAt: result.deleted_at || "",
+    id: result.id || "",
+    name: result.name || "",
+    status: result.status || "",
+    type: result.tun_type || "cfd_tunnel"
+  };
+}
+
+export async function readCloudflareTunnelInfoFromApi({
+  accountId,
+  apiToken,
+  fetchImpl = globalThis.fetch,
+  timeoutMs = 8000,
+  tunnel
+} = {}) {
+  const accountRef = String(accountId || "").trim();
+  const tokenValue = String(apiToken || "").trim();
+  const tunnelRef = String(tunnel || "").trim();
+  if (!accountRef) {
+    return {
+      checked: false,
+      error: "CLOUDFLARE_ACCOUNT_ID is required for Cloudflare API tunnel inspection.",
+      source: "cloudflare-api",
+      tunnel: null
+    };
+  }
+  if (!tokenValue) {
+    return {
+      checked: false,
+      error: "CLOUDFLARE_API_TOKEN is required for Cloudflare API tunnel inspection.",
+      source: "cloudflare-api",
+      tunnel: null
+    };
+  }
+  if (!tunnelRef) {
+    return {
+      checked: false,
+      error: "Cloudflare tunnel UUID is required for Cloudflare API tunnel inspection.",
+      source: "cloudflare-api",
+      tunnel: null
+    };
+  }
+  if (typeof fetchImpl !== "function") {
+    return {
+      checked: false,
+      error: "Fetch API is not available for Cloudflare API tunnel inspection.",
+      source: "cloudflare-api",
+      tunnel: null
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const endpoint = `${cloudflareTunnelApiBaseUrl}/${encodeURIComponent(accountRef)}/cfd_tunnel/${encodeURIComponent(tunnelRef)}`;
+  try {
+    const response = await fetchImpl(endpoint, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${tokenValue}`
+      },
+      method: "GET",
+      signal: controller.signal
+    });
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    if (!response.ok || payload?.success !== true) {
+      return {
+        checked: false,
+        error: sanitizeMessage(readCloudflareApiErrors(payload, `Cloudflare tunnel API returned HTTP ${response.status}.`)),
+        source: "cloudflare-api",
+        tunnel: null
+      };
+    }
+    return {
+      checked: true,
+      error: "",
+      source: "cloudflare-api",
+      tunnel: normalizeCloudflareApiTunnel(payload?.result || {})
+    };
+  } catch (error) {
+    return {
+      checked: false,
+      error: sanitizeMessage(error?.message || "Cloudflare tunnel API request failed."),
+      source: "cloudflare-api",
+      tunnel: null
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function buildCloudflareDeploymentStatus({
   requiredSecrets = requiredCloudflareGithubSecrets,
   secretNames = null,
@@ -199,15 +316,20 @@ export function buildCloudflareDeploymentStatus({
     }));
   } else {
     const tunnelStatus = String(tunnelRead.tunnel?.status || "").toLowerCase();
+    const tunnelReady = ["active", "healthy"].includes(tunnelStatus);
     checks.push(status(
-      tunnelStatus === "active" ? "pass" : "fail",
+      tunnelReady ? "pass" : "fail",
       "tunnel-status",
-      tunnelStatus === "active"
+      tunnelReady
         ? "Cloudflare Tunnel is active."
         : "Cloudflare Tunnel is not active.",
       {
+        configSource: tunnelRead.tunnel?.configSource || "",
+        connsActiveAt: tunnelRead.tunnel?.connsActiveAt || "",
+        connsInactiveAt: tunnelRead.tunnel?.connsInactiveAt || "",
         id: tunnelRead.tunnel?.id || "",
         name: tunnelRead.tunnel?.name || "",
+        source: tunnelRead.source || "wrangler",
         status: tunnelRead.tunnel?.status || ""
       }
     ));
@@ -247,7 +369,9 @@ export function buildCloudflareDeploymentStatus({
 }
 
 export async function runCloudflareDeploymentStatus({
+  accountId,
   allowMissingApiOrigin = false,
+  apiToken,
   fetchImpl = globalThis.fetch,
   repo,
   retries,
@@ -258,7 +382,28 @@ export async function runCloudflareDeploymentStatus({
   url
 } = {}) {
   const secretRead = readGithubSecretNames({ repo, runner });
-  const tunnelRead = readCloudflareTunnelInfo({ runner, tunnel });
+  let tunnelRead = null;
+  if (String(accountId || "").trim() || String(apiToken || "").trim()) {
+    tunnelRead = await readCloudflareTunnelInfoFromApi({
+      accountId,
+      apiToken,
+      fetchImpl,
+      timeoutMs,
+      tunnel
+    });
+  } else {
+    tunnelRead = readCloudflareTunnelInfo({ runner, tunnel });
+    if (!tunnelRead.checked) {
+      const apiHint = "Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN to inspect the tunnel through the Cloudflare API without relying on Wrangler login state.";
+      tunnelRead = {
+        ...tunnelRead,
+        error: sanitizeMessage(`${tunnelRead.error || "Wrangler tunnel inspection failed."} ${apiHint}`),
+        source: "wrangler"
+      };
+    } else {
+      tunnelRead = { ...tunnelRead, source: "wrangler" };
+    }
+  }
   let smokeReport = null;
   if (String(url || "").trim()) {
     smokeReport = await runCloudflareSmoke({

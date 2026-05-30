@@ -113,6 +113,16 @@ npm run prepare:production-env -- --storage-driver s3 --json
 
 This writes a preparation package under `reports/commercial-evidence/production-env-prep/`, including `.env.production.template`, `secret-store-checklist.json`, `README.md`, and `manifest.json`. The template includes the durable backup fields `BACKUP_DIR` and, for local file storage, `FILE_BACKUP_DIR`. It also includes the Cloudflare backend handoff fields `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_TUNNEL_TOKEN`, `API_ORIGIN`, `CLOUDFLARE_DEPLOYMENT_URL`, and `CLOUDFLARE_BACKEND_WEB_ORIGIN`, so the same filled env file can drive `npm run validate:cloudflare-backend -- --env .env.production --json` and `npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --verify-token --json`. The optional `--verify-token` check calls Cloudflare's `/user/tokens/verify` endpoint and records only the active/failed status, never the token value or token id. No plaintext secret values are generated. The package directory is written with private `0700` permissions and package files with `0600` permissions. This is a preparation package only: copy the field list into the approved secret manager, fill the real `.env.production` through deployment tooling, run `npm run validate:production-env -- .env.production --json` and `npm run validate:cloudflare-backend -- --env .env.production --json`, then generate and validate reviewed signoffs. Treat the generated package as a checklist, not release evidence.
 
+Cloudflare deployment status can inspect the backend Tunnel through Cloudflare's API when the account id and token are provided through the environment:
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=<account-id> \
+CLOUDFLARE_API_TOKEN=<api-token-with-cloudflare-tunnel-read> \
+npm run doctor:cloudflare -- --repo 17602842555/HR --tunnel <tunnel-uuid> --account-id <account-id> --url <worker-url> --json
+```
+
+Do not pass `CLOUDFLARE_API_TOKEN` as a CLI argument. The doctor redacts Cloudflare API failures and only reports tunnel id/name/status/config source plus smoke-test blockers.
+
 Production secrets signoff validation:
 
 ```bash

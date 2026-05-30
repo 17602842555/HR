@@ -588,9 +588,13 @@ function checkDeploymentArtifacts() {
     "parseCloudflareDeploymentStatusArgs",
     "buildCloudflareDeploymentStatus",
     "runCloudflareDeploymentStatus",
+    "readCloudflareTunnelInfoFromApi",
     "requiredCloudflareGithubSecrets",
     "stripAnsi",
     "runCloudflareSmoke",
+    "https://api.cloudflare.com/client/v4/accounts",
+    "--account-id",
+    "CLOUDFLARE_ACCOUNT_ID",
     "github-secrets",
     "tunnel-status",
     "cloudflare-smoke",
@@ -605,7 +609,10 @@ function checkDeploymentArtifacts() {
     "cloudflare deployment status reports current partial backend configuration blockers",
     "cloudflare deployment status reads GitHub secret names without values",
     "cloudflare deployment status sanitizes CLI errors for JSON evidence",
-    "cloudflare deployment status parses wrangler tunnel info output"
+    "cloudflare deployment status parses wrangler tunnel info output",
+    "cloudflare deployment status reads tunnel status through Cloudflare API without leaking token",
+    "cloudflare deployment status API tunnel read fails closed and sanitizes token errors",
+    "cloudflare deployment status uses API inspection when account id is provided but token is missing"
   ].forEach((needle) => assertIncludes(cloudflareDeploymentStatusTests, needle, "server/tests/cloudflare-deployment-status.test.mjs"));
 
   const cloudflareWorker = readText("cloudflare/worker.js");
