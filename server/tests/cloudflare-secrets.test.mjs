@@ -8,7 +8,8 @@ import {
   buildCloudflareSecretPlan,
   loadCloudflareSecretEnv,
   parseCloudflareSecretArgs,
-  repoFromGitRemote
+  repoFromGitRemote,
+  verifyCloudflareApiToken
 } from "../../scripts/configure-cloudflare-secrets.mjs";
 
 const validEnv = Object.freeze({
@@ -20,12 +21,13 @@ const validEnv = Object.freeze({
   TRUST_PROXY: "1"
 });
 
-test("cloudflare secret parser supports env repo apply and json flags", () => {
-  assert.deepEqual(parseCloudflareSecretArgs(["--env", ".env.production", "--repo", "17602842555/HR", "--apply", "--json"]), {
+test("cloudflare secret parser supports env repo apply json and token verification flags", () => {
+  assert.deepEqual(parseCloudflareSecretArgs(["--env", ".env.production", "--repo", "17602842555/HR", "--apply", "--verify-token", "--json"]), {
     apply: true,
     envPath: ".env.production",
     json: true,
-    repo: "17602842555/HR"
+    repo: "17602842555/HR",
+    verifyToken: true
   });
   assert.throws(() => parseCloudflareSecretArgs(["--bad"]), /Unknown cloudflare secret configuration argument/);
 });
@@ -125,6 +127,69 @@ test("cloudflare secret apply writes GitHub secrets through stdin", () => {
   assert.equal(calls.some((call) => call.input === validEnv.CLOUDFLARE_API_TOKEN), true);
   assert.equal(calls.some((call) => call.args.includes(validEnv.CLOUDFLARE_API_TOKEN)), false);
   assert.equal(calls.some((call) => call.args.includes(validEnv.CLOUDFLARE_TUNNEL_TOKEN)), false);
+});
+
+test("cloudflare api token verification calls official endpoint without leaking token", async () => {
+  const calls = [];
+  const result = await verifyCloudflareApiToken({
+    token: validEnv.CLOUDFLARE_API_TOKEN,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, authorization: options.headers.Authorization });
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            success: true,
+            errors: [],
+            messages: [{ code: 10000, message: "This API Token is valid and active" }],
+            result: {
+              id: "ed17574386854bf78a67040be0a770b0",
+              status: "active"
+            }
+          };
+        }
+      };
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.checked, true);
+  assert.equal(result.status, "active");
+  assert.equal(result.tokenIdPresent, true);
+  assert.equal(calls[0].url, "https://api.cloudflare.com/client/v4/user/tokens/verify");
+  assert.equal(calls[0].authorization, `Bearer ${validEnv.CLOUDFLARE_API_TOKEN}`);
+  assert.equal(JSON.stringify(result).includes(validEnv.CLOUDFLARE_API_TOKEN), false);
+  assert.equal(JSON.stringify(result).includes("ed17574386854bf78a67040be0a770b0"), false);
+});
+
+test("cloudflare api token verification fails closed and sanitizes errors", async () => {
+  const result = await verifyCloudflareApiToken({
+    token: validEnv.CLOUDFLARE_API_TOKEN,
+    fetchImpl: async () => ({
+      ok: false,
+      status: 403,
+      async json() {
+        return {
+          success: false,
+          errors: [{ message: `token=${validEnv.CLOUDFLARE_API_TOKEN} is not authorized` }],
+          result: { status: "disabled" }
+        };
+      }
+    })
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.checked, true);
+  assert.equal(result.status, "disabled");
+  assert.equal(JSON.stringify(result).includes(validEnv.CLOUDFLARE_API_TOKEN), false);
+  assert.equal(result.errors.some((error) => error.includes("token=[REDACTED]")), true);
+
+  const missing = await verifyCloudflareApiToken({ token: "placeholder", fetchImpl: async () => {
+    throw new Error("should not call Cloudflare");
+  } });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.checked, false);
 });
 
 test("cloudflare secret apply refuses invalid plans", () => {

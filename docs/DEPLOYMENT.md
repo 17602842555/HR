@@ -111,7 +111,7 @@ npm run prepare:production-env -- --json
 npm run prepare:production-env -- --storage-driver s3 --json
 ```
 
-This writes a preparation package under `reports/commercial-evidence/production-env-prep/`, including `.env.production.template`, `secret-store-checklist.json`, `README.md`, and `manifest.json`. The template includes the durable backup fields `BACKUP_DIR` and, for local file storage, `FILE_BACKUP_DIR`. It also includes the Cloudflare backend handoff fields `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_TUNNEL_TOKEN`, `API_ORIGIN`, `CLOUDFLARE_DEPLOYMENT_URL`, and `CLOUDFLARE_BACKEND_WEB_ORIGIN`, so the same filled env file can drive `npm run validate:cloudflare-backend -- --env .env.production --json` and `npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --json`. No plaintext secret values are generated. The package directory is written with private `0700` permissions and package files with `0600` permissions. This is a preparation package only: copy the field list into the approved secret manager, fill the real `.env.production` through deployment tooling, run `npm run validate:production-env -- .env.production --json` and `npm run validate:cloudflare-backend -- --env .env.production --json`, then generate and validate reviewed signoffs. Treat the generated package as a checklist, not release evidence.
+This writes a preparation package under `reports/commercial-evidence/production-env-prep/`, including `.env.production.template`, `secret-store-checklist.json`, `README.md`, and `manifest.json`. The template includes the durable backup fields `BACKUP_DIR` and, for local file storage, `FILE_BACKUP_DIR`. It also includes the Cloudflare backend handoff fields `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_TUNNEL_TOKEN`, `API_ORIGIN`, `CLOUDFLARE_DEPLOYMENT_URL`, and `CLOUDFLARE_BACKEND_WEB_ORIGIN`, so the same filled env file can drive `npm run validate:cloudflare-backend -- --env .env.production --json` and `npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --verify-token --json`. The optional `--verify-token` check calls Cloudflare's `/user/tokens/verify` endpoint and records only the active/failed status, never the token value or token id. No plaintext secret values are generated. The package directory is written with private `0700` permissions and package files with `0600` permissions. This is a preparation package only: copy the field list into the approved secret manager, fill the real `.env.production` through deployment tooling, run `npm run validate:production-env -- .env.production --json` and `npm run validate:cloudflare-backend -- --env .env.production --json`, then generate and validate reviewed signoffs. Treat the generated package as a checklist, not release evidence.
 
 Production secrets signoff validation:
 
@@ -362,15 +362,15 @@ Prepare and validate those repository secrets without printing secret values:
 # Keep CLOUDFLARE_API_TOKEN outside the checked-in env file when possible.
 CLOUDFLARE_API_TOKEN=<Cloudflare token with Workers deploy permission> \
 CLOUDFLARE_ACCOUNT_ID=<32-character account id> \
-npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --json
+npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --verify-token --json
 
-# Apply only after the dry-run JSON is ok=true.
+# Apply only after the token-verified dry-run JSON is ok=true.
 CLOUDFLARE_API_TOKEN=<Cloudflare token with Workers deploy permission> \
 CLOUDFLARE_ACCOUNT_ID=<32-character account id> \
-npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --apply
+npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --verify-token --apply
 ```
 
-`configure:cloudflare` validates the backend tunnel origin, frontend deployment origin, tunnel token, Cloudflare account id, and deploy token before it writes anything. When `--apply` is used it calls `gh secret set` with each value over stdin, so token material is not placed in shell arguments or command logs.
+`configure:cloudflare` validates the backend tunnel origin, frontend deployment origin, tunnel token, Cloudflare account id, and deploy token before it writes anything. With `--verify-token`, it calls Cloudflare's token verification API and fails closed unless the token status is active. When `--apply` is used it calls `gh secret set` with each value over stdin, so token material is not placed in shell arguments or command logs.
 
 The GitHub Actions workflow uses Node 24-native GitHub and Cloudflare actions, writes `API_ORIGIN` into a temporary private `.cloudflare-worker-secrets.env` file, deploys the Worker with `wrangler deploy --secrets-file .cloudflare-worker-secrets.env`, validates the backend Tunnel/server environment with a temporary private env file when `CLOUDFLARE_TUNNEL_TOKEN` is present, removes the temporary Worker secrets file, and runs `npm run smoke:cloudflare` against `CLOUDFLARE_DEPLOYMENT_URL` when that URL is present. Push-triggered runs remain build-only when Cloudflare secrets are missing, but manual `workflow_dispatch` runs default to `require_deploy=true` and fail if `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `API_ORIGIN`, `CLOUDFLARE_DEPLOYMENT_URL`, or `CLOUDFLARE_TUNNEL_TOKEN` are not configured. Use `require_deploy=false` only for an intentional build-only dry run. The smoke check verifies `/api/edge/health`, backend `/api/health`, and the backend OpenAPI contract through the Cloudflare gateway. For local deployment, use the same required Cloudflare Worker runtime secret:
 

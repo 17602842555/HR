@@ -560,8 +560,12 @@ function checkDeploymentArtifacts() {
     "parseCloudflareSecretArgs",
     "buildCloudflareSecretPlan",
     "applyCloudflareSecretPlan",
+    "verifyCloudflareApiToken",
+    "https://api.cloudflare.com/client/v4/user/tokens/verify",
+    "--verify-token",
     "validateCloudflareBackendEnv",
     "placeholderFragments",
+    "sanitizeCloudflareMessage",
     "\"gh\", [\"secret\", \"set\"",
     "input: value",
     "secretValues"
@@ -571,6 +575,8 @@ function checkDeploymentArtifacts() {
   [
     "cloudflare secret plan validates backend values and redacts secret material",
     "cloudflare secret apply writes GitHub secrets through stdin",
+    "cloudflare api token verification calls official endpoint without leaking token",
+    "cloudflare api token verification fails closed and sanitizes errors",
     "cloudflare secret plan rejects unsafe production configuration",
     "cloudflare secret plan rejects placeholder deploy token fragments",
     "CLOUDFLARE_ACCOUNT_ID",

@@ -26,6 +26,8 @@ const runtimeOverrideKeys = Object.freeze([
   "WEB_ORIGIN"
 ]);
 
+const cloudflareTokenVerifyUrl = "https://api.cloudflare.com/client/v4/user/tokens/verify";
+
 const placeholderFragments = Object.freeze([
   "admin123456",
   "changeme",
@@ -50,6 +52,13 @@ function isPlaceholder(value) {
     || placeholderFragments.some((fragment) => normalized.includes(fragment))
     || normalized.includes("<")
     || normalized.includes("example.com");
+}
+
+function sanitizeCloudflareMessage(value = "") {
+  return String(value || "")
+    .replaceAll(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
+    .replaceAll(/(token|secret|password|key)=\S+/gi, "$1=[REDACTED]")
+    .slice(0, 240);
 }
 
 function publicOrigin(value) {
@@ -80,7 +89,8 @@ export function parseCloudflareSecretArgs(argv = process.argv.slice(2)) {
     apply: false,
     envPath: ".env.production",
     json: false,
-    repo: ""
+    repo: "",
+    verifyToken: false
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -88,6 +98,8 @@ export function parseCloudflareSecretArgs(argv = process.argv.slice(2)) {
       options.apply = true;
     } else if (arg === "--json") {
       options.json = true;
+    } else if (arg === "--verify-token") {
+      options.verifyToken = true;
     } else if (arg === "--env") {
       options.envPath = argv[index + 1] || "";
       index += 1;
@@ -99,6 +111,70 @@ export function parseCloudflareSecretArgs(argv = process.argv.slice(2)) {
     }
   }
   return options;
+}
+
+export async function verifyCloudflareApiToken({
+  fetchImpl = globalThis.fetch,
+  timeoutMs = 8000,
+  token
+} = {}) {
+  const value = String(token || "").trim();
+  if (isPlaceholder(value) || value.length < 20) {
+    return {
+      checked: false,
+      errors: ["CLOUDFLARE_API_TOKEN is missing, placeholder, or too short for online verification."],
+      ok: false,
+      status: "invalid-input"
+    };
+  }
+  if (typeof fetchImpl !== "function") {
+    return {
+      checked: false,
+      errors: ["Fetch API is not available for Cloudflare token verification."],
+      ok: false,
+      status: "unavailable"
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchImpl(cloudflareTokenVerifyUrl, {
+      headers: {
+        Authorization: `Bearer ${value}`,
+        Accept: "application/json"
+      },
+      method: "GET",
+      signal: controller.signal
+    });
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    const apiErrors = Array.isArray(payload?.errors)
+      ? payload.errors.map((error) => sanitizeCloudflareMessage(error?.message || "Cloudflare API token verification failed."))
+      : [];
+    const status = String(payload?.result?.status || (response.ok ? "unknown" : `http-${response.status}`)).slice(0, 40);
+    const ok = response.ok && payload?.success === true && status === "active";
+    return {
+      checked: true,
+      errors: ok ? [] : apiErrors.length ? apiErrors : [`Cloudflare API token verification returned ${status}.`],
+      ok,
+      status,
+      tokenIdPresent: Boolean(payload?.result?.id)
+    };
+  } catch (error) {
+    return {
+      checked: true,
+      errors: [sanitizeCloudflareMessage(error?.message || "Cloudflare API token verification request failed.")],
+      ok: false,
+      status: "request-failed"
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export function repoFromGitRemote(remoteUrl = "") {
@@ -247,6 +323,11 @@ function printHumanReport(plan, applyResult) {
   });
   plan.warnings.forEach((warning) => console.warn(`WARN ${warning}`));
   plan.errors.forEach((error) => console.error(`FAIL ${error}`));
+  if (plan.tokenVerification) {
+    const marker = plan.tokenVerification.ok ? "PASS" : "FAIL";
+    console.log(`${marker} cloudflare-token-verify: status=${plan.tokenVerification.status}`);
+    plan.tokenVerification.errors?.forEach((error) => console.error(`FAIL ${error}`));
+  }
   if (applyResult) {
     applyResult.applied.forEach((name) => console.log(`applied ${name}`));
     applyResult.errors.forEach((error) => console.error(`FAIL ${error}`));
@@ -268,6 +349,15 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
       runtimeEnv: process.env
     });
     loaded.warnings.forEach((warning) => plan.warnings.push(warning));
+    if (options.verifyToken) {
+      plan.tokenVerification = await verifyCloudflareApiToken({
+        token: plan.secretValues.get("CLOUDFLARE_API_TOKEN")
+      });
+      if (!plan.tokenVerification.ok) {
+        plan.errors.push("Cloudflare API token online verification failed.");
+        plan.ok = false;
+      }
+    }
     const applyResult = options.apply ? applyCloudflareSecretPlan(plan) : null;
     const report = {
       ...plan,
