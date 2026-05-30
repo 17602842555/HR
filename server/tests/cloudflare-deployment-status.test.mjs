@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildCloudflareDeploymentStatus,
   parseCloudflareDeploymentStatusArgs,
+  readCloudflareTunnelConfigurationFromApi,
   readCloudflareTunnelInfo,
   readCloudflareTunnelInfoFromApi,
   readGithubSecretNames,
@@ -19,6 +20,10 @@ test("cloudflare deployment status parser supports repo tunnel url and json flag
       "399ce110-a343-43b5-81cd-333f5f86212c",
       "--account-id",
       "0123456789abcdef0123456789abcdef",
+      "--api-origin",
+      "https://api.oa.example.cn",
+      "--backend-service",
+      "http://api:8787",
       "--url",
       "https://deep-oa-hr.example.workers.dev",
       "--allow-missing-api-origin",
@@ -27,7 +32,9 @@ test("cloudflare deployment status parser supports repo tunnel url and json flag
     {
       accountId: "0123456789abcdef0123456789abcdef",
       allowMissingApiOrigin: true,
+      apiOrigin: "https://api.oa.example.cn",
       apiToken: "",
+      backendService: "http://api:8787",
       json: true,
       repo: "17602842555/HR",
       retries: 2,
@@ -42,6 +49,7 @@ test("cloudflare deployment status parser supports repo tunnel url and json flag
 
 test("cloudflare deployment status passes only when secrets tunnel and smoke are ready", () => {
   const report = buildCloudflareDeploymentStatus({
+    apiOrigin: "https://api.oa.example.cn",
     secretNames: requiredCloudflareGithubSecrets,
     smokeReport: {
       hardBlockers: [],
@@ -59,12 +67,21 @@ test("cloudflare deployment status passes only when secrets tunnel and smoke are
         name: "deep-oa-hr-api",
         status: "healthy"
       }
+    },
+    tunnelConfigRead: {
+      checked: true,
+      ingress: [
+        { hostname: "api.oa.example.cn", service: "http://api:8787" },
+        { hostname: "", service: "http_status:404" }
+      ],
+      source: "cloudflare-api"
     }
   });
 
   assert.equal(report.ok, true);
   assert.equal(report.summary.githubSecretsReady, true);
   assert.equal(report.summary.tunnelReady, true);
+  assert.equal(report.summary.tunnelIngressReady, true);
   assert.equal(report.summary.cloudflareSmokeReady, true);
 });
 
@@ -98,12 +115,58 @@ test("cloudflare deployment status reports current partial backend configuration
   assert.equal(report.ok, false);
   assert(report.hardBlockers.some((check) => check.name === "github-secrets"));
   assert(report.hardBlockers.some((check) => check.name === "tunnel-status"));
+  assert(report.hardBlockers.some((check) => check.name === "tunnel-ingress"));
   assert(report.hardBlockers.some((check) => check.name === "cloudflare-smoke"));
   assert.deepEqual(
     report.checks.find((check) => check.name === "github-secrets").details.missing,
     ["CLOUDFLARE_API_TOKEN", "API_ORIGIN"]
   );
   assert.equal(JSON.stringify(report).includes("eyJ"), false);
+});
+
+test("cloudflare deployment status requires API origin ingress mapping to backend service", () => {
+  const missingIngress = buildCloudflareDeploymentStatus({
+    apiOrigin: "https://api.oa.example.cn",
+    secretNames: requiredCloudflareGithubSecrets,
+    smokeReport: { hardBlockers: [], ok: true, url: "https://oa.example.cn", warnings: [] },
+    tunnelConfigRead: {
+      checked: true,
+      ingress: [
+        { hostname: "wrong.oa.example.cn", service: "http://api:8787" },
+        { hostname: "", service: "http_status:404" }
+      ],
+      source: "cloudflare-api"
+    },
+    tunnelRead: {
+      checked: true,
+      source: "cloudflare-api",
+      tunnel: { id: "399ce110-a343-43b5-81cd-333f5f86212c", name: "deep-oa-hr-api", status: "healthy" }
+    }
+  });
+  const missingCheck = missingIngress.checks.find((check) => check.name === "tunnel-ingress");
+  assert.equal(missingIngress.ok, false);
+  assert.equal(missingCheck.level, "fail");
+  assert.match(missingCheck.message, /does not map API_ORIGIN/);
+
+  const missingCatchAll = buildCloudflareDeploymentStatus({
+    apiOrigin: "https://api.oa.example.cn",
+    secretNames: requiredCloudflareGithubSecrets,
+    smokeReport: { hardBlockers: [], ok: true, url: "https://oa.example.cn", warnings: [] },
+    tunnelConfigRead: {
+      checked: true,
+      ingress: [{ hostname: "api.oa.example.cn", service: "http://api:8787" }],
+      source: "cloudflare-api"
+    },
+    tunnelRead: {
+      checked: true,
+      source: "cloudflare-api",
+      tunnel: { id: "399ce110-a343-43b5-81cd-333f5f86212c", name: "deep-oa-hr-api", status: "healthy" }
+    }
+  });
+  const catchAllCheck = missingCatchAll.checks.find((check) => check.name === "tunnel-ingress");
+  assert.equal(missingCatchAll.ok, false);
+  assert.equal(catchAllCheck.level, "fail");
+  assert.match(catchAllCheck.message, /catch-all/);
 });
 
 test("cloudflare deployment status reads GitHub secret names without values", () => {
@@ -232,10 +295,78 @@ test("cloudflare deployment status API tunnel read fails closed and sanitizes to
   assert.match(result.error, /password=\[REDACTED\]/);
 });
 
+test("cloudflare deployment status reads tunnel configuration through Cloudflare API without leaking token", async () => {
+  const result = await readCloudflareTunnelConfigurationFromApi({
+    accountId: "0123456789abcdef0123456789abcdef",
+    apiToken: "secret-cloudflare-api-token",
+    tunnel: "399ce110-a343-43b5-81cd-333f5f86212c",
+    fetchImpl: async (url, options) => {
+      assert.equal(
+        url,
+        "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/cfd_tunnel/399ce110-a343-43b5-81cd-333f5f86212c/configurations"
+      );
+      assert.equal(options.method, "GET");
+      assert.equal(options.headers.Authorization, "Bearer secret-cloudflare-api-token");
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          result: {
+            account_id: "0123456789abcdef0123456789abcdef",
+            config: {
+              ingress: [
+                { hostname: "API.OA.EXAMPLE.CN", service: "http://api:8787" },
+                { service: "http_status:404" }
+              ]
+            }
+          }
+        })
+      };
+    }
+  });
+
+  assert.equal(result.checked, true);
+  assert.equal(result.source, "cloudflare-api");
+  assert.deepEqual(result.ingress, [
+    { hostname: "api.oa.example.cn", path: "", service: "http://api:8787" },
+    { hostname: "", path: "", service: "http_status:404" }
+  ]);
+  const serialized = JSON.stringify(result);
+  assert.equal(serialized.includes("secret-cloudflare-api-token"), false);
+  assert.equal(serialized.includes("0123456789abcdef0123456789abcdef"), false);
+});
+
+test("cloudflare deployment status API tunnel configuration read fails closed and sanitizes token errors", async () => {
+  const result = await readCloudflareTunnelConfigurationFromApi({
+    accountId: "0123456789abcdef0123456789abcdef",
+    apiToken: "secret-cloudflare-api-token",
+    tunnel: "399ce110-a343-43b5-81cd-333f5f86212c",
+    fetchImpl: async () => ({
+      ok: false,
+      status: 403,
+      json: async () => ({
+        success: false,
+        errors: [{ message: "Bearer secret-cloudflare-api-token token=secret-cloudflare-api-token password=123" }]
+      })
+    })
+  });
+
+  assert.equal(result.checked, false);
+  assert.equal(result.source, "cloudflare-api");
+  assert.deepEqual(result.ingress, []);
+  assert.equal(result.error.includes("secret-cloudflare-api-token"), false);
+  assert.equal(result.error.includes("123"), false);
+  assert.match(result.error, /Bearer \[REDACTED\]/);
+  assert.match(result.error, /token=\[REDACTED\]/);
+  assert.match(result.error, /password=\[REDACTED\]/);
+});
+
 test("cloudflare deployment status uses API inspection when account id is provided but token is missing", async () => {
   let wranglerCalled = false;
   const report = await runCloudflareDeploymentStatus({
     accountId: "0123456789abcdef0123456789abcdef",
+    apiOrigin: "https://api.oa.example.cn",
     apiToken: "",
     repo: "17602842555/HR",
     tunnel: "399ce110-a343-43b5-81cd-333f5f86212c",
@@ -252,7 +383,10 @@ test("cloudflare deployment status uses API inspection when account id is provid
   });
 
   const tunnelCheck = report.checks.find((check) => check.name === "tunnel-status");
+  const ingressCheck = report.checks.find((check) => check.name === "tunnel-ingress");
   assert.equal(wranglerCalled, false);
   assert.equal(tunnelCheck.level, "fail");
   assert.match(tunnelCheck.details.error, /CLOUDFLARE_API_TOKEN is required/);
+  assert.equal(ingressCheck.level, "fail");
+  assert.match(ingressCheck.details.error, /CLOUDFLARE_API_TOKEN is required/);
 });

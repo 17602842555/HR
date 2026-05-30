@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { runCloudflareSmoke } from "./cloudflare-smoke.mjs";
+import { normalizeDeploymentUrl, runCloudflareSmoke } from "./cloudflare-smoke.mjs";
 
 const cloudflareTunnelApiBaseUrl = "https://api.cloudflare.com/client/v4/accounts";
+const defaultBackendServiceUrl = "http://api:8787";
 
 export const requiredCloudflareGithubSecrets = Object.freeze([
   "CLOUDFLARE_API_TOKEN",
@@ -41,7 +42,9 @@ export function parseCloudflareDeploymentStatusArgs(argv = process.argv.slice(2)
   const options = {
     accountId: env.CLOUDFLARE_ACCOUNT_ID || "",
     allowMissingApiOrigin: boolFlag(env.CLOUDFLARE_STATUS_ALLOW_MISSING_API_ORIGIN),
+    apiOrigin: env.API_ORIGIN || "",
     apiToken: env.CLOUDFLARE_API_TOKEN || "",
+    backendService: env.CLOUDFLARE_BACKEND_SERVICE_URL || defaultBackendServiceUrl,
     json: boolFlag(env.CLOUDFLARE_STATUS_JSON),
     repo: env.GITHUB_REPOSITORY || "",
     retries: parsePositiveInt(env.CLOUDFLARE_SMOKE_RETRIES, 2),
@@ -59,6 +62,12 @@ export function parseCloudflareDeploymentStatusArgs(argv = process.argv.slice(2)
       options.allowMissingApiOrigin = true;
     } else if (arg === "--account-id") {
       options.accountId = argv[index + 1] || "";
+      index += 1;
+    } else if (arg === "--api-origin") {
+      options.apiOrigin = argv[index + 1] || "";
+      index += 1;
+    } else if (arg === "--backend-service") {
+      options.backendService = argv[index + 1] || "";
       index += 1;
     } else if (arg === "--repo") {
       options.repo = argv[index + 1] || "";
@@ -187,6 +196,15 @@ function normalizeCloudflareApiTunnel(result = {}) {
   };
 }
 
+function normalizeCloudflareIngressRules(result = {}) {
+  const ingress = Array.isArray(result?.config?.ingress) ? result.config.ingress : [];
+  return ingress.map((rule) => ({
+    hostname: String(rule?.hostname || "").trim().toLowerCase(),
+    path: String(rule?.path || "").trim(),
+    service: String(rule?.service || "").trim()
+  }));
+}
+
 export async function readCloudflareTunnelInfoFromApi({
   accountId,
   apiToken,
@@ -274,11 +292,159 @@ export async function readCloudflareTunnelInfoFromApi({
   }
 }
 
+export async function readCloudflareTunnelConfigurationFromApi({
+  accountId,
+  apiToken,
+  fetchImpl = globalThis.fetch,
+  timeoutMs = 8000,
+  tunnel
+} = {}) {
+  const accountRef = String(accountId || "").trim();
+  const tokenValue = String(apiToken || "").trim();
+  const tunnelRef = String(tunnel || "").trim();
+  if (!accountRef) {
+    return {
+      checked: false,
+      error: "CLOUDFLARE_ACCOUNT_ID is required for Cloudflare Tunnel configuration inspection.",
+      ingress: [],
+      source: "cloudflare-api"
+    };
+  }
+  if (!tokenValue) {
+    return {
+      checked: false,
+      error: "CLOUDFLARE_API_TOKEN is required for Cloudflare Tunnel configuration inspection.",
+      ingress: [],
+      source: "cloudflare-api"
+    };
+  }
+  if (!tunnelRef) {
+    return {
+      checked: false,
+      error: "Cloudflare tunnel UUID is required for Cloudflare Tunnel configuration inspection.",
+      ingress: [],
+      source: "cloudflare-api"
+    };
+  }
+  if (typeof fetchImpl !== "function") {
+    return {
+      checked: false,
+      error: "Fetch API is not available for Cloudflare Tunnel configuration inspection.",
+      ingress: [],
+      source: "cloudflare-api"
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const endpoint = `${cloudflareTunnelApiBaseUrl}/${encodeURIComponent(accountRef)}/cfd_tunnel/${encodeURIComponent(tunnelRef)}/configurations`;
+  try {
+    const response = await fetchImpl(endpoint, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${tokenValue}`
+      },
+      method: "GET",
+      signal: controller.signal
+    });
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    if (!response.ok || payload?.success !== true) {
+      return {
+        checked: false,
+        error: sanitizeMessage(readCloudflareApiErrors(payload, `Cloudflare tunnel configuration API returned HTTP ${response.status}.`)),
+        ingress: [],
+        source: "cloudflare-api"
+      };
+    }
+    return {
+      checked: true,
+      error: "",
+      ingress: normalizeCloudflareIngressRules(payload?.result || {}),
+      source: "cloudflare-api"
+    };
+  } catch (error) {
+    return {
+      checked: false,
+      error: sanitizeMessage(error?.message || "Cloudflare tunnel configuration API request failed."),
+      ingress: [],
+      source: "cloudflare-api"
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeServiceTarget(value) {
+  return String(value || "").trim().replace(/\/+$/, "").toLowerCase();
+}
+
+function tunnelIngressStatus({ apiOrigin, backendService, tunnelConfigRead }) {
+  const apiOriginValue = String(apiOrigin || "").trim();
+  if (!apiOriginValue) {
+    return status("fail", "tunnel-ingress", "API_ORIGIN is required to validate the Cloudflare Tunnel public hostname.", {
+      expectedService: backendService || defaultBackendServiceUrl
+    });
+  }
+
+  let apiHostname = "";
+  try {
+    apiHostname = new URL(normalizeDeploymentUrl(apiOriginValue)).hostname.toLowerCase();
+  } catch (error) {
+    return status("fail", "tunnel-ingress", "API_ORIGIN is not a valid production HTTPS origin.", {
+      error: sanitizeMessage(error?.message || "Invalid API_ORIGIN."),
+      expectedService: backendService || defaultBackendServiceUrl
+    });
+  }
+
+  if (!tunnelConfigRead?.checked) {
+    return status("fail", "tunnel-ingress", "Cloudflare Tunnel public hostname configuration could not be inspected.", {
+      error: sanitizeMessage(tunnelConfigRead?.error || "Cloudflare Tunnel configuration was not inspected."),
+      expectedService: backendService || defaultBackendServiceUrl
+    });
+  }
+
+  const ingress = tunnelConfigRead.ingress || [];
+  const expectedService = normalizeServiceTarget(backendService || defaultBackendServiceUrl);
+  const hostnameRules = ingress.filter((rule) => rule.hostname === apiHostname);
+  const matchedRule = hostnameRules.find((rule) => normalizeServiceTarget(rule.service) === expectedService);
+  const catchAllRule = ingress[ingress.length - 1] || null;
+  const catchAllConfigured = Boolean(
+    catchAllRule
+    && !catchAllRule.hostname
+    && normalizeServiceTarget(catchAllRule.service) === "http_status:404"
+  );
+
+  const details = {
+    catchAllConfigured,
+    expectedService: backendService || defaultBackendServiceUrl,
+    matchedHostname: matchedRule?.hostname || "",
+    matchedService: matchedRule?.service || "",
+    publicHostnameCount: ingress.filter((rule) => rule.hostname).length,
+    source: tunnelConfigRead.source || "cloudflare-api"
+  };
+
+  if (!matchedRule) {
+    return status("fail", "tunnel-ingress", "Cloudflare Tunnel does not map API_ORIGIN to the expected backend service.", details);
+  }
+  if (!catchAllConfigured) {
+    return status("fail", "tunnel-ingress", "Cloudflare Tunnel ingress is missing the required final http_status:404 catch-all rule.", details);
+  }
+  return status("pass", "tunnel-ingress", "Cloudflare Tunnel maps API_ORIGIN to the backend API service.", details);
+}
+
 export function buildCloudflareDeploymentStatus({
+  apiOrigin = "",
+  backendService = defaultBackendServiceUrl,
   requiredSecrets = requiredCloudflareGithubSecrets,
   secretNames = null,
   secretRead = null,
   smokeReport = null,
+  tunnelConfigRead = null,
   tunnelRead = null
 } = {}) {
   const checks = [];
@@ -335,6 +501,8 @@ export function buildCloudflareDeploymentStatus({
     ));
   }
 
+  checks.push(tunnelIngressStatus({ apiOrigin, backendService, tunnelConfigRead }));
+
   if (!smokeReport) {
     checks.push(status("fail", "cloudflare-smoke", "Cloudflare Worker smoke was not run.", {
       error: "CLOUDFLARE_DEPLOYMENT_URL or --url is required."
@@ -362,6 +530,7 @@ export function buildCloudflareDeploymentStatus({
     summary: {
       cloudflareSmokeReady: Boolean(smokeReport?.ok),
       githubSecretsReady: checks.find((check) => check.name === "github-secrets")?.level === "pass",
+      tunnelIngressReady: checks.find((check) => check.name === "tunnel-ingress")?.level === "pass",
       tunnelReady: checks.find((check) => check.name === "tunnel-status")?.level === "pass"
     },
     warnings
@@ -371,7 +540,9 @@ export function buildCloudflareDeploymentStatus({
 export async function runCloudflareDeploymentStatus({
   accountId,
   allowMissingApiOrigin = false,
+  apiOrigin,
   apiToken,
+  backendService,
   fetchImpl = globalThis.fetch,
   repo,
   retries,
@@ -383,8 +554,16 @@ export async function runCloudflareDeploymentStatus({
 } = {}) {
   const secretRead = readGithubSecretNames({ repo, runner });
   let tunnelRead = null;
+  let tunnelConfigRead = null;
   if (String(accountId || "").trim() || String(apiToken || "").trim()) {
     tunnelRead = await readCloudflareTunnelInfoFromApi({
+      accountId,
+      apiToken,
+      fetchImpl,
+      timeoutMs,
+      tunnel
+    });
+    tunnelConfigRead = await readCloudflareTunnelConfigurationFromApi({
       accountId,
       apiToken,
       fetchImpl,
@@ -403,6 +582,12 @@ export async function runCloudflareDeploymentStatus({
     } else {
       tunnelRead = { ...tunnelRead, source: "wrangler" };
     }
+    tunnelConfigRead = {
+      checked: false,
+      error: "Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN to inspect Cloudflare Tunnel public hostname configuration.",
+      ingress: [],
+      source: "wrangler"
+    };
   }
   let smokeReport = null;
   if (String(url || "").trim()) {
@@ -415,7 +600,14 @@ export async function runCloudflareDeploymentStatus({
       url
     });
   }
-  return buildCloudflareDeploymentStatus({ secretRead, smokeReport, tunnelRead });
+  return buildCloudflareDeploymentStatus({
+    apiOrigin,
+    backendService,
+    secretRead,
+    smokeReport,
+    tunnelConfigRead,
+    tunnelRead
+  });
 }
 
 function printHumanReport(report) {

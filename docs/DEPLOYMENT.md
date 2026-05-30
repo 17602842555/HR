@@ -118,10 +118,10 @@ Cloudflare deployment status can inspect the backend Tunnel through Cloudflare's
 ```bash
 CLOUDFLARE_ACCOUNT_ID=<account-id> \
 CLOUDFLARE_API_TOKEN=<api-token-with-cloudflare-tunnel-read> \
-npm run doctor:cloudflare -- --repo 17602842555/HR --tunnel <tunnel-uuid> --account-id <account-id> --url <worker-url> --json
+npm run doctor:cloudflare -- --repo 17602842555/HR --tunnel <tunnel-uuid> --account-id <account-id> --api-origin <backend-origin> --url <worker-url> --json
 ```
 
-Do not pass `CLOUDFLARE_API_TOKEN` as a CLI argument. The doctor redacts Cloudflare API failures and only reports tunnel id/name/status/config source plus smoke-test blockers.
+Do not pass `CLOUDFLARE_API_TOKEN` as a CLI argument. The doctor redacts Cloudflare API failures and only reports tunnel id/name/status/config source, whether the Tunnel ingress maps `API_ORIGIN` to the expected backend service, and smoke-test blockers.
 
 Production secrets signoff validation:
 
@@ -349,11 +349,13 @@ Check the current Cloudflare deployment state without printing secret values:
 npm run doctor:cloudflare -- \
   --repo 17602842555/HR \
   --tunnel 399ce110-a343-43b5-81cd-333f5f86212c \
+  --account-id "$CLOUDFLARE_ACCOUNT_ID" \
+  --api-origin "$API_ORIGIN" \
   --url https://deep-oa-hr.2445776963.workers.dev \
   --json
 ```
 
-This status command fails closed until required repository secrets are present, the Tunnel is active, the Worker reports a configured and valid API origin, and `npm run smoke:cloudflare` can prove both `/api/edge/health` and the backend `/api/health` / `/api/openapi.json` path through the Worker.
+This status command fails closed until required repository secrets are present, the Tunnel is active/healthy, the remotely-managed Tunnel configuration maps the `API_ORIGIN` hostname to `http://api:8787` and ends with a final `http_status:404` catch-all rule, the Worker reports a configured and valid API origin, and `npm run smoke:cloudflare` can prove both `/api/edge/health` and the backend `/api/health` / `/api/openapi.json` path through the Worker.
 
 Required GitHub repository secrets:
 
