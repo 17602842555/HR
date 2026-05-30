@@ -350,6 +350,46 @@ npm run cf:deploy
 npm run smoke:cloudflare -- --url https://<worker-or-custom-domain> --json
 ```
 
+## Cloudflare Tunnel Backend Server
+
+Use `docker-compose.cloudflare.yml` together with `docker-compose.prod.yml` when the Fastify API should be exposed through Cloudflare without opening an inbound API port on the server. Create a remotely-managed Cloudflare Tunnel, set its public hostname to the backend API domain, and route that hostname to the compose service URL:
+
+```text
+http://api:8787
+```
+
+Required server-side production values:
+
+```bash
+CLOUDFLARE_TUNNEL_TOKEN=<remotely-managed tunnel token>
+API_ORIGIN=https://api.<your-domain>
+CLOUDFLARE_DEPLOYMENT_URL=https://<worker-or-custom-domain>
+WEB_ORIGIN=https://<worker-or-custom-domain>
+TRUST_PROXY=1
+```
+
+Validate the backend Cloudflare env before starting the production stack:
+
+```bash
+npm run validate:production-env -- .env.production --json
+npm run validate:cloudflare-backend -- --env .env.production --json
+```
+
+Start the backend server with the tunnel sidecar:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.cloudflare.yml --env-file .env.production up -d --build postgres api cloudflared
+```
+
+After the tunnel reports healthy, set the Worker secret and smoke the public gateway:
+
+```bash
+printf '%s' "$API_ORIGIN" | npx wrangler secret put API_ORIGIN
+npm run smoke:cloudflare -- --url "$CLOUDFLARE_DEPLOYMENT_URL" --json
+```
+
+`API_ORIGIN` must be the backend tunnel hostname. Do not set it to the same origin as `CLOUDFLARE_DEPLOYMENT_URL`; that would make the Worker proxy `/api/*` back into itself.
+
 Keep the existing Fastify/Prisma/PostgreSQL API as the commercial system of record unless the data layer is explicitly ported to Cloudflare D1/Hyperdrive/R2. The Worker is the Cloudflare edge backend/gateway: it adds security headers, hosts the frontend assets, and keeps browser traffic same-origin at `/api/*`. Production release evidence still requires the API origin, database, file storage, signoffs, and backup/restore drill to pass the commercial gate.
 
 Optional local-tool mode:

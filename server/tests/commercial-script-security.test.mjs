@@ -93,3 +93,17 @@ test("cloudflare deploy workflow verifies backend gateway after deploy", () => {
   assert.match(workflow, /npm run smoke:cloudflare -- --url "\$CLOUDFLARE_DEPLOYMENT_URL" --json/);
   assert.match(workflow, /DEPLOYMENT_URL_READY/);
 });
+
+test("cloudflare compose exposes API through an outbound tunnel only", () => {
+  const compose = readScript("docker-compose.cloudflare.yml");
+  const envExample = readScript(".env.production.example");
+
+  assert.match(compose, /cloudflare\/cloudflared:/);
+  assert.match(compose, /--no-autoupdate/);
+  assert.match(compose, /CLOUDFLARE_TUNNEL_TOKEN is required/);
+  assert.match(compose, /condition: service_healthy/);
+  assert.doesNotMatch(compose, /ports:/);
+  assert.match(envExample, /CLOUDFLARE_TUNNEL_TOKEN=/);
+  assert.match(envExample, /API_ORIGIN=https:\/\/api\.oa\.example\.com/);
+  assert.match(envExample, /CLOUDFLARE_DEPLOYMENT_URL=https:\/\/oa\.example\.com/);
+});

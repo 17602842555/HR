@@ -41,6 +41,7 @@
     "validate:storage-signoff": "node scripts/validate-storage-signoff.mjs",
     "validate:drill-evidence": "node scripts/validate-drill-evidence.mjs",
     "validate:local-recovery-drill": "node scripts/validate-local-recovery-drill.mjs",
+    "validate:cloudflare-backend": "node scripts/validate-cloudflare-backend.mjs",
     "audit:evidence-permissions": "node scripts/validate-evidence-permissions.mjs",
     "validate:migrations": "node scripts/validate-migrations.mjs",
     "validate:supply-chain": "node scripts/validate-supply-chain.mjs",
