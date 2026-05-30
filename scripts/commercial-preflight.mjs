@@ -888,6 +888,15 @@ function checkDeploymentArtifacts() {
     "source: \"api\""
   ].forEach((needle) => assertIncludes(apiFallbackPolicy, needle, "src/services/apiFallbackPolicy.mjs"));
 
+  const localStoragePolicy = readText("src/services/storage.js");
+  [
+    "resolveApiPolicy",
+    "localStatePersistenceAllowed",
+    "allowDemoFallback",
+    "removeItem(STORAGE_KEY)",
+    "return false"
+  ].forEach((needle) => assertIncludes(localStoragePolicy, needle, "src/services/storage.js"));
+
   const authRoutes = readText("server/src/modules/auth/auth-routes.mjs");
   [
     "auth.login_failed",
@@ -4685,6 +4694,7 @@ function main() {
       "Cloudflare tunnel sidecar hardening",
       "Docker nginx body/proxy settings",
       "Docker web API-required build args",
+      "frontend API-required local persistence guard",
       "deployable brand boundary check",
       "append-only audit migration",
       "tamper-evident audit hash chain",

@@ -4,11 +4,26 @@ import { resolve } from "node:path";
 import test from "node:test";
 import { apiUnavailableStatus, resolveApiPolicy } from "../../src/config/apiPolicy.mjs";
 import { apiActionErrorStatus, canFallbackToLocalAction } from "../../src/services/apiFallbackPolicy.mjs";
+import {
+  STORAGE_KEY,
+  localStatePersistenceAllowed,
+  readStoredState,
+  writeStoredState
+} from "../../src/services/storage.js";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 
 function readText(path) {
   return readFileSync(resolve(root, path), "utf8");
+}
+
+function memoryStorage() {
+  const values = new Map();
+  return {
+    getItem: (key) => values.get(key) || null,
+    removeItem: (key) => values.delete(key),
+    setItem: (key, value) => values.set(key, String(value))
+  };
 }
 
 test("frontend API policy allows demo fallback only for development or explicit demo builds", () => {
@@ -36,6 +51,22 @@ test("frontend API policy forbids silent demo fallback in production or API-requ
   assert.equal(status.mode, "api_required");
   assert.equal(status.source, "api");
   assert.match(status.error, /wrong backend/);
+});
+
+test("frontend local state persistence is disabled in production and API-required builds", () => {
+  const storage = memoryStorage();
+
+  assert.equal(localStatePersistenceAllowed({ DEV: true, PROD: false }), true);
+  assert.equal(localStatePersistenceAllowed({ DEV: false, PROD: false, VITE_DEMO_FALLBACK: "1" }), true);
+  assert.equal(localStatePersistenceAllowed({ DEV: false, PROD: true }), false);
+  assert.equal(localStatePersistenceAllowed({ DEV: true, PROD: false, VITE_REQUIRE_API: "1", VITE_DEMO_FALLBACK: "1" }), false);
+
+  assert.equal(writeStoredState({ approvals: ["demo"] }, { env: { DEV: true, PROD: false }, storage }), true);
+  assert.deepEqual(readStoredState({ env: { DEV: true, PROD: false }, storage }), { approvals: ["demo"] });
+  assert.deepEqual(readStoredState({ env: { PROD: true }, storage }), null);
+
+  assert.equal(writeStoredState({ people: { sensitive: "stale" } }, { env: { PROD: true }, storage }), false);
+  assert.equal(storage.getItem(STORAGE_KEY), null);
 });
 
 test("frontend action fallback only applies to demo network failures", () => {
@@ -71,6 +102,7 @@ test("frontend action failure status keeps API as source for business errors", (
 test("commercial web image build forces API-required frontend output", () => {
   const dockerfile = readText("Dockerfile.web");
   const compose = readText("docker-compose.yml");
+  const storage = readText("src/services/storage.js");
 
   assert.match(dockerfile, /ARG VITE_REQUIRE_API=1/);
   assert.match(dockerfile, /ARG VITE_DEMO_FALLBACK=0/);
@@ -78,4 +110,6 @@ test("commercial web image build forces API-required frontend output", () => {
   assert.match(dockerfile, /ENV VITE_DEMO_FALLBACK=\$\{VITE_DEMO_FALLBACK\}/);
   assert.match(compose, /VITE_REQUIRE_API:\s+"1"/);
   assert.match(compose, /VITE_DEMO_FALLBACK:\s+"0"/);
+  assert.match(storage, /localStatePersistenceAllowed/);
+  assert.match(storage, /removeItem\(STORAGE_KEY\)/);
 });
