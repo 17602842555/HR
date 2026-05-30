@@ -333,9 +333,11 @@ CLOUDFLARE_API_TOKEN=<Cloudflare token with Workers deploy permission>
 CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
 API_ORIGIN=https://<approved-api-origin>
 CLOUDFLARE_DEPLOYMENT_URL=https://<worker-or-custom-domain>
+CLOUDFLARE_TUNNEL_TOKEN=<remotely-managed tunnel token for backend API>
+CLOUDFLARE_BACKEND_WEB_ORIGIN=https://<worker-or-custom-domain> # optional override, defaults to deployment URL
 ```
 
-The GitHub Actions workflow deploys the Worker, writes `API_ORIGIN` as a Worker secret when all required Cloudflare values are configured, and runs `npm run smoke:cloudflare` against `CLOUDFLARE_DEPLOYMENT_URL` when that URL is present. The smoke check verifies `/api/edge/health`, backend `/api/health`, and the backend OpenAPI contract through the Cloudflare gateway. For local deployment, set the same Cloudflare Worker runtime secret manually:
+The GitHub Actions workflow deploys the Worker, writes `API_ORIGIN` as a Worker secret when all required Cloudflare values are configured, validates the backend Tunnel/server environment with a temporary private env file when `CLOUDFLARE_TUNNEL_TOKEN` is present, and runs `npm run smoke:cloudflare` against `CLOUDFLARE_DEPLOYMENT_URL` when that URL is present. The smoke check verifies `/api/edge/health`, backend `/api/health`, and the backend OpenAPI contract through the Cloudflare gateway. For local deployment, set the same Cloudflare Worker runtime secret manually:
 
 ```bash
 API_ORIGIN=https://<approved-api-origin>

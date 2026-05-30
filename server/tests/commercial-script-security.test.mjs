@@ -90,8 +90,15 @@ test("cloudflare deploy workflow verifies backend gateway after deploy", () => {
   assert.match(workflow, /cloudflare\/wrangler-action@v3/);
   assert.match(workflow, /wrangler secret put API_ORIGIN/);
   assert.match(workflow, /CLOUDFLARE_DEPLOYMENT_URL/);
+  assert.match(workflow, /CLOUDFLARE_TUNNEL_TOKEN/);
+  assert.match(workflow, /mktemp/);
+  assert.match(workflow, /umask 077/);
+  assert.match(workflow, /trap 'rm -f "\$backend_env"' EXIT/);
+  assert.match(workflow, /npm run validate:cloudflare-backend -- --env "\$backend_env" --json/);
   assert.match(workflow, /npm run smoke:cloudflare -- --url "\$CLOUDFLARE_DEPLOYMENT_URL" --json/);
   assert.match(workflow, /DEPLOYMENT_URL_READY/);
+  assert.doesNotMatch(workflow, /actions\/upload-artifact@v4/);
+  assert.doesNotMatch(workflow, /cat "\$backend_env"/);
 });
 
 test("cloudflare compose exposes API through an outbound tunnel only", () => {
