@@ -392,6 +392,12 @@ function checkDeploymentArtifacts() {
     "OBJECT_STORAGE_SECRET_ACCESS_KEY=",
     "WEB_ORIGIN=https://oa.example.com",
     "TRUST_PROXY=0",
+    "CLOUDFLARE_ACCOUNT_ID=",
+    "CLOUDFLARE_API_TOKEN=",
+    "CLOUDFLARE_TUNNEL_TOKEN=",
+    "API_ORIGIN=https://api.oa.example.com",
+    "CLOUDFLARE_DEPLOYMENT_URL=https://oa.example.com",
+    "CLOUDFLARE_BACKEND_WEB_ORIGIN=https://oa.example.com",
     "RUN_DB_SEED=0",
     "ALLOW_PRODUCTION_SEED=0",
     "VITE_REQUIRE_API=1",
@@ -593,6 +599,22 @@ function checkDeploymentArtifacts() {
     "backend-health",
     "openapi-contract"
   ].forEach((needle) => assertIncludes(cloudflareSmoke, needle, "scripts/cloudflare-smoke.mjs"));
+
+  const cloudflareBackendValidator = readText("scripts/validate-cloudflare-backend.mjs");
+  [
+    "isExampleComOrigin",
+    "API_ORIGIN must not use example.com template hosts.",
+    "CLOUDFLARE_DEPLOYMENT_URL must not use example.com template hosts.",
+    "WEB_ORIGIN must not use example.com template hosts."
+  ].forEach((needle) => assertIncludes(cloudflareBackendValidator, needle, "scripts/validate-cloudflare-backend.mjs"));
+
+  const cloudflareBackendTests = readText("server/tests/cloudflare-backend.test.mjs");
+  [
+    "cloudflare backend validator rejects example.com template origins",
+    "API_ORIGIN must not use example.com",
+    "CLOUDFLARE_DEPLOYMENT_URL must not use example.com",
+    "WEB_ORIGIN must not use example.com"
+  ].forEach((needle) => assertIncludes(cloudflareBackendTests, needle, "server/tests/cloudflare-backend.test.mjs"));
 
   const materializeReleaseInputsTests = readText("server/tests/materialize-release-inputs.test.mjs");
   [

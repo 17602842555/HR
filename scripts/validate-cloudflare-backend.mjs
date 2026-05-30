@@ -19,6 +19,15 @@ function originOf(value) {
   }
 }
 
+function isExampleComOrigin(value) {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname === "example.com" || hostname.endsWith(".example.com");
+  } catch {
+    return false;
+  }
+}
+
 function originsFromWebOrigin(value) {
   return String(value || "")
     .split(",")
@@ -51,6 +60,12 @@ export function validateCloudflareBackendEnv(env = {}) {
   if (apiOrigin && deploymentUrl && originOf(apiOrigin) === originOf(deploymentUrl)) {
     errors.push("API_ORIGIN must be the backend tunnel origin, not the same origin as CLOUDFLARE_DEPLOYMENT_URL.");
   }
+  if (apiOrigin && isExampleComOrigin(apiOrigin)) {
+    errors.push("API_ORIGIN must not use example.com template hosts.");
+  }
+  if (deploymentUrl && isExampleComOrigin(deploymentUrl)) {
+    errors.push("CLOUDFLARE_DEPLOYMENT_URL must not use example.com template hosts.");
+  }
 
   const allowedOrigins = originsFromWebOrigin(env.WEB_ORIGIN);
   const deploymentOrigin = originOf(deploymentUrl);
@@ -59,6 +74,9 @@ export function validateCloudflareBackendEnv(env = {}) {
   }
   if (allowedOrigins.includes("*")) {
     errors.push("WEB_ORIGIN must not include wildcard origins.");
+  }
+  if (allowedOrigins.some((origin) => isExampleComOrigin(origin))) {
+    errors.push("WEB_ORIGIN must not use example.com template hosts.");
   }
 
   if (String(env.TRUST_PROXY || "0").trim() !== "1") {

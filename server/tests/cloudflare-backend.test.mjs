@@ -55,6 +55,20 @@ test("cloudflare backend validator rejects local non-https production URLs", () 
   assert.equal(report.errors.some((error) => error.includes("API_ORIGIN")), true);
 });
 
+test("cloudflare backend validator rejects example.com template origins", () => {
+  const report = validateCloudflareBackendEnv({
+    ...validEnv,
+    API_ORIGIN: "https://api.oa.example.com",
+    CLOUDFLARE_DEPLOYMENT_URL: "https://oa.example.com",
+    WEB_ORIGIN: "https://oa.example.com"
+  });
+
+  assert.equal(report.ok, false);
+  assert.equal(report.errors.some((error) => error.includes("API_ORIGIN must not use example.com")), true);
+  assert.equal(report.errors.some((error) => error.includes("CLOUDFLARE_DEPLOYMENT_URL must not use example.com")), true);
+  assert.equal(report.errors.some((error) => error.includes("WEB_ORIGIN must not use example.com")), true);
+});
+
 test("cloudflare backend validator reads dotenv files", () => {
   const dir = mkdtempSync(join(tmpdir(), "oa-cloudflare-backend-"));
   const envPath = join(dir, ".env.production");
