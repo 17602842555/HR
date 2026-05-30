@@ -91,6 +91,15 @@ function hasPlaceholder(value) {
   return !normalized || PLACEHOLDER_SECRET_FRAGMENTS.some((fragment) => normalized.includes(fragment));
 }
 
+function hasWeakSeedPassword(value) {
+  const password = String(value || "");
+  return hasPlaceholder(password)
+    || password.length < 12
+    || password.trim() !== password
+    || !/[A-Za-z]/.test(password)
+    || !/\d/.test(password);
+}
+
 function isTemporaryPath(path = "") {
   const normalized = String(path || "").trim();
   return normalized === "/tmp"
@@ -204,7 +213,7 @@ function validateRuntimeConfig(config) {
   if (
     !config.jwtSecret
     || config.jwtSecret.length < 32
-    || [DEV_JWT_SECRET, PLACEHOLDER_JWT_SECRET].includes(config.jwtSecret)
+    || hasPlaceholder(config.jwtSecret)
   ) {
     throw new Error("Production JWT_SECRET must be a non-placeholder secret with at least 32 characters.");
   }
@@ -212,8 +221,8 @@ function validateRuntimeConfig(config) {
   validateProductionWebOrigins(config);
   validateProductionObjectStorage(config);
 
-  if (config.runDbSeed && config.defaultAdminPassword === DEFAULT_ADMIN_PASSWORD) {
-    throw new Error("Production seed cannot use the default admin password.");
+  if (config.runDbSeed && hasWeakSeedPassword(config.defaultAdminPassword)) {
+    throw new Error("Production seed DEFAULT_ADMIN_PASSWORD must be non-placeholder, at least 12 characters, and include letters and numbers.");
   }
 
   if (config.fileStorageDriver === "s3") return;

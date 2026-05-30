@@ -30,6 +30,18 @@ test("production runtime rejects placeholder JWT secret", () => {
   );
 });
 
+test("production runtime rejects placeholder JWT fragments", () => {
+  assert.throws(
+    () => loadEnv({
+      isProduction: true,
+      jwtSecret: "changeme-jwt-secret-value-that-is-long-enough",
+      webOrigin: [productionWebOrigin],
+      fileStorageDir: productionFileStorageDir
+    }),
+    /Production JWT_SECRET/
+  );
+});
+
 test("production runtime rejects wildcard web origin", () => {
   assert.throws(
     () => loadEnv({
@@ -66,7 +78,21 @@ test("production runtime rejects default admin password when seed is enabled", (
       defaultAdminPassword: runtimeConfigDefaults.defaultAdminPassword,
       fileStorageDir: productionFileStorageDir
     }),
-    /default admin password/
+    /DEFAULT_ADMIN_PASSWORD/
+  );
+});
+
+test("production runtime rejects weak seed admin password", () => {
+  assert.throws(
+    () => loadEnv({
+      isProduction: true,
+      jwtSecret: strongSecret,
+      webOrigin: [productionWebOrigin],
+      runDbSeed: true,
+      defaultAdminPassword: "NoDigitsAtAll",
+      fileStorageDir: productionFileStorageDir
+    }),
+    /DEFAULT_ADMIN_PASSWORD/
   );
 });
 

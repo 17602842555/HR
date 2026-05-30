@@ -285,7 +285,7 @@ For production, set `RUN_DB_SEED=0` unless the reviewed bootstrap seed is intent
 
 Runtime validation refuses to boot when:
 
-- In production, `JWT_SECRET` is missing, shorter than 32 characters, or left at a placeholder value.
+- In production, `JWT_SECRET` is missing, shorter than 32 characters, or contains placeholder text such as `changeme`, `example`, `placeholder`, `replace-with`, or `todo`.
 - `COOKIE_MAX_AGE_SECONDS` is not a positive integer.
 - `AUTH_FAILED_LOGIN_LIMIT`, `AUTH_FAILED_LOGIN_WINDOW_MS`, or `AUTH_FAILED_LOGIN_MAX_KEYS` is not a positive integer.
 - `FILE_MAX_UPLOAD_BYTES`, `IMPORT_MAX_HTML_BYTES`, or `API_BODY_LIMIT_BYTES` is not a positive integer.
@@ -293,7 +293,7 @@ Runtime validation refuses to boot when:
 - In production with `FILE_STORAGE_DRIVER=local`, `FILE_STORAGE_DIR` is missing, implicit, or relative. It must point to an explicit absolute backed persistent volume path.
 - In production with `FILE_STORAGE_DRIVER=s3`, any required `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_REGION`, `OBJECT_STORAGE_ACCESS_KEY_ID`, or `OBJECT_STORAGE_SECRET_ACCESS_KEY` value is missing, local/example, or placeholder.
 - In production, `WEB_ORIGIN=*`.
-- In production, `RUN_DB_SEED=1` and `DEFAULT_ADMIN_PASSWORD` remains `admin123456`.
+- In production, `RUN_DB_SEED=1` and `DEFAULT_ADMIN_PASSWORD` is missing, shorter than 12 characters, lacks letters or digits, or contains default/placeholder text such as `admin123456`, `changeme`, `example`, `placeholder`, `replace-with`, or `todo`.
 - In production, `scripts/seed.mjs` is run without `ALLOW_PRODUCTION_SEED=1`, without a non-default policy-compliant admin password, or without approved local/S3 file-storage settings.
 
 Login protection:
