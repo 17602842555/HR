@@ -159,6 +159,46 @@ test("production runtime rejects local IPv6 object storage endpoint", () => {
   );
 });
 
+test("production runtime rejects placeholder S3 object storage credentials", () => {
+  assert.throws(
+    () => loadEnv({
+      isProduction: true,
+      jwtSecret: strongSecret,
+      webOrigin: [productionWebOrigin],
+      fileStorageDriver: "s3",
+      objectStorage: {
+        accessKeyId: "placeholder-access-key",
+        bucket: "oa-prod-files",
+        endpoint: "https://s3.company.test",
+        prefix: "prod",
+        region: "cn-east-1",
+        secretAccessKey: "object-secret-at-least-16"
+      }
+    }),
+    /OBJECT_STORAGE_ACCESS_KEY_ID/
+  );
+});
+
+test("production runtime rejects short S3 object storage secret", () => {
+  assert.throws(
+    () => loadEnv({
+      isProduction: true,
+      jwtSecret: strongSecret,
+      webOrigin: [productionWebOrigin],
+      fileStorageDriver: "s3",
+      objectStorage: {
+        accessKeyId: "AKIAREALACCESS",
+        bucket: "oa-prod-files",
+        endpoint: "https://s3.company.test",
+        prefix: "prod",
+        region: "cn-east-1",
+        secretAccessKey: "short-secret"
+      }
+    }),
+    /OBJECT_STORAGE_SECRET_ACCESS_KEY must be at least 16 characters/
+  );
+});
+
 test("production runtime requires explicit absolute file storage path", () => {
   assert.throws(
     () => loadEnv({

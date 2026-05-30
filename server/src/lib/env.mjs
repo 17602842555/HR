@@ -8,6 +8,19 @@ const DEFAULT_COOKIE_MAX_AGE_SECONDS = 8 * 60 * 60;
 const DEFAULT_FILE_STORAGE_DIR = resolve(process.cwd(), ".local-files");
 const SUPPORTED_FILE_STORAGE_DRIVERS = new Set(["local", "s3"]);
 const MINIMUM_API_BODY_LIMIT_BYTES = 1024 * 1024;
+const PLACEHOLDER_SECRET_FRAGMENTS = Object.freeze([
+  "admin123456",
+  "changeme",
+  "change-me",
+  "change_before",
+  "dev-only-change-me",
+  "example",
+  "local-commercial-demo-secret",
+  "oa_dev_password",
+  "placeholder",
+  "replace-with",
+  "todo"
+]);
 const LOCAL_HOSTNAMES = new Set([
   "localhost",
   "127.0.0.1",
@@ -69,6 +82,11 @@ function isLocalHostname(hostname = "") {
   return LOCAL_HOSTNAMES.has(String(hostname || "").trim().toLowerCase());
 }
 
+function hasPlaceholder(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return !normalized || PLACEHOLDER_SECRET_FRAGMENTS.some((fragment) => normalized.includes(fragment));
+}
+
 function isTemporaryPath(path = "") {
   const normalized = String(path || "").trim();
   return normalized === "/tmp"
@@ -108,6 +126,7 @@ function validateProductionWebOrigins(config) {
 
 function validateProductionObjectStorage(config) {
   if (config.fileStorageDriver !== "s3") return;
+  const objectStorage = config.objectStorage || {};
   const parsed = parseRuntimeUrl(config.objectStorage?.endpoint, "Production OBJECT_STORAGE_ENDPOINT");
   if (parsed.protocol !== "https:") {
     throw new Error("Production OBJECT_STORAGE_ENDPOINT must use https.");
@@ -117,6 +136,19 @@ function validateProductionObjectStorage(config) {
   }
   if (isTemplateHostname(parsed.hostname)) {
     throw new Error("Production OBJECT_STORAGE_ENDPOINT must not use example.com template hosts.");
+  }
+  [
+    ["bucket", "BUCKET"],
+    ["region", "REGION"],
+    ["accessKeyId", "ACCESS_KEY_ID"],
+    ["secretAccessKey", "SECRET_ACCESS_KEY"]
+  ].forEach(([key, envKey]) => {
+    if (hasPlaceholder(objectStorage[key])) {
+      throw new Error(`Production OBJECT_STORAGE_${envKey} must be non-placeholder.`);
+    }
+  });
+  if (String(objectStorage.secretAccessKey || "").length < 16) {
+    throw new Error("Production OBJECT_STORAGE_SECRET_ACCESS_KEY must be at least 16 characters.");
   }
 }
 
