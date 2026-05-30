@@ -129,6 +129,7 @@ function checkPackageScripts() {
     "dev:server",
     "drill:commercial",
     "drill:local-recovery",
+    "doctor:cloudflare",
     "doctor:commercial",
     "evidence:commercial",
     "gap:report",
@@ -508,6 +509,29 @@ function checkDeploymentArtifacts() {
     "CLOUDFLARE_ACCOUNT_ID",
     "CLOUDFLARE_API_TOKEN"
   ].forEach((needle) => assertIncludes(cloudflareSecretTests, needle, "server/tests/cloudflare-secrets.test.mjs"));
+
+  const cloudflareDeploymentStatus = readText("scripts/cloudflare-deployment-status.mjs");
+  [
+    "parseCloudflareDeploymentStatusArgs",
+    "buildCloudflareDeploymentStatus",
+    "runCloudflareDeploymentStatus",
+    "requiredCloudflareGithubSecrets",
+    "runCloudflareSmoke",
+    "github-secrets",
+    "tunnel-status",
+    "cloudflare-smoke",
+    "CLOUDFLARE_API_TOKEN",
+    "API_ORIGIN"
+  ].forEach((needle) => assertIncludes(cloudflareDeploymentStatus, needle, "scripts/cloudflare-deployment-status.mjs"));
+
+  const cloudflareDeploymentStatusTests = readText("server/tests/cloudflare-deployment-status.test.mjs");
+  [
+    "cloudflare deployment status parser supports repo tunnel url and json flags",
+    "cloudflare deployment status passes only when secrets tunnel and smoke are ready",
+    "cloudflare deployment status reports current partial backend configuration blockers",
+    "cloudflare deployment status reads GitHub secret names without values",
+    "cloudflare deployment status parses wrangler tunnel info output"
+  ].forEach((needle) => assertIncludes(cloudflareDeploymentStatusTests, needle, "server/tests/cloudflare-deployment-status.test.mjs"));
 
   const materializeReleaseInputsTests = readText("server/tests/materialize-release-inputs.test.mjs");
   [
@@ -4588,6 +4612,7 @@ function main() {
       "commercial signoff validation workflow",
       "commercial OpenAPI contract",
       "commercial doctor diagnostics",
+      "Cloudflare deployment status doctor",
       "Docker nginx body/proxy settings",
       "Docker web API-required build args",
       "deployable brand boundary check",

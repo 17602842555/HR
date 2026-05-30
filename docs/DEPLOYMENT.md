@@ -333,6 +333,18 @@ Current Cloudflare setup created on 2026-05-30:
 - GitHub repository secrets currently configured: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_DEPLOYMENT_URL`, `CLOUDFLARE_BACKEND_WEB_ORIGIN`, and `CLOUDFLARE_TUNNEL_TOKEN`.
 - Still required for GitHub auto-deploy and production release: durable `CLOUDFLARE_API_TOKEN`, production `API_ORIGIN`, production `.env.production`, production database/file-storage signoffs, and Cloudflare smoke through the final backend origin.
 
+Check the current Cloudflare deployment state without printing secret values:
+
+```bash
+npm run doctor:cloudflare -- \
+  --repo 17602842555/HR \
+  --tunnel 399ce110-a343-43b5-81cd-333f5f86212c \
+  --url https://deep-oa-hr.2445776963.workers.dev \
+  --json
+```
+
+This status command fails closed until required repository secrets are present, the Tunnel is active, and `npm run smoke:cloudflare` can prove both `/api/edge/health` and the backend `/api/health` / `/api/openapi.json` path through the Worker.
+
 Required GitHub repository secrets:
 
 ```bash
