@@ -14,7 +14,11 @@ COPY server ./server
 COPY scripts ./scripts
 COPY oa-dashboard.html ./oa-dashboard.html
 
-RUN chmod +x scripts/docker-api-entrypoint.sh
+RUN mkdir -p /app/storage/files \
+  && chmod +x scripts/docker-api-entrypoint.sh \
+  && chown -R node:node /app
+
+USER node
 
 EXPOSE 8787
 

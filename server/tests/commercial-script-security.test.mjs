@@ -24,6 +24,15 @@ test("commercial CI evidence artifacts are private by default", () => {
   assert.match(script, /chmod 600 "\$\{COMMERCIAL_EVIDENCE_DIR\}\/ready\.json"/);
 });
 
+test("API production image runs as non-root with writable storage path", () => {
+  const dockerfile = readScript("Dockerfile.api");
+
+  assert.match(dockerfile, /mkdir -p \/app\/storage\/files/);
+  assert.match(dockerfile, /chown -R node:node \/app/);
+  assert.match(dockerfile, /USER node/);
+  assert.match(dockerfile, /CMD \["sh", "scripts\/docker-api-entrypoint\.sh"\]/);
+});
+
 test("commercial drill evidence artifacts are private by default", () => {
   const script = readScript("scripts/commercial-drill.sh");
 

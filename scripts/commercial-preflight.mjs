@@ -285,6 +285,14 @@ function checkDeploymentArtifacts() {
     "replace-with-a-long-random-secret-before-deployment"
   ].forEach((needle) => assertNotIncludes(productionCompose, needle, "docker-compose.prod.yml"));
 
+  const apiDockerfile = readText("Dockerfile.api");
+  [
+    "mkdir -p /app/storage/files",
+    "chown -R node:node /app",
+    "USER node",
+    "CMD [\"sh\", \"scripts/docker-api-entrypoint.sh\"]"
+  ].forEach((needle) => assertIncludes(apiDockerfile, needle, "Dockerfile.api"));
+
   const webDockerfile = readText("Dockerfile.web");
   [
     "ARG VITE_REQUIRE_API=1",
