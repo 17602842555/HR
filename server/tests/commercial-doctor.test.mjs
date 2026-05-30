@@ -424,3 +424,29 @@ test("commercial doctor reports Docker as the hard drill blocker", () => {
   assert.equal(report.readiness.hardBlockers.some((item) => item.name === "docker"), true);
   assert.equal(report.readiness.nextSteps.some((step) => step.includes("Docker Desktop")), true);
 });
+
+test("commercial doctor accepts validated GitHub drill evidence when local Docker is unavailable", () => {
+  const report = buildCommercialDoctorReport({
+    tools: {
+      ...okTools,
+      docker: { ok: false, output: "command not found" },
+      drillEvidence: {
+        ok: true,
+        summaryPath: "/project/commercial-evidence/latest-drill-summary.json",
+        errors: [],
+        warnings: []
+      }
+    },
+    network: {
+      apiOpen: false,
+      postgresOpen: false,
+      webOpen: false
+    }
+  });
+
+  assert.equal(check(report, "docker").level, "warn");
+  assert.equal(check(report, "docker-drill-evidence").level, "pass");
+  assert.equal(report.failures, 0);
+  assert.equal(report.readiness.canRunDockerDrill, true);
+  assert.equal(report.readiness.hardBlockers.some((item) => item.name === "docker"), false);
+});

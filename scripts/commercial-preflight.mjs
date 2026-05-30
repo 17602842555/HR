@@ -134,6 +134,7 @@ function checkPackageScripts() {
     "doctor:cloudflare",
     "doctor:commercial",
     "evidence:commercial",
+    "evidence:github-drill",
     "gap:report",
     "prepare:production-env",
     "audit:readiness",
@@ -219,6 +220,7 @@ function checkDeploymentArtifacts() {
     "scripts/export-openapi.mjs",
     "scripts/generate-sbom.mjs",
     "scripts/generate-signoff-drafts.mjs",
+    "scripts/github-drill-evidence.mjs",
     "scripts/local-postgres.mjs",
     "scripts/local-api-service.mjs",
     "scripts/materialize-release-inputs.mjs",
@@ -244,6 +246,7 @@ function checkDeploymentArtifacts() {
     "server/tests/cloudflare-secrets.test.mjs",
     "server/tests/cloudflare-worker.test.mjs",
     "server/tests/commercial-script-security.test.mjs",
+    "server/tests/github-drill-evidence.test.mjs",
     "server/tests/local-postgres.test.mjs",
     "server/tests/local-api-service.test.mjs",
     "server/tests/materialize-release-inputs.test.mjs",
@@ -820,6 +823,7 @@ function checkDeploymentArtifacts() {
     ".local-postgres/.env.local-postgres",
     "COMMERCIAL_DEV_MANIFEST",
     "resolvePostgresBinaries",
+    "validateCommercialDrillEvidence",
     "commercial-dev-stack",
     "apiHealth",
     "webHealth",
@@ -847,6 +851,8 @@ function checkDeploymentArtifacts() {
     "Database integrity",
     "postgresTarget",
     "local-postgres-bootstrap",
+    "docker-drill-evidence",
+    "evidence:github-drill",
     "nextSteps",
     "Vite is listening",
     "no OA API listener",
@@ -869,7 +875,8 @@ function checkDeploymentArtifacts() {
     "commercial dev blocked manifest is actionable and contains no database secret",
     "commercial dev manifests redact local project and home paths",
     "commercial dev manifest writer uses private mode and redacts path and database password text",
-    "commercial doctor reports Docker as the hard drill blocker"
+    "commercial doctor reports Docker as the hard drill blocker",
+    "commercial doctor accepts validated GitHub drill evidence when local Docker is unavailable"
   ].forEach((needle) => assertIncludes(doctorTests, needle, "server/tests/commercial-doctor.test.mjs"));
 
   const devCommercialCore = readText("scripts/dev-commercial-core.mjs");
@@ -1267,6 +1274,7 @@ function checkKnownGapRegister() {
 function checkCommercialEvidenceAutomation() {
   const pkg = readJson("package.json");
   assertIncludes(pkg.scripts["evidence:commercial"], "scripts/commercial-evidence.mjs", "package.json evidence:commercial script");
+  assertIncludes(pkg.scripts["evidence:github-drill"], "scripts/github-drill-evidence.mjs", "package.json evidence:github-drill script");
   assertIncludes(pkg.scripts["audit:evidence-permissions"], "scripts/validate-evidence-permissions.mjs", "package.json audit:evidence-permissions script");
 
   const evidence = readText("scripts/commercial-evidence.mjs");
@@ -1298,6 +1306,7 @@ function checkCommercialEvidenceAutomation() {
     "scripts/commercial-doctor.mjs",
     "scripts/commercial-preflight.mjs",
     "scripts/commercial-gap-report.mjs",
+    "scripts/github-drill-evidence.mjs",
     "scripts/validate-migrations.mjs",
     "scripts/validate-supply-chain.mjs",
     "scripts/commercial-readiness-audit.mjs",
@@ -1415,7 +1424,9 @@ function checkCommercialEvidenceAutomation() {
   const deployment = readText("docs/DEPLOYMENT.md");
   [
     "npm run evidence:commercial",
+    "npm run evidence:github-drill",
     "reports/commercial-evidence/latest.json",
+    "latest-github-drill-evidence.json",
     "--strict-readiness",
     "npm run audit:evidence-permissions",
     "evidence-permissions"

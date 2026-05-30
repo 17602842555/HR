@@ -13,6 +13,7 @@ import {
   selectPostgresTarget
 } from "./commercial-doctor-core.mjs";
 import { resolvePostgresBinaries } from "./local-postgres.mjs";
+import { validateCommercialDrillEvidence } from "./validate-drill-evidence.mjs";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 
@@ -177,6 +178,7 @@ const docker = commandCheck("docker", ["--version"]);
 const psql = commandCheck("psql", ["--version"]);
 
 const pgDump = commandCheck("pg_dump", ["--version"]);
+const drillEvidence = validateCommercialDrillEvidence(undefined, { rootDir: root });
 const localPostgresBinaries = resolvePostgresBinaries(process.env);
 const localPostgres = {
   ok: localPostgresBinaries.missing.length === 0,
@@ -219,6 +221,7 @@ const report = buildCommercialDoctorReport({
   tools: {
     node,
     docker,
+    drillEvidence,
     localPostgres,
     psql,
     pgDump

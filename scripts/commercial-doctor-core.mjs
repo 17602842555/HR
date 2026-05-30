@@ -164,6 +164,7 @@ function unique(values) {
 function buildReadinessSummary(checks) {
   const byName = new Map(checks.map((item) => [item.name, item]));
   const checkLevel = (name) => byName.get(name)?.level || "warn";
+  const hasDockerPath = checkLevel("docker") === "pass" || checkLevel("docker-drill-evidence") === "pass";
   const hardBlockers = checks
     .filter((item) => item.level === "fail")
     .map((item) => ({ name: item.name, message: item.message }));
@@ -175,7 +176,7 @@ function buildReadinessSummary(checks) {
     .map((item) => item.details?.hint));
 
   return {
-    canRunDockerDrill: checkLevel("node") === "pass" && checkLevel("docker") === "pass" && hardBlockers.length === 0,
+    canRunDockerDrill: checkLevel("node") === "pass" && hasDockerPath && hardBlockers.length === 0,
     canReachPostgres: checkLevel("postgres-tcp") === "pass",
     canVerifyDatabaseIntegrity: checkLevel("database-append-only-triggers") === "pass",
     canRunApiSmoke: checkLevel("api-port") === "pass",
@@ -205,9 +206,39 @@ export function buildCommercialDoctorReport({
   checks.push(status(levelFromTool(true, node), "node", node.output));
 
   const docker = tools.docker || { ok: false, output: "command not checked" };
-  checks.push(status(levelFromTool(true, docker), "docker", docker.ok ? docker.output : "Docker CLI is required for docker-compose commercial drill.", {
-    hint: docker.ok ? "" : "Install/start Docker Desktop, then rerun npm run drill:commercial."
-  }));
+  const drillEvidence = tools.drillEvidence || null;
+  const hasValidatedDrillEvidence = drillEvidence?.ok === true;
+  checks.push(status(
+    docker.ok ? "pass" : hasValidatedDrillEvidence ? "warn" : "fail",
+    "docker",
+    docker.ok
+      ? docker.output
+      : hasValidatedDrillEvidence
+        ? "Docker CLI is not available locally, but validated commercial drill evidence is present."
+        : "Docker CLI is required for docker-compose commercial drill.",
+    {
+      hint: docker.ok || hasValidatedDrillEvidence
+        ? ""
+        : "Install/start Docker Desktop, run npm run drill:commercial, or fetch validated GitHub drill evidence with npm run evidence:github-drill -- --promote --json."
+    }
+  ));
+
+  if (drillEvidence) {
+    checks.push(status(
+      drillEvidence.ok ? "pass" : "warn",
+      "docker-drill-evidence",
+      drillEvidence.ok
+        ? "Validated commercial Docker backup/restore drill evidence is available."
+        : "Commercial Docker backup/restore drill evidence is not available or not valid.",
+      {
+        errors: drillEvidence.errors || [],
+        summaryPath: drillEvidence.summaryPath || "",
+        hint: drillEvidence.ok
+          ? ""
+          : "Run npm run drill:commercial locally, or run the commercial-drill GitHub workflow and fetch it with npm run evidence:github-drill -- --promote --json."
+      }
+    ));
+  }
 
   const psql = tools.psql || { ok: false, output: "command not checked" };
   checks.push(status(levelFromTool(false, psql), "psql", psql.ok ? psql.output : "psql is useful for local database inspection but not required when using Docker exec."));
