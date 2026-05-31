@@ -1,0 +1,68 @@
+name: Cloudflare Prune Accounts
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DELETE_NON_ADMIN_ACCOUNTS to delete every non-admin account"
+        required: true
+        type: string
+      database_name:
+        description: "D1 database name"
+        required: true
+        default: "deep-oa-hr"
+        type: string
+      keep_admin_login:
+        description: "Optional admin login that must still exist before pruning"
+        required: false
+        default: ""
+        type: string
+      revoke_pending_activations:
+        description: "Revoke pending employee activation codes"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      dry_run:
+        description: "Preview only, do not write D1"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+jobs:
+  prune-accounts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Prune non-admin accounts
+        run: >
+          node scripts/prune-cloudflare-non-admin-accounts.mjs
+          --database "${{ inputs.database_name }}"
+          --confirm "${{ inputs.confirm }}"
+          --keep-login "${{ inputs.keep_admin_login }}"
+          --revoke-pending-activations "${{ inputs.revoke_pending_activations }}"
+          --dry-run "${{ inputs.dry_run }}"
