@@ -333,12 +333,18 @@ function checkDeploymentArtifacts() {
   assertNotIncludes(cloudflareCompose, "ports:", "docker-compose.cloudflare.yml");
 
   const apiDockerfile = readText("Dockerfile.api");
+  const apiEntrypoint = readText("scripts/docker-api-entrypoint.sh");
   [
     "mkdir -p /app/storage/files",
     "chown -R node:node /app",
     "USER node",
     "CMD [\"sh\", \"scripts/docker-api-entrypoint.sh\"]"
   ].forEach((needle) => assertIncludes(apiDockerfile, needle, "Dockerfile.api"));
+  [
+    "Validating Prisma migration lock...",
+    "npm run validate:migrations",
+    "npm run db:deploy"
+  ].forEach((needle) => assertIncludes(apiEntrypoint, needle, "scripts/docker-api-entrypoint.sh"));
 
   const webDockerfile = readText("Dockerfile.web");
   [

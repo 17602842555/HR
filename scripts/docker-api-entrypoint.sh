@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+echo "Validating Prisma migration lock..."
+npm run validate:migrations
+
 echo "Running database migrations..."
 npm run db:deploy
 
