@@ -144,6 +144,7 @@ function checkPackageScripts() {
     "backup:postgres",
     "dossier:commercial",
     "prune:backups",
+    "release:github",
     "release:gate",
     "restore:postgres",
     "restore:files",
@@ -226,6 +227,7 @@ function checkDeploymentArtifacts() {
     "scripts/generate-sbom.mjs",
     "scripts/generate-signoff-drafts.mjs",
     "scripts/github-drill-evidence.mjs",
+    "scripts/github-release-orchestrator.mjs",
     "scripts/github-signoff-evidence.mjs",
     "scripts/local-postgres.mjs",
     "scripts/local-api-service.mjs",
@@ -255,6 +257,7 @@ function checkDeploymentArtifacts() {
     "server/tests/cloudflare-worker.test.mjs",
     "server/tests/commercial-script-security.test.mjs",
     "server/tests/github-drill-evidence.test.mjs",
+    "server/tests/github-release-orchestrator.test.mjs",
     "server/tests/github-signoff-evidence.test.mjs",
     "server/tests/local-postgres.test.mjs",
     "server/tests/local-api-service.test.mjs",
@@ -1339,6 +1342,7 @@ function checkCommercialEvidenceAutomation() {
   assertIncludes(pkg.scripts["evidence:commercial"], "scripts/commercial-evidence.mjs", "package.json evidence:commercial script");
   assertIncludes(pkg.scripts["evidence:github-drill"], "scripts/github-drill-evidence.mjs", "package.json evidence:github-drill script");
   assertIncludes(pkg.scripts["evidence:github-signoff"], "scripts/github-signoff-evidence.mjs", "package.json evidence:github-signoff script");
+  assertIncludes(pkg.scripts["release:github"], "scripts/github-release-orchestrator.mjs", "package.json release:github script");
   assertIncludes(pkg.scripts["audit:evidence-permissions"], "scripts/validate-evidence-permissions.mjs", "package.json audit:evidence-permissions script");
 
   const evidence = readText("scripts/commercial-evidence.mjs");
@@ -1371,6 +1375,7 @@ function checkCommercialEvidenceAutomation() {
     "scripts/commercial-preflight.mjs",
     "scripts/commercial-gap-report.mjs",
     "scripts/github-drill-evidence.mjs",
+    "scripts/github-release-orchestrator.mjs",
     "scripts/github-signoff-evidence.mjs",
     "scripts/validate-migrations.mjs",
     "scripts/validate-supply-chain.mjs",
@@ -1390,6 +1395,7 @@ function checkCommercialEvidenceAutomation() {
     "reports/commercial-evidence/production-env-prep/latest-manifest.json",
     "reports/commercial-evidence/signoff-drafts/latest-manifest.json",
     "reports/commercial-evidence/latest-github-signoff-evidence.json",
+    "reports/commercial-evidence/github-release-orchestration/latest-manifest.json",
     "reports/commercial-evidence/signoff-validation/release-inputs.json",
     "reports/commercial-evidence/signoff-validation/production-env.json",
     "reports/commercial-evidence/signoff-validation/cloudflare-backend.json",
@@ -1474,6 +1480,35 @@ function checkCommercialEvidenceAutomation() {
     "GitHub signoff evidence fetch downloads validates promotes and enforces current SHA"
   ].forEach((needle) => assertIncludes(githubSignoffEvidenceTests, needle, "server/tests/github-signoff-evidence.test.mjs"));
 
+  const githubReleaseOrchestrator = readText("scripts/github-release-orchestrator.mjs");
+  [
+    "parseGithubReleaseArgs",
+    "runGithubReleaseOrchestration",
+    "buildGithubReleasePlan",
+    "requiredBackendRepositorySecrets",
+    "requiredReleaseEnvironmentSecrets",
+    "commercial-signoff.yml",
+    "commercial-drill.yml",
+    "cloudflare-deploy.yml",
+    "target_environment",
+    "run_release_evidence",
+    "require_deploy",
+    "evidence:github-signoff",
+    "evidence:github-drill",
+    "--require-current-sha",
+    "github-release-orchestration",
+    "Release orchestration prerequisites are not complete"
+  ].forEach((needle) => assertIncludes(githubReleaseOrchestrator, needle, "scripts/github-release-orchestrator.mjs"));
+
+  const githubReleaseOrchestratorTests = readText("server/tests/github-release-orchestrator.test.mjs");
+  [
+    "GitHub release orchestrator parser defaults to dry-run production release plan",
+    "GitHub release plan blocks missing repository and environment secrets",
+    "GitHub release dry-run writes a private manifest and does not trigger workflows",
+    "GitHub release apply fails closed before workflow triggers when secrets are missing",
+    "GitHub release apply can trigger all workflows without waiting"
+  ].forEach((needle) => assertIncludes(githubReleaseOrchestratorTests, needle, "server/tests/github-release-orchestrator.test.mjs"));
+
   const evidencePermissions = readText("scripts/validate-evidence-permissions.mjs");
   [
     "auditEvidencePermissions",
@@ -1481,6 +1516,7 @@ function checkCommercialEvidenceAutomation() {
     "requiredEvidenceFiles",
     "optionalEvidenceFiles",
     "latest-github-signoff-evidence.json",
+    "github-release-orchestration/latest-manifest.json",
     "latest-owner-handoff-manifest.json",
     "hr-data-review/latest-manifest.json",
     "production-env-prep/latest-manifest.json",
@@ -1528,9 +1564,11 @@ function checkCommercialEvidenceAutomation() {
     "npm run evidence:commercial",
     "npm run evidence:github-drill",
     "npm run evidence:github-signoff",
+    "npm run release:github",
     "reports/commercial-evidence/latest.json",
     "latest-github-drill-evidence.json",
     "latest-github-signoff-evidence.json",
+    "github-release-orchestration/latest-manifest.json",
     "--strict-readiness",
     "npm run audit:evidence-permissions",
     "evidence-permissions"

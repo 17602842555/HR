@@ -234,6 +234,15 @@ npm run evidence:github-signoff -- --promote --require-current-sha --json
 
 The first command downloads and validates `commercial-signoff-validation` under `reports/commercial-evidence/github-signoff-artifact/`, then writes `reports/commercial-evidence/latest-github-signoff-evidence.json`. The `--promote` form copies only the six validator JSON files into `reports/commercial-evidence/signoff-validation/` so the normal commercial evidence checks can use them. The script rejects missing JSON files, any validator result without `ok:true`, stale workflow SHAs, accidental `.env.production` uploads, and plaintext secret-like content such as `JWT_SECRET=` or bearer tokens.
 
+GitHub release orchestration:
+
+```bash
+npm run release:github -- --json
+npm run release:github -- --apply --json
+```
+
+The default command is a dry-run production release plan. It inspects GitHub repository secret names and the selected GitHub environment secret names only, writes `reports/commercial-evidence/github-release-orchestration/latest-manifest.json` with private `0600` permissions, and lists any missing backend or release-input secret names without reading secret values. With `--apply`, it fails closed until every required repository secret (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `API_ORIGIN`, `CLOUDFLARE_DEPLOYMENT_URL`, `CLOUDFLARE_TUNNEL_TOKEN`, `CLOUDFLARE_BACKEND_WEB_ORIGIN`) and environment secret (`PRODUCTION_ENV_B64`, `PRODUCTION_SECRETS_SIGNOFF_B64`, `HR_DATA_SIGNOFF_B64`, `FILE_STORAGE_SIGNOFF_B64`) is configured. Once ready, it triggers `commercial-signoff`, `commercial-drill`, and `cloudflare-deploy` with `require_deploy=true`, waits for those runs by default, and promotes GitHub signoff/drill artifacts back into the local evidence workspace with `--require-current-sha`. Use `--no-wait` only when an operator wants to trigger the workflows now and inspect/fetch evidence later. This orchestration is an operational wrapper; release acceptance still requires the full evidence package and `npm run release:gate -- reports/commercial-evidence/latest.json --json`.
+
 Local commercial development stack with port collision avoidance:
 
 ```bash
