@@ -32,6 +32,84 @@ function isAdminAccount(user = {}) {
   return Array.isArray(user.roleCodes) && user.roleCodes.includes("admin");
 }
 
+function isActiveEmployeeStatus(status) {
+  return ["ACTIVE", "在职"].includes(String(status || "ACTIVE"));
+}
+
+function publicAccountUserRecord(user = {}, iam = {}) {
+  const roles = Array.isArray(iam.roles) ? iam.roles : [];
+  const roleCodes = Array.isArray(user.roleCodes) ? user.roleCodes : [];
+  const roleObjects = roleCodes
+    .map((code) => roles.find((role) => role.code === code))
+    .filter(Boolean)
+    .map((role) => ({
+      code: role.code,
+      id: role.id,
+      name: role.name
+    }));
+
+  return {
+    email: user.email || "",
+    employee: user.employee || null,
+    id: user.id,
+    mustChangePassword: Boolean(user.mustChangePassword),
+    name: user.name || "",
+    roleCodes,
+    roles: roleObjects,
+    status: user.status || "ACTIVE"
+  };
+}
+
+function buildAccountLibrary(people = {}, iam = {}) {
+  const users = Array.isArray(iam.users) ? iam.users : [];
+  const roles = Array.isArray(iam.roles) ? iam.roles : [];
+  const accountByEmployeeId = new Map(users
+    .filter((user) => user.employee?.id)
+    .map((user) => [user.employee.id, user]));
+  const accounts = (people.employees || []).map((employee) => {
+    const employeeId = employee.id || `employee-${employee.employeeNo || employee.seq || employee.name}`;
+    const user = accountByEmployeeId.get(employeeId)
+      || users.find((item) => item.name === employee.name && item.employee?.name === employee.name)
+      || null;
+    const roleCodes = Array.isArray(user?.roleCodes) ? user.roleCodes : [];
+    const roleNames = roleCodes
+      .map((code) => roles.find((role) => role.code === code)?.name)
+      .filter(Boolean);
+    return {
+      account: user ? publicAccountUserRecord(user, iam) : null,
+      accountEmail: user?.email || "",
+      accountId: user?.id || null,
+      accountMustChangePassword: Boolean(user?.mustChangePassword),
+      accountStatus: user?.status || "UNASSIGNED",
+      department: employee.department || "",
+      email: employee.email || "",
+      employeeId,
+      employeeName: employee.name,
+      employeeNo: employee.employeeNo || employee.seq || "-",
+      employeeStatus: employee.status || "在职",
+      id: employeeId,
+      roleCodes,
+      roleNames,
+      roleTitle: employee.roleTitle || employee.role || ""
+    };
+  });
+  const activeAccounts = accounts.filter((item) => isActiveEmployeeStatus(item.employeeStatus));
+  const assignedAccounts = accounts.filter((item) => item.accountId);
+  const activeAssignedAccounts = activeAccounts.filter((item) => item.accountId);
+  return {
+    accounts,
+    accountStats: {
+      activeAssignedAccounts: activeAssignedAccounts.length,
+      activeEmployees: activeAccounts.length,
+      assignedAccounts: assignedAccounts.length,
+      coverageRate: activeAccounts.length ? Math.round((activeAssignedAccounts.length / activeAccounts.length) * 100) : 100,
+      disabledAccounts: assignedAccounts.filter((item) => item.accountStatus === "DISABLED").length,
+      missingAccounts: activeAccounts.length - activeAssignedAccounts.length,
+      totalEmployees: accounts.length
+    }
+  };
+}
+
 function resolveDatabaseId(databaseName) {
   const direct = process.env.CLOUDFLARE_D1_DATABASE_ID || argValue("--database-id", "");
   if (direct) return direct;
@@ -131,6 +209,10 @@ function pruneAccounts(state, { keepLogin = "", revokePendingActivations = true 
   }
 
   recomputeRoleCounts(state.iam);
+  state.iam = {
+    ...(state.iam || {}),
+    ...buildAccountLibrary(state.people || { employees: [] }, state.iam || { roles: [], users: [] })
+  };
   return {
     keptAdminCount: adminUsers.length,
     removedUserCount: removedUsers.length,

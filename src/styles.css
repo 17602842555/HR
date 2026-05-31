@@ -1996,6 +1996,20 @@ dd {
   gap: 10px;
 }
 
+.missing-account-details {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.missing-account-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
 .password-reset-row {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto;

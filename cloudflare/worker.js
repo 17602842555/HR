@@ -1734,6 +1734,10 @@ async function loadState(env) {
   if (row?.value) {
     const state = JSON.parse(row.value);
     const seededApproversAdded = ensureSeededApprovalUsers(state);
+    state.iam = {
+      ...(state.iam || {}),
+      ...buildAccountLibrary(state.people || { employees: [] }, state.iam || { roles: [], users: [] })
+    };
     state.systemReadiness = makeReadiness("d1");
     await ensureAuditLogIntegrity(state.auditLogs || []);
     state.auditIntegrity = await makeAuditIntegrity(state.auditLogs || []);

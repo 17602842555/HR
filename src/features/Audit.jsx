@@ -74,20 +74,24 @@ function fallbackAccountLibrary(people = {}, iam = {}) {
       roleNames: user?.roles?.map((role) => role.name).filter(Boolean) || []
     };
   });
+  return {
+    accounts,
+    accountStats: accountStatsFromRows(accounts)
+  };
+}
+
+function accountStatsFromRows(accounts = []) {
   const activeAccounts = accounts.filter((item) => isActiveEmployeeStatus(item.employeeStatus));
   const assignedAccounts = accounts.filter((item) => item.accountId);
   const activeAssignedAccounts = activeAccounts.filter((item) => item.accountId);
   return {
-    accounts,
-    accountStats: {
-      totalEmployees: accounts.length,
-      activeEmployees: activeAccounts.length,
-      assignedAccounts: assignedAccounts.length,
-      activeAssignedAccounts: activeAssignedAccounts.length,
-      missingAccounts: activeAccounts.length - activeAssignedAccounts.length,
-      disabledAccounts: assignedAccounts.filter((item) => item.accountStatus === "DISABLED").length,
-      coverageRate: activeAccounts.length ? Math.round((activeAssignedAccounts.length / activeAccounts.length) * 100) : 100
-    }
+    totalEmployees: accounts.length,
+    activeEmployees: activeAccounts.length,
+    assignedAccounts: assignedAccounts.length,
+    activeAssignedAccounts: activeAssignedAccounts.length,
+    missingAccounts: activeAccounts.length - activeAssignedAccounts.length,
+    disabledAccounts: assignedAccounts.filter((item) => item.accountStatus === "DISABLED").length,
+    coverageRate: activeAccounts.length ? Math.round((activeAssignedAccounts.length / activeAccounts.length) * 100) : 100
   };
 }
 
@@ -146,8 +150,25 @@ export function Audit({ actions, state }) {
     }
     return fallbackAccountLibrary(state.people, iam);
   }, [iam, state.people]);
-  const accountRows = accountLibrary.accounts || [];
-  const accountStats = accountLibrary.accountStats || {};
+  const validUserIds = useMemo(() => new Set((iam.users || []).map((user) => user.id).filter(Boolean)), [iam.users]);
+  const accountRows = useMemo(() => (accountLibrary.accounts || []).map((row) => {
+    if (!row.accountId || validUserIds.has(row.accountId)) return row;
+    return {
+      ...row,
+      account: null,
+      accountEmail: "",
+      accountId: null,
+      accountMustChangePassword: false,
+      accountStatus: "UNASSIGNED",
+      roleCodes: [],
+      roleNames: []
+    };
+  }), [accountLibrary.accounts, validUserIds]);
+  const assignedAccountRows = useMemo(() => accountRows.filter((row) => row.accountId), [accountRows]);
+  const missingAccountRows = useMemo(() => (
+    accountRows.filter((row) => !row.accountId && isActiveEmployeeStatus(row.employeeStatus))
+  ), [accountRows]);
+  const accountStats = useMemo(() => accountStatsFromRows(accountRows), [accountRows]);
   const files = state.files || [];
   const exportRecords = state.exportRecords || [];
   const auditIntegrity = state.auditIntegrity || {
@@ -924,7 +945,13 @@ export function Audit({ actions, state }) {
             <DataTable columns={activationColumns} rows={activationResults} rowKey={(row) => row.id} />
           </div>
         ) : null}
-        <DataTable columns={accountColumns} empty="暂无员工账号数据" rows={accountRows} rowKey={(row) => row.employeeId} />
+        <DataTable columns={accountColumns} empty="暂无已开通员工账号" rows={assignedAccountRows} rowKey={(row) => row.employeeId} />
+        {missingAccountRows.length ? (
+          <details className="missing-account-details">
+            <summary>查看未开户注册员工（{missingAccountRows.length}）</summary>
+            <DataTable columns={accountColumns} rows={missingAccountRows} rowKey={(row) => row.employeeId} />
+          </details>
+        ) : null}
       </Panel>
       <Panel title="账号角色分配" actions={<span className="soft-text">账号角色变更会刷新后端权限判定</span>}>
         <form className="account-create-form" onSubmit={submitAccountCreate}>
