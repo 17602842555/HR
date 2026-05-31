@@ -86,6 +86,19 @@ async function transferFirstPendingApproval(token, approvalId) {
   const source = node?.decisions?.find((item) => item.status === "待审批");
   assert(source, "Approval has no pending source approver to transfer", { approvalId, node });
   const target = `商业转交审批人-${Date.now()}`;
+  const targetUser = await request("/api/iam/users", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: {
+      email: `smoke-transfer-${Date.now()}@oa.local`,
+      mustChangePassword: false,
+      name: target,
+      newPassword: "SmokePass12345",
+      roleCodes: ["department-manager"],
+      status: "ACTIVE"
+    }
+  });
+  assert(targetUser.user?.id, "Transfer target approver account was not created", targetUser);
 
   await request(`/api/approvals/${encodeURIComponent(approvalId)}/transfer`, {
     method: "POST",
@@ -757,11 +770,30 @@ async function main() {
     "Deleted approval rule still returned",
     rulesAfterDelete
   );
+  const runtimeApprovalRule = await request("/api/approvals/rules", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: {
+      department: `商业冒烟流程部门-${Date.now()}`,
+      templateId: "expense",
+      templateName: "费用报销",
+      nodes: [
+        { id: "manager", name: "部门负责人会签", approvers: ["商业主管A", "商业主管B"] },
+        { id: "finance", name: "财务复核", approvers: ["财务负责人", "出纳"] }
+      ]
+    }
+  });
+  assert(
+    runtimeApprovalRule.nodes?.every((node) => node.approverUsers?.every((user) => user.userId)),
+    "Runtime approval rule did not bind every approver to an account",
+    runtimeApprovalRule
+  );
   evidence.approvalRules = {
     total: rules.approvalRules.length,
     boundApproverAccounts: smokeApproverUsers.length,
     coverageCells: ruleCoverage.approvalRuleCoverage?.summary?.totalCells || 0,
-    crud: "create-preview-disable-delete-ok"
+    crud: "create-preview-disable-delete-ok",
+    runtimeRuleId: runtimeApprovalRule.id
   };
 
   const definitions = await request("/api/approvals/definitions", { headers: authHeaders(token) });
@@ -920,7 +952,7 @@ async function main() {
     body: {
       definitionId: "expense",
       title: `商业冒烟撤回审批 ${Date.now()}`,
-      department: rules.approvalRules[0].department,
+      department: runtimeApprovalRule.department,
       formData: {
         expenseType: "办公采购",
         amount: "64",
@@ -949,7 +981,7 @@ async function main() {
       definitionId: "expense",
       title: approvalTitle,
       applicant: "张三",
-      department: rules.approvalRules[0].department,
+      department: runtimeApprovalRule.department,
       formData: {
         expenseType: "办公采购",
         amount: "128",
@@ -967,7 +999,7 @@ async function main() {
       definitionId: "expense",
       title: "不应创建的重复费用报销",
       applicant: "张三",
-      department: rules.approvalRules[0].department,
+      department: runtimeApprovalRule.department,
       formData: {
         expenseType: "重复提交",
         amount: "9999",
