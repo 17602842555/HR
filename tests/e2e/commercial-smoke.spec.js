@@ -8,10 +8,15 @@ const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "admin123456";
 
 async function loginIfBackendRequired(page) {
   const loginTitle = page.getByText("商业版后台登录");
-  const mainNav = page.getByRole("navigation", { name: "主导航" });
+  const apiReady = page.locator(".api-status").filter({ hasText: "后端已连接" });
 
-  if (await mainNav.isVisible({ timeout: 5000 }).catch(() => false)) {
-    await expect(page.locator(".api-status")).toContainText("后端已连接");
+  const firstVisibleState = await Promise.race([
+    apiReady.waitFor({ state: "visible", timeout: 10000 }).then(() => "ready"),
+    loginTitle.waitFor({ state: "visible", timeout: 10000 }).then(() => "login")
+  ]).catch(() => null);
+
+  if (firstVisibleState === "ready") {
+    await expect(page.getByRole("navigation", { name: "主导航" })).toBeVisible();
     return;
   }
 
@@ -21,7 +26,7 @@ async function loginIfBackendRequired(page) {
   await page.getByLabel("邮箱").fill(adminEmail);
   await page.getByLabel("密码").fill(adminPassword);
   await page.getByRole("button", { name: /登录系统/ }).click();
-  await expect(mainNav).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "主导航" })).toBeVisible();
   await expect(page.locator(".api-status")).toContainText("后端已连接");
 }
 
