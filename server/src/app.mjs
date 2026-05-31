@@ -25,7 +25,6 @@ import { registerWorkflowRoutes } from "./modules/workflow/workflow-routes.mjs";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const FIRST_LOGIN_ALLOWED_PATHS = new Set([
-  "/api/auth/change-password",
   "/api/auth/complete-first-login",
   "/api/auth/logout",
   "/api/auth/me"

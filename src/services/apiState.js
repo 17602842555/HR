@@ -75,6 +75,64 @@ export function normalizeCurrentUser(payload) {
   };
 }
 
+function emptyPeopleState(fallbackPeople = {}) {
+  return {
+    ...fallbackPeople,
+    departmentStats: [],
+    employees: [],
+    femaleEmployees: [],
+    inactiveEmployees: [],
+    leaverDepartmentStats: [],
+    leavers: [],
+    monthLeavers: [],
+    orgStats: []
+  };
+}
+
+function emptyIamState(fallbackIam = {}) {
+  return {
+    ...fallbackIam,
+    accountStats: {
+      activeAssignedAccounts: 0,
+      activeEmployees: 0,
+      assignedAccounts: 0,
+      coverageRate: 0,
+      disabledAccounts: 0,
+      missingAccounts: 0,
+      totalEmployees: 0
+    },
+    accounts: [],
+    roles: [],
+    users: []
+  };
+}
+
+export function apiRequiredBaselineState(fallbackState = {}) {
+  return {
+    ...fallbackState,
+    analytics: null,
+    approvalRuleCoverage: null,
+    approvalRules: [],
+    approvals: [],
+    assetEvents: [],
+    assets: [],
+    attendanceRecords: [],
+    auditLogs: [],
+    exportRecords: [],
+    files: [],
+    financeRequests: [],
+    iam: emptyIamState(fallbackState.iam),
+    importRuns: [],
+    leaves: [],
+    payrolls: [],
+    people: emptyPeopleState(fallbackState.people),
+    resourceBookings: [],
+    resources: [],
+    systemReadiness: fallbackState.systemReadiness || {},
+    workflowDefinitions: []
+  };
+}
+
 export function normalizePeoplePayload(payload, fallbackPeople) {
   const people = pickObject(payload, ["people", "overview"]) || {};
   const employees = pickArray(payload, ["employees"]) || pickArray(people, ["employees"]);

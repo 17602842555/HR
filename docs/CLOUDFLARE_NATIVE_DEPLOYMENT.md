@@ -10,6 +10,7 @@ Create these in `Settings -> Secrets and variables -> Actions -> Repository secr
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | A Cloudflare API token with Workers Scripts edit/deploy permission for this account. |
 | `CLOUDFLARE_ACCOUNT_ID` | The 32-character Cloudflare account id. |
+| `CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD` | A strong temporary bootstrap password for `admin@oa.local`; do not use `admin123456`, `changeme`, or other placeholders. The admin account is forced through first-login setup by default. |
 | `CLOUDFLARE_DEPLOYMENT_URL` | The Worker public URL, for example `https://deep-oa-hr.2445776963.workers.dev`. |
 
 Do not add `API_ORIGIN` for scheme C. The Worker runs the API directly.
@@ -35,7 +36,7 @@ The Worker allows credentialed API calls from `https://17602842555.github.io`, s
 ## First Deploy
 
 1. Push to `main`, or run the `Deploy HR OA to Cloudflare` GitHub Action manually.
-2. The Cloudflare workflow runs `npm run build`, deploys with `wrangler deploy`, then smokes:
+2. The Cloudflare workflow writes `CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD` to the Worker with `wrangler secret put`, runs `npm run build`, deploys with `wrangler deploy`, then smokes:
 
 ```bash
 npm run smoke:cloudflare -- --url https://deep-oa-hr.2445776963.workers.dev --json
@@ -75,4 +76,4 @@ Because this project currently has no custom domain, validate the live deploymen
 npm run doctor:cloudflare -- --repo 17602842555/HR --url https://deep-oa-hr.2445776963.workers.dev --json
 ```
 
-This should pass with the three repository secrets required for scheme C: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_DEPLOYMENT_URL`. Tunnel-only checks are not required unless a future custom domain and Cloudflare Tunnel are introduced.
+This should pass with the four repository secrets required for scheme C: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD`, and `CLOUDFLARE_DEPLOYMENT_URL`. Tunnel-only checks are not required unless a future custom domain and Cloudflare Tunnel are introduced.

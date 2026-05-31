@@ -4745,6 +4745,18 @@ test("iam employee account library sync creates one account per active employee 
   assert.equal(blockedBeforeSetup.statusCode, 403);
   assert.equal(blockedBeforeSetup.json().error, "first_login_required");
 
+  const passwordOnlyBypass = await app.inject({
+    method: "POST",
+    url: "/api/auth/change-password",
+    headers: { authorization: `Bearer ${firstLoginToken}` },
+    payload: {
+      currentPassword: credential.temporaryPassword,
+      newPassword: "PasswordOnlyBypass123"
+    }
+  });
+  assert.equal(passwordOnlyBypass.statusCode, 403);
+  assert.equal(passwordOnlyBypass.json().error, "first_login_required");
+
   const completedSetup = await app.inject({
     method: "POST",
     url: "/api/auth/complete-first-login",

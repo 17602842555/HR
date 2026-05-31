@@ -120,11 +120,15 @@ test("cloudflare deploy workflow verifies native Worker API after deploy", () =>
   assert.match(wrangler, /\[vars\]/);
   assert.match(wrangler, /OA_API_MODE = "native"/);
   assert.match(workflow, /CLOUDFLARE_DEPLOYMENT_URL/);
+  assert.match(workflow, /CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD/);
+  assert.match(workflow, /ADMIN_BOOTSTRAP_READY/);
   assert.match(workflow, /require_deploy:/);
   assert.match(workflow, /REQUIRE_CLOUDFLARE_DEPLOY/);
   assert.match(workflow, /Require Cloudflare deployment configuration/);
   assert.match(workflow, /Cloudflare deployment was explicitly required/);
   assert.match(workflow, /Use require_deploy=false only for a build-only workflow dry run/);
+  assert.match(workflow, /Configure Worker bootstrap admin secret/);
+  assert.match(workflow, /wrangler secret put CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD/);
   assert.match(workflow, /npm run smoke:cloudflare -- --url "\$CLOUDFLARE_DEPLOYMENT_URL" --json/);
   assert.match(workflow, /DEPLOYMENT_URL_READY/);
   assert.doesNotMatch(workflow, /actions\/upload-artifact@/);

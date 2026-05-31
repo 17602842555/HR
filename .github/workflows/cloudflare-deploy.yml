@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_READY: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+      ADMIN_BOOTSTRAP_READY: ${{ secrets.CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD != '' }}
       DEPLOYMENT_URL_READY: ${{ secrets.CLOUDFLARE_DEPLOYMENT_URL != '' || vars.CLOUDFLARE_DEPLOYMENT_URL != '' }}
       REQUIRE_CLOUDFLARE_DEPLOY: ${{ github.event_name == 'workflow_dispatch' && inputs.require_deploy }}
       CLOUDFLARE_DEPLOYMENT_URL: ${{ secrets.CLOUDFLARE_DEPLOYMENT_URL || vars.CLOUDFLARE_DEPLOYMENT_URL }}
@@ -46,15 +47,29 @@ jobs:
           VITE_DEMO_FALLBACK: "0"
 
       - name: Require Cloudflare deployment configuration
-        if: ${{ env.REQUIRE_CLOUDFLARE_DEPLOY == 'true' && (env.CLOUDFLARE_READY != 'true' || env.DEPLOYMENT_URL_READY != 'true') }}
+        if: ${{ env.REQUIRE_CLOUDFLARE_DEPLOY == 'true' && (env.CLOUDFLARE_READY != 'true' || env.ADMIN_BOOTSTRAP_READY != 'true' || env.DEPLOYMENT_URL_READY != 'true') }}
         run: |
           echo "::error::Cloudflare deployment was explicitly required, but one or more required repository secrets or variables are missing."
-          echo "Required: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_DEPLOYMENT_URL."
+          echo "Required: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD, and CLOUDFLARE_DEPLOYMENT_URL."
           echo "Use require_deploy=false only for a build-only workflow dry run."
           exit 1
 
+      - name: Configure Worker bootstrap admin secret
+        if: ${{ env.CLOUDFLARE_READY == 'true' && env.ADMIN_BOOTSTRAP_READY == 'true' }}
+        run: |
+          set -euo pipefail
+          if [ "$CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD" = "admin123456" ]; then
+            echo "::error::CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD must not use the old demo default."
+            exit 1
+          fi
+          printf '%s' "$CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD" | npx wrangler secret put CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD }}
+
       - name: Deploy Worker with assets and native API
-        if: ${{ env.CLOUDFLARE_READY == 'true' }}
+        if: ${{ env.CLOUDFLARE_READY == 'true' && env.ADMIN_BOOTSTRAP_READY == 'true' }}
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -62,7 +77,7 @@ jobs:
           command: deploy
 
       - name: Smoke deployed backend gateway
-        if: ${{ env.CLOUDFLARE_READY == 'true' && env.DEPLOYMENT_URL_READY == 'true' }}
+        if: ${{ env.CLOUDFLARE_READY == 'true' && env.ADMIN_BOOTSTRAP_READY == 'true' && env.DEPLOYMENT_URL_READY == 'true' }}
         run: npm run smoke:cloudflare -- --url "$CLOUDFLARE_DEPLOYMENT_URL" --json
 
       - name: Cloudflare smoke URL not configured
@@ -74,3 +89,9 @@ jobs:
         run: |
           echo "Cloudflare deploy skipped."
           echo "Configure CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_DEPLOYMENT_URL repository secrets or variables, then rerun this workflow."
+
+      - name: Cloudflare bootstrap admin secret not configured
+        if: ${{ env.CLOUDFLARE_READY == 'true' && env.ADMIN_BOOTSTRAP_READY != 'true' }}
+        run: |
+          echo "Cloudflare deploy skipped."
+          echo "Configure CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD as a repository secret, then rerun this workflow."

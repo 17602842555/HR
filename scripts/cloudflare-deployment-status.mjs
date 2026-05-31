@@ -8,6 +8,7 @@ const defaultBackendServiceUrl = "http://api:8787";
 export const requiredNativeCloudflareGithubSecrets = Object.freeze([
   "CLOUDFLARE_API_TOKEN",
   "CLOUDFLARE_ACCOUNT_ID",
+  "CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD",
   "CLOUDFLARE_DEPLOYMENT_URL"
 ]);
 

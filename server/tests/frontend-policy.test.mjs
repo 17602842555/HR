@@ -103,11 +103,17 @@ test("commercial web image build forces API-required frontend output", () => {
   const dockerfile = readText("Dockerfile.web");
   const compose = readText("docker-compose.yml");
   const storage = readText("src/services/storage.js");
+  const dashboardSource = readText("src/data/dashboardSource.js");
+  const viteConfig = readText("vite.config.js");
 
   assert.match(dockerfile, /ARG VITE_REQUIRE_API=1/);
   assert.match(dockerfile, /ARG VITE_DEMO_FALLBACK=0/);
   assert.match(dockerfile, /ENV VITE_REQUIRE_API=\$\{VITE_REQUIRE_API\}/);
   assert.match(dockerfile, /ENV VITE_DEMO_FALLBACK=\$\{VITE_DEMO_FALLBACK\}/);
+  assert.doesNotMatch(dashboardSource, /oa-dashboard\.html\?raw/);
+  assert.match(dashboardSource, /__LOCAL_DASHBOARD_HTML__/);
+  assert.match(viteConfig, /VITE_REQUIRE_API/);
+  assert.match(viteConfig, /__LOCAL_DASHBOARD_HTML__/);
   assert.match(compose, /VITE_REQUIRE_API:\s+"1"/);
   assert.match(compose, /VITE_DEMO_FALLBACK:\s+"0"/);
   assert.match(storage, /localStatePersistenceAllowed/);

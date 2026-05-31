@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mergeApiState, normalizeApiStatePayload } from "../../src/services/apiState.js";
+import { apiRequiredBaselineState, mergeApiState, normalizeApiStatePayload } from "../../src/services/apiState.js";
 
 const fallbackState = {
   auditIntegrity: {
@@ -54,4 +54,28 @@ test("frontend API state merges audit integrity with audit domain override guard
   const locallyOverridden = mergeApiState(fallbackState, apiState, new Set(["audit"]));
   assert.equal(locallyOverridden.auditIntegrity.ok, false);
   assert.equal(locallyOverridden.auditLogs.length, 0);
+});
+
+test("frontend API-required baseline strips local HR and business demo records", () => {
+  const baseline = apiRequiredBaselineState({
+    approvals: [{ id: "local-approval" }],
+    people: {
+      employees: [{ id: "local-employee" }],
+      femaleEmployees: [{ id: "local-female" }],
+      leavers: [{ id: "local-leaver" }],
+      monthLeavers: [{ id: "local-month-leaver" }]
+    },
+    iam: {
+      permissions: [{ code: "employee.read" }],
+      roles: [{ code: "admin" }],
+      users: [{ id: "local-user" }]
+    }
+  });
+
+  assert.deepEqual(baseline.people.employees, []);
+  assert.deepEqual(baseline.people.leavers, []);
+  assert.deepEqual(baseline.approvals, []);
+  assert.deepEqual(baseline.iam.roles, []);
+  assert.deepEqual(baseline.iam.users, []);
+  assert.deepEqual(baseline.iam.permissions, [{ code: "employee.read" }]);
 });

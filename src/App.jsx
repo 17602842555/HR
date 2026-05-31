@@ -138,10 +138,11 @@ function AssetForm({ actions, onClose }) {
 }
 
 function LoginScreen({ apiStatus, auth }) {
+  const showDemoCredentials = import.meta.env.DEV && import.meta.env.VITE_REQUIRE_API !== "1";
   const [form, setForm] = useState({
     tenantCode: "default",
-    email: "admin@oa.local",
-    password: "admin123456"
+    email: showDemoCredentials ? "admin@oa.local" : "",
+    password: showDemoCredentials ? "admin123456" : ""
   });
   const [error, setError] = useState(apiStatus.error || "");
 
@@ -172,7 +173,7 @@ function LoginScreen({ apiStatus, auth }) {
           <label>密码
             <input type="password" value={form.password} autoComplete="current-password" onChange={(event) => setForm({ ...form, password: event.target.value })} />
           </label>
-          {error ? <p className="login-error">{error}</p> : <p className="login-hint">默认演示账号来自 seed，生产环境请替换初始密码和 JWT 密钥。</p>}
+          {error ? <p className="login-error">{error}</p> : <p className="login-hint">{showDemoCredentials ? "本地演示账号来自 seed，生产环境不会预填账号密码。" : "请输入管理员分配的账号；生产环境不会预填默认密码。"}</p>}
           <button className="primary" type="submit" disabled={auth.busy}>
             <LockKeyhole size={16} /> {auth.busy ? "登录中" : "登录系统"}
           </button>

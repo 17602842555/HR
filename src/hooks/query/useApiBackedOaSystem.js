@@ -15,7 +15,7 @@ import * as resourceApi from "../../api/resources.js";
 import * as systemApi from "../../api/system.js";
 import { apiUnavailableStatus, resolveApiPolicy } from "../../config/apiPolicy.mjs";
 import { apiActionErrorStatus, canFallbackToLocalAction } from "../../services/apiFallbackPolicy.mjs";
-import { fallbackUser, mergeApiState, normalizeApiStatePayload, normalizeCurrentUser } from "../../services/apiState.js";
+import { apiRequiredBaselineState, fallbackUser, mergeApiState, normalizeApiStatePayload, normalizeCurrentUser } from "../../services/apiState.js";
 import { useOaSystem } from "../useOaSystem.js";
 
 const DOMAIN_LOADERS = {
@@ -166,6 +166,9 @@ function assetActionForStatus(status) {
 export function useApiBackedOaSystem() {
   const fallback = useOaSystem();
   const apiPolicy = useMemo(() => resolveApiPolicy(import.meta.env), []);
+  const baselineState = useMemo(() => (
+    apiPolicy.requireApi ? apiRequiredBaselineState(fallback.state) : fallback.state
+  ), [apiPolicy.requireApi, fallback.state]);
   const [apiState, setApiState] = useState(null);
   const [currentUser, setCurrentUser] = useState(() => fallbackUser());
   const [authBusy, setAuthBusy] = useState(false);
@@ -193,7 +196,7 @@ export function useApiBackedOaSystem() {
           setApiStatus({ error: "请先完成首次登录设置", mode: "first_login_required", source: "api" });
           return;
         }
-        const domainResult = await fetchDomainState(fallback.state, domainsForUser(user));
+        const domainResult = await fetchDomainState(baselineState, domainsForUser(user));
         if (cancelled) return;
         setCurrentUser(user);
         setApiState(domainResult.state);
@@ -218,7 +221,7 @@ export function useApiBackedOaSystem() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [baselineState]);
 
   const markLocalOverride = useCallback((domains) => {
     setLocalOverrideDomains((current) => {
@@ -229,7 +232,7 @@ export function useApiBackedOaSystem() {
   }, []);
 
   const reloadDomains = useCallback(async (domains) => {
-    const result = await fetchDomainState(fallback.state, domains);
+    const result = await fetchDomainState(baselineState, domains);
     const loadedKeys = Object.keys(result.state);
     if (loadedKeys.length > 0) {
       setApiState((current) => ({ ...(current || {}), ...result.state }));
@@ -245,11 +248,11 @@ export function useApiBackedOaSystem() {
       });
     }
     return result;
-  }, [fallback.state]);
+  }, [baselineState]);
 
   const state = useMemo(
-    () => mergeApiState(fallback.state, apiState, localOverrideDomains),
-    [apiState, fallback.state, localOverrideDomains]
+    () => mergeApiState(baselineState, apiState, localOverrideDomains),
+    [apiState, baselineState, localOverrideDomains]
   );
   const metrics = useMemo(() => calculateMetrics(state), [state]);
   const shouldUseApi = apiStatus.source !== "mock" && !["api_required", "fallback", "first_login_required", "unauthenticated"].includes(apiStatus.mode);
@@ -269,7 +272,7 @@ export function useApiBackedOaSystem() {
           setApiStatus({ error: "请先完成首次登录设置", mode: "first_login_required", source: "api" });
           return { ok: true, firstLoginRequired: true };
         }
-        const domainResult = await fetchDomainState(fallback.state, domainsForUser(user));
+        const domainResult = await fetchDomainState(baselineState, domainsForUser(user));
         setCurrentUser(user);
         setApiState(domainResult.state);
         setLocalOverrideDomains(new Set());
@@ -314,7 +317,7 @@ export function useApiBackedOaSystem() {
       try {
         const session = await authApi.completeFirstLogin(payload);
         const user = normalizeCurrentUser(session);
-        const domainResult = await fetchDomainState(fallback.state, domainsForUser(user));
+        const domainResult = await fetchDomainState(baselineState, domainsForUser(user));
         setCurrentUser(user);
         setApiState(domainResult.state);
         setLocalOverrideDomains(new Set());
@@ -345,7 +348,7 @@ export function useApiBackedOaSystem() {
         setAuthBusy(false);
       }
     }
-  }), [apiPolicy, apiStatus.mode, authBusy, fallback.state, reloadDomains, shouldUseApi]);
+  }), [apiPolicy, apiStatus.mode, authBusy, baselineState, reloadDomains, shouldUseApi]);
 
   const actions = useMemo(() => {
     const localOnly = (domains, localAction) => (...args) => {
@@ -394,7 +397,7 @@ export function useApiBackedOaSystem() {
             auditLogs: auditPayload,
             auditIntegrity: auditIntegrityPayload,
             people: peoplePayload
-          }, fallback.state);
+          }, baselineState);
           setApiState((current) => ({
             ...(current || {}),
             ...nextState,
@@ -698,7 +701,7 @@ export function useApiBackedOaSystem() {
         fallback.actions.withdrawApproval
       )
     };
-  }, [apiPolicy.allowDemoFallback, apiPolicy.requireApi, currentUserName, fallback.actions, markLocalOverride, reloadDomains, shouldUseApi, state.revealSensitive]);
+  }, [apiPolicy.allowDemoFallback, apiPolicy.requireApi, baselineState, currentUserName, fallback.actions, markLocalOverride, reloadDomains, shouldUseApi, state.revealSensitive]);
 
   return {
     actions,

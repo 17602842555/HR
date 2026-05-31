@@ -24,6 +24,24 @@ function passingEvidence(overrides = {}) {
     { id: "evidence-permissions", required: true, exitCode: 0 },
     { id: "production-env", required: false, exitCode: 0 },
     { id: "cloudflare-backend", required: false, exitCode: 0 },
+    {
+      id: "cloudflare-deployment",
+      required: false,
+      exitCode: 0,
+      parsedJson: {
+        deploymentMode: "native-worker",
+        summary: {
+          d1PersistenceReady: true,
+          nativeWorkerReady: true
+        }
+      }
+    },
+    {
+      id: "no-domain-public",
+      required: false,
+      exitCode: 0,
+      parsedJson: { ok: true }
+    },
     { id: "secrets-signoff", required: false, exitCode: 0 },
     { id: "hr-signoff", required: false, exitCode: 0 },
     { id: "storage-signoff", required: false, exitCode: 0 },
@@ -59,8 +77,10 @@ function passingEvidence(overrides = {}) {
       productionRuntime: true,
       signoffChecks: {
         cloudflareBackend: true,
+        cloudflareDeployment: true,
         drillEvidence: true,
         hr: true,
+        noDomainPublic: true,
         productionEnv: true,
         secrets: true,
         storage: true
@@ -98,11 +118,46 @@ test("commercial release gate passes fully green release evidence", () => {
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.failures, []);
-  assert.equal(result.summary.checkCount, 20);
+  assert.equal(result.summary.checkCount, 22);
   assert.equal(result.summary.openGapCount, 0);
   assert.equal(result.summary.evidenceMode, "full");
   assert.equal(result.summary.maxEvidenceAgeHours, 24);
   assert.equal(result.summary.evidenceAgeHours, 1);
+});
+
+test("commercial release gate accepts native Worker D1 release evidence without PostgreSQL target", () => {
+  const evidence = passingEvidence({
+    targetProfile: {
+      ...passingEvidence().targetProfile,
+      backendMode: "native-worker",
+      apiBaseUrl: "https://deep-oa-hr.2445776963.workers.dev/api",
+      database: {
+        configured: true,
+        d1Configured: true,
+        isLocal: false,
+        source: "cloudflare-worker-d1",
+        target: "cloudflare-d1"
+      },
+      signoffChecks: {
+        ...passingEvidence().targetProfile.signoffChecks,
+        cloudflareDeployment: true,
+        noDomainPublic: true
+      }
+    },
+    checks: passingEvidence().checks.filter((check) => !["production-env", "cloudflare-backend", "doctor"].includes(check.id)),
+    summary: {
+      ok: true,
+      readiness: null
+    }
+  });
+  const result = releaseGate(evidence);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.failures, []);
+  assert(result.summary.requiredChecks.includes("cloudflare-deployment"));
+  assert(result.summary.requiredChecks.includes("no-domain-public"));
+  assert.equal(result.summary.requiredChecks.includes("production-env"), false);
+  assert.equal(result.summary.requiredChecks.includes("doctor"), false);
 });
 
 test("commercial release gate blocks quick or missing evidence mode", () => {
@@ -184,6 +239,8 @@ test("commercial release gate blocks open gaps doctor blockers and missing e2e",
       { id: "evidence-permissions", required: true, exitCode: 0 },
       { id: "production-env", required: false, exitCode: 0 },
       { id: "cloudflare-backend", required: false, exitCode: 0 },
+      { id: "cloudflare-deployment", required: false, exitCode: 0, parsedJson: { deploymentMode: "native-worker", summary: { d1PersistenceReady: true, nativeWorkerReady: true } } },
+      { id: "no-domain-public", required: false, exitCode: 0, parsedJson: { ok: true } },
       { id: "secrets-signoff", required: false, exitCode: 0 },
       { id: "hr-signoff", required: false, exitCode: 0 },
       { id: "storage-signoff", required: false, exitCode: 0 },

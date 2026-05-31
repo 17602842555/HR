@@ -59,6 +59,8 @@ function evidence(overrides = {}) {
     checks: [
       { id: "preflight", required: true, exitCode: 0, command: "node scripts/commercial-preflight.mjs" },
       { id: "production-env", required: false, exitCode: 1, command: "npm run validate:production-env -- .env.production --json" },
+      { id: "cloudflare-deployment", required: false, exitCode: 1, command: "npm run doctor:cloudflare -- --repo 17602842555/HR --url https://deep-oa-hr.2445776963.workers.dev --json" },
+      { id: "no-domain-public", required: false, exitCode: 1, command: "npm run smoke:no-domain-public -- --json" },
       { id: "secrets-signoff", required: false, exitCode: 1, command: "npm run validate:secrets-signoff -- --json" },
       { id: "hr-signoff", required: false, exitCode: 1, command: "npm run validate:hr-signoff -- --json" },
       { id: "storage-signoff", required: false, exitCode: 1, command: "npm run validate:storage-signoff -- --json" },
@@ -133,12 +135,12 @@ test("commercial gap report groups release blockers by owner with commands", () 
   assert.equal(report.targetProfile.database.target, "local-postgresql");
   assert.equal(report.targetProfile.database.source, "local-postgres-env");
   assert.equal("host" in report.targetProfile.database, false);
-	  assert(report.owners.some((owner) => (
-	    owner.owner === "Security lead"
-	    && owner.validationCommands.includes("npm run validate:production-env -- .env.production --json")
-	    && owner.validationCommands.includes("npm run validate:cloudflare-backend -- --env .env.production --json")
-	    && owner.validationCommands.some((command) => command.includes("validate:secrets-signoff"))
-	  )));
+  assert(report.owners.some((owner) => (
+    owner.owner === "Security lead"
+    && owner.validationCommands.includes("npm run smoke:cloudflare -- --url https://deep-oa-hr.2445776963.workers.dev --json")
+    && owner.validationCommands.includes("npm run doctor:cloudflare -- --repo 17602842555/HR --url https://deep-oa-hr.2445776963.workers.dev --json")
+    && owner.validationCommands.includes("npm run smoke:no-domain-public -- --json")
+  )));
   assert(report.gaps.find((gap) => gap.id === "GAP-004").validationCommands.includes("npm run restore:files -- <file-storage-backup.tar.gz> --yes"));
 });
 
@@ -200,7 +202,7 @@ test("commercial gap report writes private timestamped and latest artifacts", as
     assert.deepEqual(manifest.warningChecks.map((check) => check.id), ["production-env", "doctor"]);
     const securityFile = written.ownerHandoff.ownerFiles.find((file) => file.owner === "Security lead");
     const securityText = await readFile(securityFile.path, "utf8");
-    assert.match(securityText, /validate:secrets-signoff/);
+    assert.match(securityText, /smoke:no-domain-public/);
     assert.match(securityText, /Current Target Profile/);
     assert.match(securityText, /VITE_REQUIRE_API=1, VITE_DEMO_FALLBACK=0/);
   } finally {

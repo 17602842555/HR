@@ -9,6 +9,8 @@ function greenChecks() {
     { id: "contract", required: true, exitCode: 0 },
     { id: "production-env", required: false, exitCode: 0 },
     { id: "cloudflare-backend", required: false, exitCode: 0 },
+    { id: "cloudflare-deployment", required: false, exitCode: 0 },
+    { id: "no-domain-public", required: false, exitCode: 0 },
     { id: "secrets-signoff", required: false, exitCode: 0 },
     { id: "hr-signoff", required: false, exitCode: 0 },
     { id: "storage-signoff", required: false, exitCode: 0 },
@@ -78,13 +80,13 @@ test("commercial readiness audit blocks open gaps even when evidence is green", 
 test("commercial readiness audit blocks closed gaps with failing evidence", () => {
   const result = auditCommercialReadiness(greenEvidence({
     checks: greenChecks().map((check) => (
-      check.id === "secrets-signoff" ? { ...check, exitCode: 1 } : check
+      check.id === "no-domain-public" ? { ...check, exitCode: 1 } : check
     ))
   }));
 
   assert.equal(result.ok, false);
   assert(result.failures.some((failure) => failure.includes("GAP-003")));
-  assert(result.failures.some((failure) => failure.includes("secrets-signoff exitCode=1")));
+  assert(result.failures.some((failure) => failure.includes("no-domain-public exitCode=1")));
   assert(result.failures.some((failure) => failure.includes("marked Closed but closure evidence is not green")));
 });
 

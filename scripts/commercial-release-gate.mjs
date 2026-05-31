@@ -16,6 +16,8 @@ const baseRequiredChecks = [
   "evidence-permissions",
   "production-env",
   "cloudflare-backend",
+  "cloudflare-deployment",
+  "no-domain-public",
   "secrets-signoff",
   "hr-signoff",
   "storage-signoff",
@@ -86,14 +88,23 @@ function validateTargetProfile(profile) {
   }
 
   const database = profile.database || {};
-  if (database.configured !== true) {
-    failures.push("Evidence targetProfile.database.configured must be true.");
-  }
-  if (database.isLocal === true) {
-    failures.push("Evidence targetProfile.database.isLocal must be false for release evidence.");
-  }
-  if (!database.host) {
-    failures.push("Evidence targetProfile.database.host is required.");
+  if (profile.backendMode === "native-worker") {
+    if (database.target !== "cloudflare-d1") {
+      failures.push("Evidence targetProfile.database.target must be cloudflare-d1 for native Worker release evidence.");
+    }
+    if (database.d1Configured !== true) {
+      failures.push("Evidence targetProfile.database.d1Configured must be true for native Worker release evidence.");
+    }
+  } else {
+    if (database.configured !== true) {
+      failures.push("Evidence targetProfile.database.configured must be true.");
+    }
+    if (database.isLocal === true) {
+      failures.push("Evidence targetProfile.database.isLocal must be false for release evidence.");
+    }
+    if (!database.host) {
+      failures.push("Evidence targetProfile.database.host is required.");
+    }
   }
 
   if (Array.isArray(profile.warnings) && profile.warnings.length > 0) {
@@ -101,6 +112,22 @@ function validateTargetProfile(profile) {
   }
 
   return { failures, warnings };
+}
+
+function releaseRequiredChecks(profile, requireE2e) {
+  const nativeWorker = profile?.backendMode === "native-worker";
+  const ids = baseRequiredChecks.filter((id) => {
+    if (nativeWorker) return !["production-env", "cloudflare-backend", "doctor"].includes(id);
+    return !["cloudflare-deployment", "no-domain-public"].includes(id);
+  });
+  return requireE2e ? [...ids, "e2e"] : ids;
+}
+
+function releaseBlockingWarningCheck(check, profile) {
+  if (profile?.backendMode === "native-worker") {
+    return !["production-env", "cloudflare-backend", "doctor"].includes(check.id);
+  }
+  return !["cloudflare-deployment", "no-domain-public"].includes(check.id);
 }
 
 export function loadReleaseEvidence(path = defaultEvidencePath) {
@@ -123,8 +150,8 @@ export function evaluateReleaseGate(report, options = {}) {
   const checks = Array.isArray(report?.checks) ? report.checks : [];
   const knownGaps = Array.isArray(report?.knownGaps) ? report.knownGaps : [];
   const checkById = new Map(checks.map((check) => [check.id, check]));
-  const requiredChecks = requireE2e ? [...baseRequiredChecks, "e2e"] : baseRequiredChecks;
   const targetProfileResult = validateTargetProfile(report?.targetProfile);
+  const requiredChecks = releaseRequiredChecks(report?.targetProfile, requireE2e);
 
   if (!report || report.schemaVersion !== 1) {
     failures.push("Evidence report must use schemaVersion 1.");
@@ -155,7 +182,12 @@ export function evaluateReleaseGate(report, options = {}) {
     failures.push(`Required evidence check failed: ${check.id} exitCode=${check.exitCode}.`);
   });
 
-  const warningChecks = checks.filter((check) => !check.required && !check.diagnostic && check.exitCode !== 0);
+  const warningChecks = checks.filter((check) => (
+    !check.required
+    && !check.diagnostic
+    && check.exitCode !== 0
+    && releaseBlockingWarningCheck(check, report?.targetProfile)
+  ));
   warningChecks.forEach((check) => {
     failures.push(`Release cannot proceed while warning check is failing: ${check.id} exitCode=${check.exitCode}.`);
   });
@@ -166,7 +198,19 @@ export function evaluateReleaseGate(report, options = {}) {
   });
 
   const readiness = report?.summary?.readiness;
-  if (!readiness) {
+  if (report?.targetProfile?.backendMode === "native-worker") {
+    const cloudflareDeployment = checkById.get("cloudflare-deployment")?.parsedJson || {};
+    const noDomainPublic = checkById.get("no-domain-public")?.parsedJson || {};
+    if (cloudflareDeployment.summary?.nativeWorkerReady !== true) {
+      failures.push("Cloudflare deployment evidence must report nativeWorkerReady=true.");
+    }
+    if (cloudflareDeployment.summary?.d1PersistenceReady !== true) {
+      failures.push("Cloudflare deployment evidence must report d1PersistenceReady=true.");
+    }
+    if (noDomainPublic.ok !== true) {
+      failures.push("No-domain public smoke evidence must pass.");
+    }
+  } else if (!readiness) {
     failures.push("Doctor readiness summary is required for release.");
   } else {
     readinessFlags.forEach((flag) => {
@@ -187,7 +231,10 @@ export function evaluateReleaseGate(report, options = {}) {
   targetProfileResult.failures.forEach((failure) => failures.push(failure));
   targetProfileResult.warnings.forEach((warning) => warnings.push(warning));
 
-  const readinessAudit = auditCommercialReadiness(report, { requireE2e });
+  const readinessAudit = auditCommercialReadiness(report, {
+    backendMode: report?.targetProfile?.backendMode,
+    requireE2e
+  });
   readinessAudit.failures.forEach((failure) => {
     failures.push(`Readiness audit failed: ${failure}`);
   });

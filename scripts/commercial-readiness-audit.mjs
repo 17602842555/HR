@@ -20,8 +20,8 @@ export const gapClosureRules = Object.freeze({
     readinessFlags: Object.freeze(["canRunDockerDrill"])
   }),
   "GAP-003": Object.freeze({
-    label: "Production secrets, origin, and Cloudflare backend signoff",
-    checks: Object.freeze(["production-env", "cloudflare-backend", "secrets-signoff"]),
+    label: "No-domain GitHub Pages and Cloudflare native Worker/D1 deployment",
+    checks: Object.freeze(["cloudflare-deployment", "no-domain-public"]),
     readinessFlags: Object.freeze([])
   }),
   "GAP-004": Object.freeze({
@@ -70,7 +70,8 @@ function evaluateRuleEvidence({ id, rule, report, options = {} }) {
     evidence.push({ type: "check", id: checkId });
   });
 
-  (rule.readinessFlags || []).forEach((flag) => {
+  const readinessFlags = options.backendMode === "native-worker" ? [] : (rule.readinessFlags || []);
+  readinessFlags.forEach((flag) => {
     if (!readiness) {
       blockers.push(`missing doctor readiness flag: ${flag}`);
       return;

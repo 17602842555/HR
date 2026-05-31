@@ -27,6 +27,8 @@ function evidence(overrides = {}) {
       { id: "preflight", required: true, exitCode: 0, command: "node scripts/commercial-preflight.mjs" },
       { id: "production-env", required: false, exitCode: 1, command: "npm run validate:production-env -- .env.production --json" },
       { id: "cloudflare-backend", required: false, exitCode: 1, command: "npm run validate:cloudflare-backend -- --json" },
+      { id: "cloudflare-deployment", required: false, exitCode: 1, command: "npm run doctor:cloudflare -- --repo 17602842555/HR --url https://deep-oa-hr.2445776963.workers.dev --json" },
+      { id: "no-domain-public", required: false, exitCode: 1, command: "npm run smoke:no-domain-public -- --json" },
       { id: "secrets-signoff", required: false, exitCode: 1, command: "npm run validate:secrets-signoff -- --json" },
       { id: "hr-signoff", required: false, exitCode: 1, command: "npm run validate:hr-signoff -- --json" },
       { id: "storage-signoff", required: false, exitCode: 1, command: "npm run validate:storage-signoff -- --json" },
@@ -42,6 +44,8 @@ function evidence(overrides = {}) {
       warningChecks: [
         { id: "production-env", exitCode: 1 },
         { id: "cloudflare-backend", exitCode: 1 },
+        { id: "cloudflare-deployment", exitCode: 1 },
+        { id: "no-domain-public", exitCode: 1 },
         { id: "doctor", exitCode: 1 }
       ],
       openGaps: ["GAP-001", "GAP-002", "GAP-003", "GAP-004", "GAP-005"],

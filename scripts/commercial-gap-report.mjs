@@ -37,15 +37,14 @@ export const gapActionCatalog = Object.freeze({
   }),
   "GAP-003": Object.freeze({
     primaryActions: Object.freeze([
-      "Create a real .env.production through the approved secret store.",
-      "Provision the Cloudflare Tunnel backend token and production API origin through the same secret-managed release path.",
-      "Replace example secrets/origins and collect Security plus Deployment approvals."
+      "Confirm the GitHub Pages frontend is public at https://17602842555.github.io/HR/ and built with the Cloudflare Worker API base.",
+      "Confirm the workers.dev backend is running native Worker/D1 mode and reports the OA_DB binding as configured.",
+      "Keep API_ORIGIN and Cloudflare Tunnel blank for the no-domain scheme C release; reserve them only for a future custom-domain Tunnel backend."
     ]),
     validationCommands: Object.freeze([
-      "npm run validate:production-env -- .env.production --json",
-      "npm run validate:cloudflare-backend -- --env .env.production --json",
-      "npm run validate:secrets-signoff -- <signoff.json> --env .env.production --json",
-      "npm run doctor:commercial -- --json"
+      "npm run smoke:cloudflare -- --url https://deep-oa-hr.2445776963.workers.dev --json",
+      "npm run doctor:cloudflare -- --repo 17602842555/HR --url https://deep-oa-hr.2445776963.workers.dev --json",
+      "npm run smoke:no-domain-public -- --json"
     ])
   }),
   "GAP-004": Object.freeze({
@@ -108,8 +107,10 @@ function sanitizeTargetProfile(profile) {
   if (!profile || typeof profile !== "object") return null;
   const database = profile.database || {};
   const databaseTarget = database.configured !== true
-    ? "unconfigured"
-    : database.isLocal === true
+    ? database.target === "cloudflare-d1" ? "cloudflare-d1-unconfigured" : "unconfigured"
+    : database.target === "cloudflare-d1"
+      ? "cloudflare-d1"
+      : database.isLocal === true
       ? "local-postgresql"
       : "non-local-postgresql";
   const signoffChecks = profile.signoffChecks && typeof profile.signoffChecks === "object"
@@ -119,6 +120,7 @@ function sanitizeTargetProfile(profile) {
 
   return {
     evidenceClass: profile.evidenceClass || "unknown",
+    backendMode: profile.backendMode || "unknown",
     productionRuntime: profile.productionRuntime === true,
     productionEvidenceReady: profile.productionEvidenceReady === true,
     e2eIncluded: profile.e2eIncluded === true,
@@ -127,12 +129,15 @@ function sanitizeTargetProfile(profile) {
     viteDemoFallback: String(profile.viteDemoFallback || "unset"),
     database: {
       configured: database.configured === true,
+      d1Configured: database.d1Configured === true,
       isLocal: database.isLocal === true,
       source: database.source || "",
       target: databaseTarget
     },
     signoffChecks: {
       cloudflareBackend: signoffChecks.cloudflareBackend === true,
+      cloudflareDeployment: signoffChecks.cloudflareDeployment === true,
+      noDomainPublic: signoffChecks.noDomainPublic === true,
       productionEnv: signoffChecks.productionEnv === true,
       secrets: signoffChecks.secrets === true,
       hr: signoffChecks.hr === true,
@@ -228,6 +233,8 @@ function targetProfileLines(profile) {
   const signoffChecks = profile.signoffChecks || {};
   const signoffText = [
     `cloudflare-backend=${boolText(signoffChecks.cloudflareBackend)}`,
+    `cloudflare-deployment=${boolText(signoffChecks.cloudflareDeployment)}`,
+    `no-domain-public=${boolText(signoffChecks.noDomainPublic)}`,
     `production-env=${boolText(signoffChecks.productionEnv)}`,
     `secrets=${boolText(signoffChecks.secrets)}`,
     `hr=${boolText(signoffChecks.hr)}`,
@@ -237,6 +244,7 @@ function targetProfileLines(profile) {
 
   return [
     `- Evidence class: ${profile.evidenceClass || "unknown"}`,
+    `- Backend mode: ${profile.backendMode || "unknown"}`,
     `- Production runtime: ${boolText(profile.productionRuntime)}`,
     `- Production evidence ready: ${boolText(profile.productionEvidenceReady)}`,
     `- E2E included: ${boolText(profile.e2eIncluded)}`,
@@ -306,7 +314,10 @@ export function buildCommercialGapReport(report, {
   env = process.env,
   requireE2e = true
 } = {}) {
-  const readinessAudit = auditCommercialReadiness(report, { requireE2e });
+  const readinessAudit = auditCommercialReadiness(report, {
+    backendMode: report?.targetProfile?.backendMode,
+    requireE2e
+  });
   const sourceGaps = knownGapMap(report);
   const checks = checkMap(report);
   const gaps = (readinessAudit.gaps || [])

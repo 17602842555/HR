@@ -19,6 +19,8 @@ export const commercialEvidenceChecks = Object.freeze([
   { id: "hr-review-prep", command: "npm", args: ["run", "prepare:hr-review", "--", "--json"], required: true, parseJson: true },
   { id: "production-env", command: "npm", args: ["run", "validate:production-env", "--", ".env.production", "--json"], required: false, allowFailure: true, parseJson: true },
   { id: "cloudflare-backend", command: "npm", args: ["run", "validate:cloudflare-backend", "--", "--json"], required: false, allowFailure: true, parseJson: true },
+  { id: "cloudflare-deployment", command: "npm", args: ["run", "doctor:cloudflare", "--", "--repo", "17602842555/HR", "--url", "https://deep-oa-hr.2445776963.workers.dev", "--json"], required: false, allowFailure: true, parseJson: true },
+  { id: "no-domain-public", command: "npm", args: ["run", "smoke:no-domain-public", "--", "--json"], required: false, allowFailure: true, parseJson: true },
   { id: "secrets-signoff", command: "npm", args: ["run", "validate:secrets-signoff", "--", "--json"], required: false, allowFailure: true, parseJson: true },
   { id: "hr-signoff", command: "npm", args: ["run", "validate:hr-signoff", "--", "--json"], required: false, allowFailure: true, parseJson: true },
   { id: "storage-signoff", command: "npm", args: ["run", "validate:storage-signoff", "--", "--json"], required: false, allowFailure: true, parseJson: true },
@@ -215,28 +217,90 @@ function checkPassed(checks = [], id) {
   return checks.some((check) => check.id === id && check.exitCode === 0);
 }
 
+function checkEntry(checks = [], id) {
+  return checks.find((check) => check.id === id) || null;
+}
+
+function namedCheckPassed(payload, name) {
+  return Array.isArray(payload?.checks)
+    && payload.checks.some((check) => check.name === name && check.level === "pass");
+}
+
+function normalizeProfileBackendMode(value) {
+  const mode = String(value || "").trim().toLowerCase();
+  if (["native", "native-worker", "worker", "cloudflare-native"].includes(mode)) return "native-worker";
+  if (["tunnel", "cloudflare-tunnel", "proxy", "fastify-postgres", "postgres"].includes(mode)) return "fastify-postgres";
+  return "";
+}
+
+function cloudflareDeploymentD1Ready(checks = []) {
+  const check = checkEntry(checks, "cloudflare-deployment");
+  const payload = check?.parsedJson || {};
+  return check?.exitCode === 0
+    && payload.deploymentMode === "native-worker"
+    && payload.summary?.nativeWorkerReady === true
+    && payload.summary?.d1PersistenceReady === true;
+}
+
+function noDomainPublicD1Ready(checks = []) {
+  const check = checkEntry(checks, "no-domain-public");
+  const payload = check?.parsedJson || {};
+  return check?.exitCode === 0
+    && payload.ok === true
+    && namedCheckPassed(payload, "worker-health")
+    && namedCheckPassed(payload, "worker-d1")
+    && namedCheckPassed(payload, "worker-cors");
+}
+
+function isNativeWorkerEvidenceReady(checks = []) {
+  return cloudflareDeploymentD1Ready(checks) || noDomainPublicD1Ready(checks);
+}
+
+function productionEvidenceCheckIds(backendMode) {
+  if (backendMode === "native-worker") {
+    return ["cloudflare-deployment", "no-domain-public", "secrets-signoff", "storage-signoff", "hr-signoff", "drill-evidence"];
+  }
+  return ["production-env", "cloudflare-backend", "secrets-signoff", "storage-signoff", "hr-signoff", "drill-evidence"];
+}
+
 export function buildTargetProfile({
   checks = [],
   env = process.env,
   rootDir = process.cwd()
 } = {}) {
   const targetEnv = effectiveTargetEnv(env, rootDir);
-  const database = resolveTargetDatabase(env, rootDir);
+  const configuredBackendMode = normalizeProfileBackendMode(targetEnv.CLOUDFLARE_BACKEND_MODE || targetEnv.OA_API_MODE);
+  const nativeWorkerEvidenceReady = isNativeWorkerEvidenceReady(checks);
+  const backendMode = nativeWorkerEvidenceReady || configuredBackendMode === "native-worker"
+    ? "native-worker"
+    : "fastify-postgres";
+  const d1Configured = backendMode === "native-worker" && nativeWorkerEvidenceReady;
+  const database = backendMode === "native-worker"
+    ? {
+      configured: d1Configured,
+      d1Configured,
+      isLocal: false,
+      source: "cloudflare-worker-d1",
+      target: "cloudflare-d1"
+    }
+    : resolveTargetDatabase(env, rootDir);
   const appEnv = String(targetEnv.APP_ENV || "").trim() || "";
   const nodeEnv = String(targetEnv.NODE_ENV || "").trim() || "";
   const isProductionRuntime = appEnv === "production" || nodeEnv === "production";
-  const productionEvidenceReady = ["production-env", "cloudflare-backend", "secrets-signoff", "storage-signoff", "hr-signoff", "drill-evidence"]
+  const productionEvidenceReady = productionEvidenceCheckIds(backendMode)
     .every((id) => checkPassed(checks, id));
   const evidenceClass = isProductionRuntime && productionEvidenceReady ? "production-release-evidence" : "local-or-ci-validation";
   const warnings = [];
 
-  if (database.isLocal) warnings.push("DATABASE_URL points at a local PostgreSQL host; this is not production database evidence.");
-  if (!productionEvidenceReady) warnings.push("Production env, Cloudflare backend, signoff, storage, HR, or drill evidence is not fully green.");
+  if (backendMode === "native-worker" && d1Configured !== true) warnings.push("Cloudflare native Worker/D1 persistence evidence is not green.");
+  if (backendMode !== "native-worker" && database.isLocal) warnings.push("DATABASE_URL points at a local PostgreSQL host; this is not production database evidence.");
+  if (!productionEvidenceReady) warnings.push("Production Cloudflare/no-domain, signoff, storage, HR, or drill evidence is not fully green.");
   if (targetEnv.VITE_DEMO_FALLBACK === "1") warnings.push("VITE_DEMO_FALLBACK is enabled; production frontend evidence requires it disabled.");
 
   return {
     appEnv: appEnv || "unset",
     apiBaseUrl: redactEvidenceText(targetEnv.API_BASE_URL || "", { env: targetEnv, rootDir }),
+    backendMode,
     database,
     evidenceClass,
     e2eIncluded: checks.some((check) => check.id === "e2e"),
@@ -245,8 +309,10 @@ export function buildTargetProfile({
     productionRuntime: isProductionRuntime,
     signoffChecks: {
       cloudflareBackend: checkPassed(checks, "cloudflare-backend"),
+      cloudflareDeployment: checkPassed(checks, "cloudflare-deployment"),
       drillEvidence: checkPassed(checks, "drill-evidence"),
       hr: checkPassed(checks, "hr-signoff"),
+      noDomainPublic: checkPassed(checks, "no-domain-public"),
       productionEnv: checkPassed(checks, "production-env"),
       secrets: checkPassed(checks, "secrets-signoff"),
       storage: checkPassed(checks, "storage-signoff")
@@ -286,6 +352,7 @@ export function collectArtifacts(rootDir = process.cwd()) {
     "scripts/github-drill-evidence.mjs",
     "scripts/github-release-orchestrator.mjs",
     "scripts/github-signoff-evidence.mjs",
+    "scripts/no-domain-public-smoke.mjs",
     "scripts/prepare-hr-data-review.mjs",
     "scripts/validate-evidence-permissions.mjs",
     "scripts/validate-file-backup.mjs",
@@ -335,6 +402,7 @@ export function collectArtifacts(rootDir = process.cwd()) {
     ".github/workflows/commercial-drill.yml",
     ".github/workflows/commercial-signoff.yml",
     ".github/workflows/cloudflare-deploy.yml",
+    ".github/workflows/github-pages.yml",
     "cloudflare/worker.js",
     "docker-compose.cloudflare.yml",
     "wrangler.toml",
@@ -394,14 +462,23 @@ export function runCheck(check, { cwd = process.cwd(), env = process.env } = {})
   };
 }
 
+function releaseBlockingWarningCheck(check, targetProfile) {
+  if (targetProfile?.backendMode === "native-worker") {
+    return !["production-env", "cloudflare-backend", "doctor"].includes(check.id);
+  }
+  return !["cloudflare-deployment", "no-domain-public"].includes(check.id);
+}
+
 export function summarizeEvidence(report) {
   const requiredFailed = report.checks.filter((check) => check.required && check.exitCode !== 0);
   const warningChecks = report.checks.filter((check) => !check.required && !check.diagnostic && check.exitCode !== 0);
+  const targetProfile = report.targetProfile || null;
+  const releaseWarningChecks = warningChecks.filter((check) => releaseBlockingWarningCheck(check, targetProfile));
   const diagnosticChecks = report.checks.filter((check) => check.diagnostic);
   const openGaps = report.knownGaps.filter((gap) => gap.status === "Open");
   const doctor = report.checks.find((check) => check.id === "doctor")?.parsedJson || null;
   const e2eCheck = report.checks.find((check) => check.id === "e2e") || null;
-  const targetProfile = report.targetProfile || null;
+  const nativeWorkerRelease = targetProfile?.backendMode === "native-worker";
   const readiness = doctor?.readiness || null;
   const releaseBlockers = [];
 
@@ -409,10 +486,20 @@ export function summarizeEvidence(report) {
   if (!e2eCheck) releaseBlockers.push("E2E evidence is missing.");
   if (e2eCheck && e2eCheck.exitCode !== 0) releaseBlockers.push(`E2E evidence failed: exitCode=${e2eCheck.exitCode}.`);
   requiredFailed.forEach((check) => releaseBlockers.push(`Required check failed: ${check.id} exitCode=${check.exitCode}.`));
-  warningChecks.forEach((check) => releaseBlockers.push(`Release-blocking warning check failed: ${check.id} exitCode=${check.exitCode}.`));
+  releaseWarningChecks.forEach((check) => releaseBlockers.push(`Release-blocking warning check failed: ${check.id} exitCode=${check.exitCode}.`));
   openGaps.forEach((gap) => releaseBlockers.push(`Known commercial gap remains open: ${gap.id}.`));
 
-  if (readiness) {
+  if (nativeWorkerRelease) {
+    if (!checkPassed(report.checks, "cloudflare-deployment")) {
+      releaseBlockers.push("Cloudflare deployment status evidence is missing or failed.");
+    }
+    if (!checkPassed(report.checks, "no-domain-public")) {
+      releaseBlockers.push("No-domain GitHub Pages to Worker public smoke evidence is missing or failed.");
+    }
+    if (targetProfile.database?.target !== "cloudflare-d1" || targetProfile.database?.d1Configured !== true) {
+      releaseBlockers.push("Cloudflare D1 persistence evidence is not green.");
+    }
+  } else if (readiness) {
     [
       "canRunDockerDrill",
       "canReachPostgres",
@@ -439,8 +526,13 @@ export function summarizeEvidence(report) {
     if (targetProfile.productionEvidenceReady !== true) releaseBlockers.push("Production signoff/drill evidence is not fully green.");
     if (targetProfile.viteRequireApi !== "1") releaseBlockers.push("Frontend is not in API-required mode.");
     if (targetProfile.viteDemoFallback !== "0") releaseBlockers.push("Frontend demo fallback is not disabled.");
-    if (targetProfile.database?.configured !== true) releaseBlockers.push("Target database is not configured.");
-    if (targetProfile.database?.isLocal === true) releaseBlockers.push("Target database is local PostgreSQL, not production evidence.");
+    if (nativeWorkerRelease) {
+      if (targetProfile.database?.target !== "cloudflare-d1") releaseBlockers.push("Target database must be Cloudflare D1 for native Worker release evidence.");
+      if (targetProfile.database?.d1Configured !== true) releaseBlockers.push("Target Cloudflare D1 database is not configured.");
+    } else {
+      if (targetProfile.database?.configured !== true) releaseBlockers.push("Target database is not configured.");
+      if (targetProfile.database?.isLocal === true) releaseBlockers.push("Target database is local PostgreSQL, not production evidence.");
+    }
   }
 
   return {

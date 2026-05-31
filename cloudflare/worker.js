@@ -198,6 +198,32 @@ function validNewPassword(input) {
   return value.length >= 12 && /[A-Za-z]/.test(value) && /\d/.test(value);
 }
 
+function configuredBootstrapAdminPassword(env = {}) {
+  return String(env.CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD || env.WORKER_ADMIN_PASSWORD || env.DEFAULT_ADMIN_PASSWORD || "").trim();
+}
+
+function validBootstrapAdminPassword(env = {}) {
+  const password = configuredBootstrapAdminPassword(env);
+  if (!validNewPassword(password)) return "";
+  if (password === "admin123456" || /changeme|change-me|placeholder|example|replace-with|todo/i.test(password)) return "";
+  return password;
+}
+
+async function ensureBootstrapAdmin(state, env = {}) {
+  const admin = state?.iam?.users?.find((user) => normalizeLoginEmail(user.email) === "admin@oa.local");
+  if (!admin) return { adminReady: false, changed: false, configured: false };
+  if (admin.passwordHash) return { adminReady: true, changed: false, configured: true };
+
+  const bootstrapPassword = validBootstrapAdminPassword(env);
+  if (!bootstrapPassword) return { adminReady: false, changed: false, configured: false };
+
+  admin.passwordHash = await nativePasswordHash(bootstrapPassword);
+  admin.mustChangePassword = String(env.CLOUDFLARE_BOOTSTRAP_ADMIN_FORCE_CHANGE || "1") !== "0";
+  admin.sessionVersion = Number(admin.sessionVersion || 0) + 1;
+  admin.status = "ACTIVE";
+  return { adminReady: true, changed: true, configured: true };
+}
+
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value && typeof value === "object") {
@@ -1723,6 +1749,8 @@ async function handleNativeApi(request, env) {
   const pathname = url.pathname.replace(/^\/api/, "") || "/";
   const segments = pathname.split("/").filter(Boolean);
   const state = await loadState(env);
+  const bootstrapAdmin = await ensureBootstrapAdmin(state, env);
+  if (bootstrapAdmin.changed) await saveState(env, state);
   const method = request.method.toUpperCase();
 
   if (pathname === "/edge/health") {
@@ -1749,13 +1777,15 @@ async function handleNativeApi(request, env) {
   }
 
   if (pathname === "/ready") {
+    const storageReady = Boolean(env.OA_DB);
     return json({
       checks: {
+        adminBootstrap: bootstrapAdmin.adminReady ? "pass" : "fail",
         api: "pass",
-        database: env.OA_DB ? "d1" : "memory-preview",
+        database: storageReady ? "d1" : "memory-preview",
         seedData: nativeSeedData.counts
       },
-      ok: true,
+      ok: storageReady && bootstrapAdmin.adminReady,
       service: "deep-oa-cloudflare-api"
     });
   }
@@ -1774,7 +1804,7 @@ async function handleNativeApi(request, env) {
     const user = state.iam.users.find((item) => normalizeLoginEmail(item.email) === email);
     const validPassword = user?.passwordHash
       ? await verifyNativePassword(String(body.password || ""), user.passwordHash)
-      : email === "admin@oa.local" && body.password === "admin123456";
+      : false;
     if (!user || user.status !== "ACTIVE" || !validPassword) {
       return json({ code: "INVALID_CREDENTIALS", message: "账号或密码错误。", ok: false }, { status: 401 });
 	    }
@@ -1792,7 +1822,7 @@ async function handleNativeApi(request, env) {
     if (pathname === "/auth/me") return unauthorized();
     if (pathname !== "/auth/logout") return unauthorized();
   }
-  const firstLoginAllowed = ["/auth/change-password", "/auth/complete-first-login", "/auth/logout", "/auth/me"];
+  const firstLoginAllowed = ["/auth/complete-first-login", "/auth/logout", "/auth/me"];
   if (actor?.mustChangePassword && !firstLoginAllowed.includes(pathname)) {
     return json({
       code: "FIRST_LOGIN_REQUIRED",
@@ -1828,7 +1858,7 @@ async function handleNativeApi(request, env) {
     const body = await readJson(request);
     const validCurrent = actor.passwordHash
       ? await verifyNativePassword(String(body.currentPassword || ""), actor.passwordHash)
-      : actor.email === "admin@oa.local" && body.currentPassword === "admin123456";
+      : false;
 	    if (!validCurrent) {
 	      return json({ code: "CURRENT_PASSWORD_INVALID", message: "当前密码不正确。", ok: false }, { status: 401 });
 	    }

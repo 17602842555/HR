@@ -1,4 +1,4 @@
-import dashboardHtml from "../../oa-dashboard.html?raw";
+const dashboardHtml = typeof __LOCAL_DASHBOARD_HTML__ === "string" ? __LOCAL_DASHBOARD_HTML__ : "";
 
 const personColumns = [
   "seq",

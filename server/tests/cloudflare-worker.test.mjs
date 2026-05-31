@@ -3,6 +3,12 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import worker, { validateApiOrigin } from "../../cloudflare/worker.js";
 
+const ADMIN_PASSWORD = "AdminBootstrapPass123";
+const TEST_ENV = {
+  CLOUDFLARE_BOOTSTRAP_ADMIN_FORCE_CHANGE: "0",
+  CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD: ADMIN_PASSWORD
+};
+
 async function responseJson(response) {
   return JSON.parse(await response.text());
 }
@@ -101,11 +107,11 @@ test("cloudflare worker proxies valid backend origin with security headers", asy
 test("cloudflare worker serves native API without API_ORIGIN", async () => {
   const loginResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
-      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
       headers: { "content-type": "application/json" },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const loginPayload = await responseJson(loginResponse);
   const cookie = loginResponse.headers.get("set-cookie");
@@ -119,7 +125,7 @@ test("cloudflare worker serves native API without API_ORIGIN", async () => {
     new Request("https://deep-oa-hr.example.workers.dev/api/people", {
       headers: { cookie: "oa_cf_session=mock-user" }
     }),
-    {}
+    TEST_ENV
   );
   assert.equal(forgedResponse.status, 401);
 
@@ -127,7 +133,7 @@ test("cloudflare worker serves native API without API_ORIGIN", async () => {
     new Request("https://deep-oa-hr.example.workers.dev/api/people", {
       headers: { cookie }
     }),
-    {}
+    TEST_ENV
   );
   const peoplePayload = await responseJson(peopleResponse);
 
@@ -140,7 +146,7 @@ test("cloudflare worker serves native API without API_ORIGIN", async () => {
 
   const openapiResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/openapi.json"),
-    {}
+    TEST_ENV
   );
   const openapiPayload = await responseJson(openapiResponse);
   ["/auth/change-password", "/files/{id}/download", "/audit/integrity", "/iam/users/{id}/status", "/resources/bookings/{id}/cancel", "/workflows/definitions"]
@@ -156,7 +162,7 @@ test("cloudflare worker allows GitHub Pages frontend to call native API with cre
       },
       method: "OPTIONS"
     }),
-    {}
+    TEST_ENV
   );
 
   assert.equal(preflightResponse.status, 204);
@@ -165,14 +171,14 @@ test("cloudflare worker allows GitHub Pages frontend to call native API with cre
 
   const loginResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
-      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
       headers: {
         "content-type": "application/json",
         Origin: "https://17602842555.github.io"
       },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const cookie = loginResponse.headers.get("set-cookie");
 
@@ -190,7 +196,7 @@ test("cloudflare worker allows GitHub Pages frontend to call native API with cre
       },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const csrfPayload = await responseJson(csrfDenied);
   assert.equal(csrfDenied.status, 403);
@@ -200,16 +206,16 @@ test("cloudflare worker allows GitHub Pages frontend to call native API with cre
 test("cloudflare worker IAM guards prevent admin lockout and revoke target sessions", async () => {
   const loginResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
-      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
       headers: { "content-type": "application/json" },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const cookie = loginResponse.headers.get("set-cookie");
   const iamResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/iam", { headers: { cookie } }),
-    {}
+    TEST_ENV
   );
   const iam = (await responseJson(iamResponse)).iam;
   const adminRole = iam.roles.find((role) => role.code === "admin");
@@ -221,7 +227,7 @@ test("cloudflare worker IAM guards prevent admin lockout and revoke target sessi
       headers: { "content-type": "application/json", cookie },
       method: "PUT"
     }),
-    {}
+    TEST_ENV
   );
   assert.equal(weakenAdminRole.status, 400);
 
@@ -231,7 +237,7 @@ test("cloudflare worker IAM guards prevent admin lockout and revoke target sessi
       headers: { "content-type": "application/json", cookie },
       method: "PUT"
     }),
-    {}
+    TEST_ENV
   );
   assert.equal(selfDisable.status, 400);
 
@@ -246,7 +252,7 @@ test("cloudflare worker IAM guards prevent admin lockout and revoke target sessi
       headers: { "content-type": "application/json", cookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const created = await responseJson(createUser);
   const employeeLogin = await worker.fetch(
@@ -255,7 +261,7 @@ test("cloudflare worker IAM guards prevent admin lockout and revoke target sessi
       headers: { "content-type": "application/json" },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const employeeCookie = employeeLogin.headers.get("set-cookie");
   const resetPassword = await worker.fetch(
@@ -264,7 +270,7 @@ test("cloudflare worker IAM guards prevent admin lockout and revoke target sessi
       headers: { "content-type": "application/json", cookie },
       method: "PUT"
     }),
-    {}
+    TEST_ENV
   );
   assert.equal(resetPassword.status, 200);
 
@@ -272,7 +278,7 @@ test("cloudflare worker IAM guards prevent admin lockout and revoke target sessi
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/me", {
       headers: { cookie: employeeCookie }
     }),
-    {}
+    TEST_ENV
   );
   assert.equal(oldSession.status, 401);
 });
@@ -280,11 +286,11 @@ test("cloudflare worker IAM guards prevent admin lockout and revoke target sessi
 test("cloudflare worker native exports require business reason and record trusted export metadata", async () => {
   const loginResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
-      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
       headers: { "content-type": "application/json" },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const cookie = loginResponse.headers.get("set-cookie");
 
@@ -293,7 +299,7 @@ test("cloudflare worker native exports require business reason and record truste
       headers: { "content-type": "application/json", cookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const missingPayload = await responseJson(missingReason);
   assert.equal(missingReason.status, 400);
@@ -309,14 +315,14 @@ test("cloudflare worker native exports require business reason and record truste
       headers: { "content-type": "application/json", cookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   assert.equal(exportResponse.status, 200);
   assert.equal(exportResponse.headers.get("content-disposition"), 'attachment; filename="people-export.csv"');
 
   const recordsResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/audit/export-records", { headers: { cookie } }),
-    {}
+    TEST_ENV
   );
   const records = (await responseJson(recordsResponse)).exportRecords;
   const record = records.find((item) => item.fileName === "people-export.csv");
@@ -330,16 +336,16 @@ test("cloudflare worker native exports require business reason and record truste
 test("cloudflare worker audit integrity returns a real signed hash chain", async () => {
   const loginResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
-      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
       headers: { "content-type": "application/json" },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const cookie = loginResponse.headers.get("set-cookie");
   const integrityResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/audit/integrity", { headers: { cookie } }),
-    {}
+    TEST_ENV
   );
   const payload = await responseJson(integrityResponse);
 
@@ -353,11 +359,11 @@ test("cloudflare worker audit integrity returns a real signed hash chain", async
 test("cloudflare worker file upload and download use real checksum guards", async () => {
   const loginResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
-      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
       headers: { "content-type": "application/json" },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const cookie = loginResponse.headers.get("set-cookie");
   const invalidUpload = await worker.fetch(
@@ -366,7 +372,7 @@ test("cloudflare worker file upload and download use real checksum guards", asyn
       headers: { "content-type": "application/json", cookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   assert.equal(invalidUpload.status, 400);
 
@@ -381,7 +387,7 @@ test("cloudflare worker file upload and download use real checksum guards", asyn
       headers: { "content-type": "application/json", cookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const uploadPayload = await responseJson(uploadResponse);
   assert.equal(uploadResponse.status, 200);
@@ -392,7 +398,7 @@ test("cloudflare worker file upload and download use real checksum guards", asyn
     new Request(`https://deep-oa-hr.example.workers.dev/api/files/${uploadPayload.file.id}/download`, {
       headers: { cookie }
     }),
-    {}
+    TEST_ENV
   );
   assert.equal(downloadResponse.status, 200);
   assert.equal(await downloadResponse.text(), "worker attachment integrity");
@@ -401,11 +407,11 @@ test("cloudflare worker file upload and download use real checksum guards", asyn
 test("cloudflare worker dashboard import stores source checksum blocks duplicates and downloads source", async () => {
   const loginResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
-      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
       headers: { "content-type": "application/json" },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const cookie = loginResponse.headers.get("set-cookie");
   const sourceName = `worker-source-${Date.now()}.html`;
@@ -416,7 +422,7 @@ test("cloudflare worker dashboard import stores source checksum blocks duplicate
       headers: { "content-type": "application/json", cookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const importPayload = await responseJson(importResponse);
   assert.equal(importResponse.status, 200);
@@ -427,7 +433,7 @@ test("cloudflare worker dashboard import stores source checksum blocks duplicate
     new Request(`https://deep-oa-hr.example.workers.dev/api/imports/${importPayload.importRun.id}/source`, {
       headers: { cookie }
     }),
-    {}
+    TEST_ENV
   );
   assert.equal(sourceResponse.status, 200);
   assert.equal(await sourceResponse.text(), html);
@@ -438,7 +444,7 @@ test("cloudflare worker dashboard import stores source checksum blocks duplicate
       headers: { "content-type": "application/json", cookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const duplicatePayload = await responseJson(duplicateResponse);
   assert.equal(duplicateResponse.status, 409);
@@ -449,11 +455,11 @@ test("cloudflare worker dashboard import stores source checksum blocks duplicate
 test("cloudflare worker forces generated employee accounts through first login setup", async () => {
   const adminLogin = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
-      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
       headers: { "content-type": "application/json" },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const adminCookie = adminLogin.headers.get("set-cookie");
   const createdResponse = await worker.fetch(
@@ -467,7 +473,7 @@ test("cloudflare worker forces generated employee accounts through first login s
       headers: { "content-type": "application/json", cookie: adminCookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const createdPayload = await responseJson(createdResponse);
   const loginResponse = await worker.fetch(
@@ -476,7 +482,7 @@ test("cloudflare worker forces generated employee accounts through first login s
       headers: { "content-type": "application/json" },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const loginPayload = await responseJson(loginResponse);
   const employeeCookie = loginResponse.headers.get("set-cookie");
@@ -488,11 +494,26 @@ test("cloudflare worker forces generated employee accounts through first login s
     new Request("https://deep-oa-hr.example.workers.dev/api/people", {
       headers: { cookie: employeeCookie }
     }),
-    {}
+    TEST_ENV
   );
   const blockedPayload = await responseJson(blockedResponse);
   assert.equal(blockedResponse.status, 403);
   assert.equal(blockedPayload.error, "first_login_required");
+
+  const passwordOnlyBypass = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/change-password", {
+      body: JSON.stringify({
+        currentPassword: "TempPass12345",
+        newPassword: "PasswordOnlyBypass123"
+      }),
+      headers: { "content-type": "application/json", cookie: employeeCookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const bypassPayload = await responseJson(passwordOnlyBypass);
+  assert.equal(passwordOnlyBypass.status, 403);
+  assert.equal(bypassPayload.error, "first_login_required");
 
   const newEmail = `renamed-${Date.now()}@oa.local`;
   const setupResponse = await worker.fetch(
@@ -506,7 +527,7 @@ test("cloudflare worker forces generated employee accounts through first login s
       headers: { "content-type": "application/json", cookie: employeeCookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const setupPayload = await responseJson(setupResponse);
   assert.equal(setupResponse.status, 200);
@@ -521,7 +542,7 @@ test("cloudflare worker forces generated employee accounts through first login s
       headers: { "content-type": "application/json" },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   assert.equal(relogin.status, 200);
   const readyEmployeeCookie = relogin.headers.get("set-cookie");
@@ -530,7 +551,7 @@ test("cloudflare worker forces generated employee accounts through first login s
     new Request("https://deep-oa-hr.example.workers.dev/api/iam", {
       headers: { cookie: readyEmployeeCookie }
     }),
-    {}
+    TEST_ENV
   );
   const iamDeniedPayload = await responseJson(iamDenied);
   assert.equal(iamDenied.status, 403);
@@ -541,7 +562,7 @@ test("cloudflare worker forces generated employee accounts through first login s
       headers: { cookie: readyEmployeeCookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   assert.equal(auditExportDenied.status, 403);
 
@@ -558,7 +579,7 @@ test("cloudflare worker forces generated employee accounts through first login s
       headers: { "content-type": "application/json", cookie: readyEmployeeCookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const bookingPayload = await responseJson(bookingResponse);
   assert.equal(bookingResponse.status, 200);
@@ -568,11 +589,11 @@ test("cloudflare worker forces generated employee accounts through first login s
 test("cloudflare worker native approval decisions require every current approver before next node", async () => {
   const loginResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
-      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
       headers: { "content-type": "application/json" },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const cookie = loginResponse.headers.get("set-cookie");
   const createdResponse = await worker.fetch(
@@ -581,7 +602,7 @@ test("cloudflare worker native approval decisions require every current approver
       headers: { "content-type": "application/json", cookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const createdPayload = await responseJson(createdResponse);
   const approval = createdPayload.approval;
@@ -595,7 +616,7 @@ test("cloudflare worker native approval decisions require every current approver
       headers: { "content-type": "application/json", cookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const firstDecisionPayload = await responseJson(firstDecisionResponse);
   assert.equal(firstDecisionPayload.approval.currentNodeIndex, approval.currentNodeIndex);
@@ -607,7 +628,7 @@ test("cloudflare worker native approval decisions require every current approver
       headers: { "content-type": "application/json", cookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const secondDecisionPayload = await responseJson(secondDecisionResponse);
   assert.equal(secondDecisionPayload.approval.currentNodeIndex, approval.currentNodeIndex + 1);
@@ -616,11 +637,11 @@ test("cloudflare worker native approval decisions require every current approver
 test("cloudflare worker approval decisions reject non-admin approver impersonation", async () => {
   const adminLogin = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
-      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
       headers: { "content-type": "application/json" },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const adminCookie = adminLogin.headers.get("set-cookie");
   const createUser = await worker.fetch(
@@ -635,7 +656,7 @@ test("cloudflare worker approval decisions reject non-admin approver impersonati
       headers: { "content-type": "application/json", cookie: adminCookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const createdUser = (await responseJson(createUser)).user;
   const approvalResponse = await worker.fetch(
@@ -644,7 +665,7 @@ test("cloudflare worker approval decisions reject non-admin approver impersonati
       headers: { "content-type": "application/json", cookie: adminCookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const approval = (await responseJson(approvalResponse)).approval;
   const firstApprover = approval.approvalNodes[approval.currentNodeIndex].decisions[0].approver;
@@ -654,7 +675,7 @@ test("cloudflare worker approval decisions reject non-admin approver impersonati
       headers: { "content-type": "application/json" },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const managerCookie = managerLogin.headers.get("set-cookie");
 
@@ -664,7 +685,7 @@ test("cloudflare worker approval decisions reject non-admin approver impersonati
       headers: { "content-type": "application/json", cookie: managerCookie },
       method: "POST"
     }),
-    {}
+    TEST_ENV
   );
   const decisionPayload = await responseJson(decisionResponse);
   assert.equal(decisionResponse.status, 403);

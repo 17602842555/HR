@@ -6,12 +6,14 @@ import { parseDotenvText } from "./commercial-doctor-core.mjs";
 const secretSpecs = Object.freeze([
   Object.freeze({ name: "CLOUDFLARE_API_TOKEN", sourceKey: "CLOUDFLARE_API_TOKEN" }),
   Object.freeze({ name: "CLOUDFLARE_ACCOUNT_ID", sourceKey: "CLOUDFLARE_ACCOUNT_ID" }),
+  Object.freeze({ name: "CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD", sourceKey: "CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD" }),
   Object.freeze({ name: "CLOUDFLARE_DEPLOYMENT_URL", sourceKey: "CLOUDFLARE_DEPLOYMENT_URL" })
 ]);
 
 const runtimeOverrideKeys = Object.freeze([
   "CLOUDFLARE_ACCOUNT_ID",
   "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD",
   "CLOUDFLARE_DEPLOYMENT_URL"
 ]);
 
@@ -204,6 +206,16 @@ export function buildCloudflareSecretPlan({
     errors.push("CLOUDFLARE_ACCOUNT_ID must be the 32-character Cloudflare account id.");
   }
 
+  const bootstrapPassword = String(merged.CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD || "").trim();
+  if (
+    isPlaceholder(bootstrapPassword)
+    || bootstrapPassword.length < 12
+    || !/[A-Za-z]/.test(bootstrapPassword)
+    || !/\d/.test(bootstrapPassword)
+  ) {
+    errors.push("CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD must be a strong non-placeholder temporary admin password with at least 12 characters, letters, and digits.");
+  }
+
   try {
     const deploymentUrl = new URL(merged.CLOUDFLARE_DEPLOYMENT_URL || "");
     if (deploymentUrl.protocol !== "https:") {
@@ -236,6 +248,7 @@ export function buildCloudflareSecretPlan({
     ok: errors.length === 0,
     repo: repoName || null,
     deployment: {
+      adminBootstrapConfigured: isPresent(merged.CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD),
       mode: "cloudflare-native-worker",
       urlConfigured: isPresent(merged.CLOUDFLARE_DEPLOYMENT_URL)
     },

@@ -16,6 +16,7 @@ const defaultTunnel = "399ce110-a343-43b5-81cd-333f5f86212c";
 export const requiredBackendRepositorySecrets = Object.freeze([
   "CLOUDFLARE_API_TOKEN",
   "CLOUDFLARE_ACCOUNT_ID",
+  "CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD",
   "CLOUDFLARE_DEPLOYMENT_URL"
 ]);
 
