@@ -160,9 +160,16 @@ function stepByName(view = {}, name) {
     .find((step) => step.name === name) || null;
 }
 
+function stepByAnyName(view = {}, names) {
+  return names.map((name) => stepByName(view, name)).find(Boolean) || null;
+}
+
 export function summarizeCloudflareDeploy(view = {}) {
   const verifyBuild = stepByName(view, "Verify frontend build");
-  const deploy = stepByName(view, "Deploy Worker with assets and API origin secret");
+  const deploy = stepByAnyName(view, [
+    "Deploy Worker with assets and native API",
+    "Deploy Worker with assets and API origin secret"
+  ]);
   const smoke = stepByName(view, "Smoke deployed backend gateway");
   const missingSecrets = stepByName(view, "Cloudflare secrets not configured");
   const apiOriginMissing = stepByName(view, "Cloudflare API origin not configured");
@@ -175,6 +182,7 @@ export function summarizeCloudflareDeploy(view = {}) {
     missingSecretsNotice: missingSecrets?.conclusion === "success",
     smokeConclusion: smoke?.conclusion || "missing",
     smokePassed: smoke?.conclusion === "success",
+    workerDeployStepName: deploy?.name || "",
     workerDeployStepPresent: Boolean(deploy)
   };
 }
@@ -199,7 +207,7 @@ function nextActions({ cloudflareDeploy, githubPlan, releaseGate }) {
     if (releaseGate.failures.length > 8) actions.push(`${releaseGate.failures.length - 8} additional release gate failures remain.`);
   }
   if (cloudflareDeploy && !cloudflareDeploy.actualDeployment) {
-    actions.push("Cloudflare workflow is still build-only; configure Cloudflare/API secrets and rerun with require_deploy=true.");
+    actions.push("Cloudflare workflow is still build-only; configure Cloudflare native Worker secrets and rerun with require_deploy=true.");
   }
   return [...new Set(actions)];
 }

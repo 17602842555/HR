@@ -1,6 +1,7 @@
 import React from "react";
 import { Bell, ChevronDown, Search, UserRound } from "lucide-react";
 import { sideNav } from "../data/seed.js";
+import { publicAsset } from "../utils/publicAsset.js";
 
 export function AppShell({
   activeModule,
@@ -22,7 +23,7 @@ export function AppShell({
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <img src="/assets/logo-mark.png" alt="" />
+          <img src={publicAsset("assets/logo-mark.png")} alt="" />
           <strong>集团人事行政<br />OA</strong>
         </div>
         <nav className="side-nav" aria-label="主导航">

@@ -85,6 +85,7 @@ function serializeEmployeeAccount(employee) {
     account: user ? serializeUser(user) : null,
     accountEmail: user?.email || "",
     accountId: user?.id || null,
+    accountMustChangePassword: Boolean(user?.mustChangePassword),
     accountStatus: user?.status || "UNASSIGNED",
     roleCodes: user ? (user.roles || []).map((item) => item.role?.code).filter(Boolean) : [],
     roleNames: user ? (user.roles || []).map((item) => item.role?.name).filter(Boolean) : []

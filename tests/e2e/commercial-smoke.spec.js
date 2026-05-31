@@ -59,7 +59,7 @@ test("backend 401 shows commercial login form", async ({ page }) => {
 });
 
 test("app loads and shows the OA workbench", async ({ page }) => {
-  await expect(page).toHaveTitle(/集团人事行政 OA Demo/);
+  await expect(page).toHaveTitle(/集团人事行政 OA/);
   await expect(page.getByRole("navigation", { name: "主导航" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "全部应用" })).toBeVisible();
   await expect(page.getByPlaceholder("搜索菜单、流程、文档、人员等")).toBeVisible();

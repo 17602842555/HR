@@ -42,18 +42,37 @@ npm run smoke:cloudflare -- --url https://deep-oa-hr.2445776963.workers.dev --js
 ```
 3. The GitHub Pages workflow publishes the frontend artifact from `dist`.
 
-## Optional D1 Persistence
+## D1 Persistence
 
-The Worker can run without D1 for public preview, but formal production persistence requires D1:
+The public deployment is now expected to run with D1 persistence. The current binding in `wrangler.toml` is:
+
+```toml
+[[d1_databases]]
+binding = "OA_DB"
+database_name = "deep-oa-hr"
+database_id = "0ec260d6-3e76-4c51-a5dc-58dc321cee1b"
+```
+
+If a new Cloudflare account or database is used later, recreate the database and replace only `database_id`:
 
 ```bash
 npx wrangler d1 create deep-oa-hr
 ```
 
-Copy the returned `database_id` into the commented `[[d1_databases]]` block in `wrangler.toml`, then apply the schema:
+Then apply the schema:
 
 ```bash
 npm run cf:d1:schema
 ```
 
-After that, deploy again. `/api/edge/health` should report `d1Configured: true`.
+After deploy, `/api/edge/health` and `npm run smoke:cloudflare -- --url <worker-url> --json` must report `d1Configured: true`.
+
+## Native Deployment Doctor
+
+Because this project currently has no custom domain, validate the live deployment in native-worker mode:
+
+```bash
+npm run doctor:cloudflare -- --repo 17602842555/HR --url https://deep-oa-hr.2445776963.workers.dev --json
+```
+
+This should pass with the three repository secrets required for scheme C: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_DEPLOYMENT_URL`. Tunnel-only checks are not required unless a future custom domain and Cloudflare Tunnel are introduced.

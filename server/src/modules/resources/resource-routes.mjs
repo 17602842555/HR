@@ -351,7 +351,7 @@ export async function registerResourceRoutes(app) {
   app.post("/api/resources/bookings", { preHandler: app.authenticate }, async (request, reply) => {
     await requirePermission(app, request, { module: "resource", action: "book" });
     const body = request.body || {};
-    const applicantName = String(body.applicant || request.user.name || request.user.email || "系统用户").trim();
+    const applicantName = String(request.user.name || request.user.email || "系统用户").trim();
     const resource = await findBookingResource(app.prisma, request.user.tenantId, body);
     if (!resource) return reply.code(404).send({ error: "resource_not_found" });
     let startsAt;

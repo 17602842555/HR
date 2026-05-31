@@ -62,7 +62,7 @@ function deployView({ deployConclusion = "skipped", smokeConclusion = "skipped" 
         name: "deploy",
         steps: [
           { conclusion: "success", name: "Verify frontend build" },
-          { conclusion: deployConclusion, name: "Deploy Worker with assets and API origin secret" },
+          { conclusion: deployConclusion, name: "Deploy Worker with assets and native API" },
           { conclusion: smokeConclusion, name: "Smoke deployed backend gateway" },
           { conclusion: deployConclusion === "skipped" ? "success" : "skipped", name: "Cloudflare secrets not configured" }
         ]
@@ -139,6 +139,7 @@ test("commercial release status summarizes Cloudflare actual deployment versus b
     missingSecretsNotice: true,
     smokeConclusion: "skipped",
     smokePassed: false,
+    workerDeployStepName: "Deploy Worker with assets and native API",
     workerDeployStepPresent: true
   });
   assert.equal(summarizeCloudflareDeploy(JSON.parse(deployView({

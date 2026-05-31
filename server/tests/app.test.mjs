@@ -743,6 +743,9 @@ async function makePrismaMock(options = {}) {
           error.code = "P2025";
           throw error;
         }
+        if (data?.email !== undefined) existing.email = data.email;
+        if (data?.mustChangePassword !== undefined) existing.mustChangePassword = data.mustChangePassword;
+        if (data?.name !== undefined) existing.name = data.name;
         if (data?.lastLoginAt !== undefined) existing.lastLoginAt = data.lastLoginAt;
         if (data?.passwordHash !== undefined) existing.passwordHash = data.passwordHash;
         if (data?.status !== undefined) existing.status = data.status;
@@ -4731,10 +4734,59 @@ test("iam employee account library sync creates one account per active employee 
     }
   });
   assert.equal(login.statusCode, 200);
+  assert.equal(login.json().user.mustChangePassword, true);
+
+  const firstLoginToken = login.json().token;
+  const blockedBeforeSetup = await app.inject({
+    method: "GET",
+    url: "/api/people",
+    headers: { authorization: `Bearer ${firstLoginToken}` }
+  });
+  assert.equal(blockedBeforeSetup.statusCode, 403);
+  assert.equal(blockedBeforeSetup.json().error, "first_login_required");
+
+  const completedSetup = await app.inject({
+    method: "POST",
+    url: "/api/auth/complete-first-login",
+    headers: { authorization: `Bearer ${firstLoginToken}` },
+    payload: {
+      currentPassword: credential.temporaryPassword,
+      email: "lisi.self@oa.local",
+      name: "李四自助账号",
+      newPassword: "EmployeeNewPass123"
+    }
+  });
+  assert.equal(completedSetup.statusCode, 200);
+  assert.equal(completedSetup.json().user.email, "lisi.self@oa.local");
+  assert.equal(completedSetup.json().user.name, "李四自助账号");
+  assert.equal(completedSetup.json().user.mustChangePassword, false);
+
+  const oldPasswordLogin = await app.inject({
+    method: "POST",
+    url: "/api/auth/login",
+    payload: {
+      tenantCode: "default",
+      email: credential.email,
+      password: credential.temporaryPassword
+    }
+  });
+  assert.equal(oldPasswordLogin.statusCode, 401);
+
+  const newPasswordLogin = await app.inject({
+    method: "POST",
+    url: "/api/auth/login",
+    payload: {
+      tenantCode: "default",
+      email: "lisi.self@oa.local",
+      password: "EmployeeNewPass123"
+    }
+  });
+  assert.equal(newPasswordLogin.statusCode, 200);
 
   const overview = await app.inject({ method: "GET", url: "/api/iam", headers });
   const account = overview.json().accounts.find((item) => item.employeeNo === "EMP-2");
-  assert.equal(account.accountEmail, "lisi@oa.local");
+  assert.equal(account.accountEmail, "lisi.self@oa.local");
+  assert.equal(account.accountMustChangePassword, false);
   assert.deepEqual(account.roleCodes, ["employee-self-service"]);
   assert.equal(overview.json().accountStats.missingAccounts, 0);
 
@@ -4742,6 +4794,7 @@ test("iam employee account library sync creates one account per active employee 
   const syncLog = audit.json().auditLogs.find((item) => item.content.includes("批量生成员工账号 2 个"));
   assert.ok(syncLog);
   assert.equal(JSON.stringify(syncLog).includes(credential.temporaryPassword), false);
+  assert.equal(audit.json().auditLogs.some((item) => item.content.includes("员工完成首次登录设置")), true);
 
   await app.close();
 });
@@ -5181,6 +5234,7 @@ test("resource bookings default applicant to the authenticated user", async () =
       resourceId: "resource-1",
       startsAt: "2026-06-23T09:00:00.000Z",
       endsAt: "2026-06-23T10:00:00.000Z",
+      applicant: "董事长",
       purpose: "项目例会"
     }
   });

@@ -5,7 +5,13 @@ import { normalizeDeploymentUrl, runCloudflareSmoke } from "./cloudflare-smoke.m
 const cloudflareTunnelApiBaseUrl = "https://api.cloudflare.com/client/v4/accounts";
 const defaultBackendServiceUrl = "http://api:8787";
 
-export const requiredCloudflareGithubSecrets = Object.freeze([
+export const requiredNativeCloudflareGithubSecrets = Object.freeze([
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_ACCOUNT_ID",
+  "CLOUDFLARE_DEPLOYMENT_URL"
+]);
+
+export const requiredTunnelCloudflareGithubSecrets = Object.freeze([
   "CLOUDFLARE_API_TOKEN",
   "CLOUDFLARE_ACCOUNT_ID",
   "API_ORIGIN",
@@ -13,6 +19,8 @@ export const requiredCloudflareGithubSecrets = Object.freeze([
   "CLOUDFLARE_TUNNEL_TOKEN",
   "CLOUDFLARE_BACKEND_WEB_ORIGIN"
 ]);
+
+export const requiredCloudflareGithubSecrets = requiredNativeCloudflareGithubSecrets;
 
 function boolFlag(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").toLowerCase());
@@ -51,7 +59,8 @@ export function parseCloudflareDeploymentStatusArgs(argv = process.argv.slice(2)
     retryDelayMs: parsePositiveInt(env.CLOUDFLARE_SMOKE_RETRY_DELAY_MS, 1000),
     timeoutMs: parsePositiveInt(env.CLOUDFLARE_SMOKE_TIMEOUT_MS, 8000),
     tunnel: env.CLOUDFLARE_TUNNEL_ID || env.CLOUDFLARE_TUNNEL_NAME || "",
-    url: env.CLOUDFLARE_DEPLOYMENT_URL || ""
+    url: env.CLOUDFLARE_DEPLOYMENT_URL || "",
+    mode: env.CLOUDFLARE_STATUS_MODE || "auto"
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -78,6 +87,9 @@ export function parseCloudflareDeploymentStatusArgs(argv = process.argv.slice(2)
     } else if (arg === "--url") {
       options.url = argv[index + 1] || "";
       index += 1;
+    } else if (arg === "--mode") {
+      options.mode = argv[index + 1] || "";
+      index += 1;
     } else if (arg === "--timeout-ms") {
       options.timeoutMs = parsePositiveInt(argv[index + 1], options.timeoutMs);
       index += 1;
@@ -93,6 +105,16 @@ export function parseCloudflareDeploymentStatusArgs(argv = process.argv.slice(2)
   }
 
   return options;
+}
+
+function normalizeDeploymentMode(mode, { apiOrigin = "", tunnel = "" } = {}) {
+  const value = String(mode || "auto").trim().toLowerCase();
+  if (["native", "native-worker", "worker", "cloudflare-native"].includes(value)) return "native-worker";
+  if (["tunnel", "cloudflare-tunnel", "proxy"].includes(value)) return "tunnel";
+  if (value && value !== "auto") {
+    throw new Error("Cloudflare deployment status mode must be auto, native-worker, or tunnel.");
+  }
+  return String(apiOrigin || "").trim() || String(tunnel || "").trim() ? "tunnel" : "native-worker";
 }
 
 export function readGithubSecretNames({ repo, runner = spawnSync } = {}) {
@@ -440,7 +462,8 @@ function tunnelIngressStatus({ apiOrigin, backendService, tunnelConfigRead }) {
 export function buildCloudflareDeploymentStatus({
   apiOrigin = "",
   backendService = defaultBackendServiceUrl,
-  requiredSecrets = requiredCloudflareGithubSecrets,
+  mode = "native-worker",
+  requiredSecrets = null,
   secretNames = null,
   secretRead = null,
   smokeReport = null,
@@ -449,6 +472,10 @@ export function buildCloudflareDeploymentStatus({
 } = {}) {
   const checks = [];
   const warnings = [];
+  const deploymentMode = normalizeDeploymentMode(mode, { apiOrigin });
+  const effectiveRequiredSecrets = requiredSecrets || (
+    deploymentMode === "tunnel" ? requiredTunnelCloudflareGithubSecrets : requiredNativeCloudflareGithubSecrets
+  );
 
   const secretSource = secretRead || {
     checked: Array.isArray(secretNames),
@@ -461,7 +488,7 @@ export function buildCloudflareDeploymentStatus({
     }));
   } else {
     const present = new Set(secretSource.names || []);
-    const missing = requiredSecrets.filter((name) => !present.has(name));
+    const missing = effectiveRequiredSecrets.filter((name) => !present.has(name));
     checks.push(status(
       missing.length === 0 ? "pass" : "fail",
       "github-secrets",
@@ -470,38 +497,45 @@ export function buildCloudflareDeploymentStatus({
         : "Cloudflare GitHub repository secrets are incomplete.",
       {
         missing,
-        presentCount: requiredSecrets.length - missing.length,
-        requiredCount: requiredSecrets.length
+        presentCount: effectiveRequiredSecrets.length - missing.length,
+        requiredCount: effectiveRequiredSecrets.length
       }
     ));
   }
 
-  if (!tunnelRead?.checked) {
-    checks.push(status("fail", "tunnel-status", "Cloudflare Tunnel status could not be inspected.", {
-      error: sanitizeMessage(tunnelRead?.error || "Cloudflare Tunnel was not inspected.")
-    }));
+  if (deploymentMode === "tunnel") {
+    if (!tunnelRead?.checked) {
+      checks.push(status("fail", "tunnel-status", "Cloudflare Tunnel status could not be inspected.", {
+        error: sanitizeMessage(tunnelRead?.error || "Cloudflare Tunnel was not inspected.")
+      }));
+    } else {
+      const tunnelStatus = String(tunnelRead.tunnel?.status || "").toLowerCase();
+      const tunnelReady = ["active", "healthy"].includes(tunnelStatus);
+      checks.push(status(
+        tunnelReady ? "pass" : "fail",
+        "tunnel-status",
+        tunnelReady
+          ? "Cloudflare Tunnel is active."
+          : "Cloudflare Tunnel is not active.",
+        {
+          configSource: tunnelRead.tunnel?.configSource || "",
+          connsActiveAt: tunnelRead.tunnel?.connsActiveAt || "",
+          connsInactiveAt: tunnelRead.tunnel?.connsInactiveAt || "",
+          id: tunnelRead.tunnel?.id || "",
+          name: tunnelRead.tunnel?.name || "",
+          source: tunnelRead.source || "wrangler",
+          status: tunnelRead.tunnel?.status || ""
+        }
+      ));
+    }
+
+    checks.push(tunnelIngressStatus({ apiOrigin, backendService, tunnelConfigRead }));
   } else {
-    const tunnelStatus = String(tunnelRead.tunnel?.status || "").toLowerCase();
-    const tunnelReady = ["active", "healthy"].includes(tunnelStatus);
-    checks.push(status(
-      tunnelReady ? "pass" : "fail",
-      "tunnel-status",
-      tunnelReady
-        ? "Cloudflare Tunnel is active."
-        : "Cloudflare Tunnel is not active.",
-      {
-        configSource: tunnelRead.tunnel?.configSource || "",
-        connsActiveAt: tunnelRead.tunnel?.connsActiveAt || "",
-        connsInactiveAt: tunnelRead.tunnel?.connsInactiveAt || "",
-        id: tunnelRead.tunnel?.id || "",
-        name: tunnelRead.tunnel?.name || "",
-        source: tunnelRead.source || "wrangler",
-        status: tunnelRead.tunnel?.status || ""
-      }
-    ));
+    checks.push(status("pass", "native-worker", "Cloudflare native Worker mode does not require a custom domain, Tunnel, or API_ORIGIN.", {
+      assetsAndApiSameOrigin: true,
+      deploymentMode
+    }));
   }
-
-  checks.push(tunnelIngressStatus({ apiOrigin, backendService, tunnelConfigRead }));
 
   if (!smokeReport) {
     checks.push(status("fail", "cloudflare-smoke", "Cloudflare Worker smoke was not run.", {
@@ -520,16 +554,36 @@ export function buildCloudflareDeploymentStatus({
     smokeReport.warnings?.forEach((warning) => warnings.push(warning));
   }
 
+  if (deploymentMode === "native-worker") {
+    const edgeHealth = smokeReport?.checks?.find((check) => check.name === "edge-health");
+    const nativeMode = edgeHealth?.details?.apiMode === "cloudflare-native";
+    const d1Configured = edgeHealth?.details?.d1Configured === true;
+    checks.push(status(
+      nativeMode && d1Configured ? "pass" : "fail",
+      "d1-persistence",
+      nativeMode && d1Configured
+        ? "Cloudflare native Worker reports D1 persistence is bound."
+        : "Cloudflare native Worker must report D1 persistence before commercial use.",
+      {
+        apiMode: edgeHealth?.details?.apiMode || "",
+        d1Configured
+      }
+    ));
+  }
+
   const hardBlockers = checks.filter((check) => check.level === "fail");
   return {
     checks,
+    deploymentMode,
     hardBlockers,
     ok: hardBlockers.length === 0,
-    requiredGithubSecrets: requiredSecrets,
+    requiredGithubSecrets: effectiveRequiredSecrets,
     service: "cloudflare-deployment-status",
     summary: {
       cloudflareSmokeReady: Boolean(smokeReport?.ok),
+      d1PersistenceReady: checks.find((check) => check.name === "d1-persistence")?.level === "pass",
       githubSecretsReady: checks.find((check) => check.name === "github-secrets")?.level === "pass",
+      nativeWorkerReady: checks.find((check) => check.name === "native-worker")?.level === "pass",
       tunnelIngressReady: checks.find((check) => check.name === "tunnel-ingress")?.level === "pass",
       tunnelReady: checks.find((check) => check.name === "tunnel-status")?.level === "pass"
     },
@@ -544,6 +598,7 @@ export async function runCloudflareDeploymentStatus({
   apiToken,
   backendService,
   fetchImpl = globalThis.fetch,
+  mode = "auto",
   repo,
   retries,
   retryDelayMs,
@@ -553,47 +608,50 @@ export async function runCloudflareDeploymentStatus({
   url
 } = {}) {
   const secretRead = readGithubSecretNames({ repo, runner });
+  const deploymentMode = normalizeDeploymentMode(mode, { apiOrigin, tunnel });
   let tunnelRead = null;
   let tunnelConfigRead = null;
-  if (String(accountId || "").trim() || String(apiToken || "").trim()) {
-    tunnelRead = await readCloudflareTunnelInfoFromApi({
-      accountId,
-      apiToken,
-      fetchImpl,
-      timeoutMs,
-      tunnel
-    });
-    tunnelConfigRead = await readCloudflareTunnelConfigurationFromApi({
-      accountId,
-      apiToken,
-      fetchImpl,
-      timeoutMs,
-      tunnel
-    });
-  } else {
-    tunnelRead = readCloudflareTunnelInfo({ runner, tunnel });
-    if (!tunnelRead.checked) {
-      const apiHint = "Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN to inspect the tunnel through the Cloudflare API without relying on Wrangler login state.";
-      tunnelRead = {
-        ...tunnelRead,
-        error: sanitizeMessage(`${tunnelRead.error || "Wrangler tunnel inspection failed."} ${apiHint}`),
+  if (deploymentMode === "tunnel") {
+    if (String(accountId || "").trim() || String(apiToken || "").trim()) {
+      tunnelRead = await readCloudflareTunnelInfoFromApi({
+        accountId,
+        apiToken,
+        fetchImpl,
+        timeoutMs,
+        tunnel
+      });
+      tunnelConfigRead = await readCloudflareTunnelConfigurationFromApi({
+        accountId,
+        apiToken,
+        fetchImpl,
+        timeoutMs,
+        tunnel
+      });
+    } else {
+      tunnelRead = readCloudflareTunnelInfo({ runner, tunnel });
+      if (!tunnelRead.checked) {
+        const apiHint = "Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN to inspect the tunnel through the Cloudflare API without relying on Wrangler login state.";
+        tunnelRead = {
+          ...tunnelRead,
+          error: sanitizeMessage(`${tunnelRead.error || "Wrangler tunnel inspection failed."} ${apiHint}`),
+          source: "wrangler"
+        };
+      } else {
+        tunnelRead = { ...tunnelRead, source: "wrangler" };
+      }
+      tunnelConfigRead = {
+        checked: false,
+        error: "Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN to inspect Cloudflare Tunnel public hostname configuration.",
+        ingress: [],
         source: "wrangler"
       };
-    } else {
-      tunnelRead = { ...tunnelRead, source: "wrangler" };
     }
-    tunnelConfigRead = {
-      checked: false,
-      error: "Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN to inspect Cloudflare Tunnel public hostname configuration.",
-      ingress: [],
-      source: "wrangler"
-    };
   }
   let smokeReport = null;
   if (String(url || "").trim()) {
     smokeReport = await runCloudflareSmoke({
       fetchImpl,
-      requireApiOrigin: !allowMissingApiOrigin,
+      requireApiOrigin: deploymentMode === "tunnel" && !allowMissingApiOrigin,
       retries,
       retryDelayMs,
       timeoutMs,
@@ -603,6 +661,7 @@ export async function runCloudflareDeploymentStatus({
   return buildCloudflareDeploymentStatus({
     apiOrigin,
     backendService,
+    mode: deploymentMode,
     secretRead,
     smokeReport,
     tunnelConfigRead,

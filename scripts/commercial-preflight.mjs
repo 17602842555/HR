@@ -4435,7 +4435,7 @@ function checkAuthenticatedActorPropagationImplementation() {
 
   const resourceRoutes = readText("server/src/modules/resources/resource-routes.mjs");
   [
-    "const applicantName = String(body.applicant || request.user.name || request.user.email || \"系统用户\").trim()",
+    "const applicantName = String(request.user.name || request.user.email || \"系统用户\").trim()",
     "metadata: { applicant: applicantName",
     "applicant: booking.metadata?.applicant || booking.applicant?.name || \"系统用户\""
   ].forEach((needle) => assertIncludes(resourceRoutes, needle, "server/src/modules/resources/resource-routes.mjs"));
@@ -4475,7 +4475,8 @@ function checkAuthenticatedActorPropagationImplementation() {
     "asset write routes return business errors for invalid status and missing records",
     "leave workflow defaults applicant to the authenticated user",
     "approval comments use the authenticated actor name",
-    "resource bookings default applicant to the authenticated user"
+    "resource bookings default applicant to the authenticated user",
+    "applicant: \"董事长\""
   ].forEach((needle) => assertIncludes(tests, needle, "server/tests/app.test.mjs"));
 
   const resourcesFeature = readText("src/features/Resources.jsx");

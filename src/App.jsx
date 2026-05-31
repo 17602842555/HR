@@ -14,6 +14,7 @@ import { Resources } from "./features/Resources.jsx";
 import { flowTemplates, formDefaults, templatesFromDefinitions } from "./data/seed.js";
 import { useApiBackedOaSystem } from "./hooks/query/useApiBackedOaSystem.js";
 import { buildGlobalSearchResults } from "./services/globalSearch.js";
+import { publicAsset } from "./utils/publicAsset.js";
 
 function FieldInput({ field, onChange, value }) {
   if (field.type === "select") {
@@ -155,7 +156,7 @@ function LoginScreen({ apiStatus, auth }) {
     <main className="login-page">
       <section className="login-panel">
         <div className="login-brand">
-          <img src="/assets/logo-mark.png" alt="" />
+          <img src={publicAsset("assets/logo-mark.png")} alt="" />
           <div>
             <span>集团人事行政 OA</span>
             <strong>商业版后台登录</strong>
@@ -165,7 +166,7 @@ function LoginScreen({ apiStatus, auth }) {
           <label>租户
             <input value={form.tenantCode} onChange={(event) => setForm({ ...form, tenantCode: event.target.value })} />
           </label>
-          <label>邮箱
+          <label>登录账号（邮箱）
             <input value={form.email} autoComplete="username" onChange={(event) => setForm({ ...form, email: event.target.value })} />
           </label>
           <label>密码
@@ -186,7 +187,7 @@ function ApiRequiredScreen({ apiStatus }) {
     <main className="login-page">
       <section className="login-panel">
         <div className="login-brand">
-          <img src="/assets/logo-mark.png" alt="" />
+          <img src={publicAsset("assets/logo-mark.png")} alt="" />
           <div>
             <span>集团人事行政 OA</span>
             <strong>后端服务不可用</strong>
@@ -232,14 +233,14 @@ function FirstLoginSetupScreen({ apiStatus, auth, currentUser }) {
     <main className="login-page">
       <section className="login-panel">
         <div className="login-brand">
-          <img src="/assets/logo-mark.png" alt="" />
+          <img src={publicAsset("assets/logo-mark.png")} alt="" />
           <div>
             <span>集团人事行政 OA</span>
             <strong>首次登录设置</strong>
           </div>
         </div>
         <form className="login-form" onSubmit={submit}>
-          <label>登录账号
+          <label>新登录账号（邮箱）
             <input autoComplete="username" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
           </label>
           <label>姓名
@@ -254,7 +255,7 @@ function FirstLoginSetupScreen({ apiStatus, auth, currentUser }) {
           <label>确认新密码
             <input autoComplete="new-password" type="password" value={form.confirmPassword} onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })} />
           </label>
-          {error ? <p className="login-error">{error}</p> : <p className="login-hint">完成后临时密码失效，后续使用新的登录账号和密码进入系统。</p>}
+          {error ? <p className="login-error">{error}</p> : <p className="login-hint">首次登录只能完成账号设置；完成后临时密码失效，后续使用新的登录账号和密码进入系统。</p>}
           <button className="primary" type="submit" disabled={auth.busy}>
             <LockKeyhole size={16} /> {auth.busy ? "保存中" : "完成设置"}
           </button>

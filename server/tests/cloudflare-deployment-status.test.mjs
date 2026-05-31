@@ -8,6 +8,8 @@ import {
   readCloudflareTunnelInfoFromApi,
   readGithubSecretNames,
   requiredCloudflareGithubSecrets,
+  requiredNativeCloudflareGithubSecrets,
+  requiredTunnelCloudflareGithubSecrets,
   runCloudflareDeploymentStatus
 } from "../../scripts/cloudflare-deployment-status.mjs";
 
@@ -41,16 +43,64 @@ test("cloudflare deployment status parser supports repo tunnel url and json flag
       retryDelayMs: 1000,
       timeoutMs: 8000,
       tunnel: "399ce110-a343-43b5-81cd-333f5f86212c",
-      url: "https://deep-oa-hr.example.workers.dev"
+      url: "https://deep-oa-hr.example.workers.dev",
+      mode: "auto"
     }
   );
+  assert.equal(parseCloudflareDeploymentStatusArgs(["--mode", "native-worker"]).mode, "native-worker");
   assert.throws(() => parseCloudflareDeploymentStatusArgs(["--bad"]), /Unknown cloudflare deployment status argument/);
+});
+
+test("cloudflare deployment status passes native Worker mode with D1 and without custom domain", () => {
+  const report = buildCloudflareDeploymentStatus({
+    mode: "native-worker",
+    secretNames: requiredNativeCloudflareGithubSecrets,
+    smokeReport: {
+      checks: [
+        { details: { apiMode: "cloudflare-native", d1Configured: true }, level: "pass", name: "edge-health" },
+        { details: { service: "deep-oa-cloudflare-api", status: 200 }, level: "pass", name: "backend-health" },
+        { details: { pathCount: 5, status: 200 }, level: "pass", name: "openapi-contract" }
+      ],
+      hardBlockers: [],
+      ok: true,
+      url: "https://deep-oa-hr.2445776963.workers.dev",
+      warnings: []
+    }
+  });
+
+  assert.equal(report.ok, true);
+  assert.equal(report.deploymentMode, "native-worker");
+  assert.equal(report.summary.githubSecretsReady, true);
+  assert.equal(report.summary.nativeWorkerReady, true);
+  assert.equal(report.summary.d1PersistenceReady, true);
+  assert.equal(report.checks.some((check) => check.name === "tunnel-status"), false);
+  assert.equal(report.requiredGithubSecrets, requiredNativeCloudflareGithubSecrets);
+});
+
+test("cloudflare deployment status fails native Worker mode until D1 persistence is bound", () => {
+  const report = buildCloudflareDeploymentStatus({
+    mode: "native-worker",
+    secretNames: requiredNativeCloudflareGithubSecrets,
+    smokeReport: {
+      checks: [
+        { details: { apiMode: "cloudflare-native", d1Configured: false }, level: "pass", name: "edge-health" }
+      ],
+      hardBlockers: [],
+      ok: true,
+      url: "https://deep-oa-hr.2445776963.workers.dev",
+      warnings: []
+    }
+  });
+
+  assert.equal(report.ok, false);
+  assert(report.hardBlockers.some((check) => check.name === "d1-persistence"));
 });
 
 test("cloudflare deployment status passes only when secrets tunnel and smoke are ready", () => {
   const report = buildCloudflareDeploymentStatus({
     apiOrigin: "https://api.oa.example.cn",
-    secretNames: requiredCloudflareGithubSecrets,
+    mode: "tunnel",
+    secretNames: requiredTunnelCloudflareGithubSecrets,
     smokeReport: {
       hardBlockers: [],
       ok: true,
@@ -83,10 +133,12 @@ test("cloudflare deployment status passes only when secrets tunnel and smoke are
   assert.equal(report.summary.tunnelReady, true);
   assert.equal(report.summary.tunnelIngressReady, true);
   assert.equal(report.summary.cloudflareSmokeReady, true);
+  assert.equal(requiredCloudflareGithubSecrets, requiredNativeCloudflareGithubSecrets);
 });
 
 test("cloudflare deployment status reports current partial backend configuration blockers", () => {
   const report = buildCloudflareDeploymentStatus({
+    mode: "tunnel",
     secretNames: [
       "CLOUDFLARE_ACCOUNT_ID",
       "CLOUDFLARE_BACKEND_WEB_ORIGIN",
@@ -127,7 +179,8 @@ test("cloudflare deployment status reports current partial backend configuration
 test("cloudflare deployment status requires API origin ingress mapping to backend service", () => {
   const missingIngress = buildCloudflareDeploymentStatus({
     apiOrigin: "https://api.oa.example.cn",
-    secretNames: requiredCloudflareGithubSecrets,
+    mode: "tunnel",
+    secretNames: requiredTunnelCloudflareGithubSecrets,
     smokeReport: { hardBlockers: [], ok: true, url: "https://oa.example.cn", warnings: [] },
     tunnelConfigRead: {
       checked: true,
@@ -150,7 +203,8 @@ test("cloudflare deployment status requires API origin ingress mapping to backen
 
   const missingCatchAll = buildCloudflareDeploymentStatus({
     apiOrigin: "https://api.oa.example.cn",
-    secretNames: requiredCloudflareGithubSecrets,
+    mode: "tunnel",
+    secretNames: requiredTunnelCloudflareGithubSecrets,
     smokeReport: { hardBlockers: [], ok: true, url: "https://oa.example.cn", warnings: [] },
     tunnelConfigRead: {
       checked: true,
@@ -377,9 +431,10 @@ test("cloudflare deployment status uses API inspection when account id is provid
       }
       return {
         status: 0,
-        stdout: JSON.stringify(requiredCloudflareGithubSecrets.map((name) => ({ name })))
+        stdout: JSON.stringify(requiredTunnelCloudflareGithubSecrets.map((name) => ({ name })))
       };
-    }
+    },
+    mode: "tunnel"
   });
 
   const tunnelCheck = report.checks.find((check) => check.name === "tunnel-status");

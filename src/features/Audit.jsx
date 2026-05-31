@@ -42,6 +42,7 @@ function fileCreatedAt(file) {
 
 function userStatusLabel(status) {
   if (status === "UNASSIGNED") return "未开户";
+  if (status === "FIRST_LOGIN_REQUIRED") return "待首次设置";
   return status === "DISABLED" ? "已停用" : "启用";
 }
 
@@ -67,6 +68,7 @@ function fallbackAccountLibrary(people = {}, iam = {}) {
       account: user,
       accountEmail: user?.email || "",
       accountId: user?.id || null,
+      accountMustChangePassword: Boolean(user?.mustChangePassword),
       accountStatus: user?.status || "UNASSIGNED",
       roleCodes: user?.roleCodes || user?.roles?.map((role) => role.code).filter(Boolean) || [],
       roleNames: user?.roles?.map((role) => role.name).filter(Boolean) || []
@@ -248,6 +250,7 @@ export function Audit({ actions, state }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [accountDraft, setAccountDraft] = useState({
     email: "new.user@oa.local",
+    mustChangePassword: true,
     name: "新账号",
     newPassword: "NewUserPass123",
     roleCodes: ["auditor"],
@@ -411,7 +414,7 @@ export function Audit({ actions, state }) {
     {
       key: "accountStatus",
       label: "状态",
-      render: (row) => <StatusPill value={userStatusLabel(row.accountStatus)} />
+      render: (row) => <StatusPill value={userStatusLabel(row.accountMustChangePassword ? "FIRST_LOGIN_REQUIRED" : row.accountStatus)} />
     },
     {
       key: "roleCodes",
@@ -822,7 +825,7 @@ export function Audit({ actions, state }) {
         <div className="account-library-toolbar">
           <div>
             <strong>批量给未开户员工生成登录账号</strong>
-            <span>默认只处理在职员工；临时密码只在本次生成结果显示，不写入审计日志。</span>
+            <span>默认只处理在职员工；员工首次登录必须修改登录账号和密码。</span>
           </div>
           <div className="account-role-options">
             {roles.map((role) => (
@@ -845,7 +848,7 @@ export function Audit({ actions, state }) {
           <div className="credential-result">
             <div>
               <strong>本次临时密码</strong>
-              <span>请在交付给员工后要求首次登录立即改密；刷新后不会再次展示。</span>
+              <span>交付给员工后只能用于首次登录，员工完成设置后临时密码立即失效；刷新后不会再次展示。</span>
             </div>
             <DataTable columns={credentialColumns} rows={syncCredentials} rowKey={(row) => row.employeeId} />
           </div>
@@ -862,7 +865,7 @@ export function Audit({ actions, state }) {
             />
           </label>
           <label>
-            <span>邮箱</span>
+            <span>临时登录账号（邮箱）</span>
             <input
               autoComplete="off"
               type="email"
@@ -909,7 +912,7 @@ export function Audit({ actions, state }) {
           >
             创建账号
           </button>
-          {accountMessage ? <p>{accountMessage}</p> : null}
+          {accountMessage ? <p>{accountMessage}</p> : <p className="soft-text">创建后默认要求员工首次登录改登录账号和密码。</p>}
         </form>
         <div className="user-role-layout">
           <div className="user-list">
@@ -923,7 +926,7 @@ export function Audit({ actions, state }) {
                 <strong>{user.name}</strong>
                 <span>{user.email}</span>
                 <em>{(user.roleCodes || user.roles?.map((role) => role.code) || []).join(" / ") || "未分配角色"}</em>
-                <StatusPill value={userStatusLabel(user.status)} />
+                <StatusPill value={userStatusLabel(user.mustChangePassword ? "FIRST_LOGIN_REQUIRED" : user.status)} />
               </button>
             ))}
           </div>
@@ -932,7 +935,7 @@ export function Audit({ actions, state }) {
               <div>
                 <strong>{selectedUser.name}</strong>
                 <span>{selectedUser.employee?.roleTitle || selectedUser.email}</span>
-                <StatusPill value={userStatusLabel(selectedUser.status)} />
+                <StatusPill value={userStatusLabel(selectedUser.mustChangePassword ? "FIRST_LOGIN_REQUIRED" : selectedUser.status)} />
               </div>
               <div className="role-check-list">
                 {roles.map((role) => {
@@ -976,7 +979,7 @@ export function Audit({ actions, state }) {
                 </label>
                 <button disabled={passwordDraft.length < 12} type="button" onClick={submitPasswordReset}>重置密码</button>
               </div>
-              {passwordMessage ? <p className="password-reset-message">{passwordMessage}</p> : null}
+              {passwordMessage ? <p className="password-reset-message">{passwordMessage}</p> : <p className="soft-text">重置后员工需要用临时密码完成首次登录设置。</p>}
             </div>
           ) : null}
         </div>
