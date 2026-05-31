@@ -13,12 +13,9 @@ import {
 } from "../../scripts/configure-cloudflare-secrets.mjs";
 
 const validEnv = Object.freeze({
-  API_ORIGIN: "https://api.oa.example.cn",
   CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
   CLOUDFLARE_API_TOKEN: "cf-workers-deploy-token-for-tests-20260530",
-  CLOUDFLARE_DEPLOYMENT_URL: "https://oa.example.cn",
-  CLOUDFLARE_TUNNEL_TOKEN: "eyJhIjoiY2xvdWRmbGFyZS10dW5uZWwtdG9rZW4tZm9yLXRlc3RzIn0",
-  TRUST_PROXY: "1"
+  CLOUDFLARE_DEPLOYMENT_URL: "https://deep-oa-hr.2445776963.workers.dev"
 });
 
 test("cloudflare secret parser supports env repo apply json and token verification flags", () => {
@@ -38,7 +35,7 @@ test("cloudflare secret repo parser supports GitHub remotes", () => {
   assert.equal(repoFromGitRemote("https://example.com/not-github/repo.git"), "");
 });
 
-test("cloudflare secret plan validates backend values and redacts secret material", () => {
+test("cloudflare secret plan validates native Worker values and redacts secret material", () => {
   const plan = buildCloudflareSecretPlan({
     fileEnv: validEnv,
     repo: "17602842555/HR"
@@ -46,14 +43,13 @@ test("cloudflare secret plan validates backend values and redacts secret materia
 
   assert.equal(plan.ok, true);
   assert.equal(plan.repo, "17602842555/HR");
-  assert.equal(plan.secrets.length, 6);
+  assert.equal(plan.secrets.length, 3);
   assert.equal(plan.secrets.every((secret) => secret.configured), true);
-  assert.equal(plan.secrets.find((secret) => secret.name === "CLOUDFLARE_BACKEND_WEB_ORIGIN").source, "computed");
-  assert.equal(plan.backend.apiOriginConfigured, true);
+  assert.equal(plan.deployment.mode, "cloudflare-native-worker");
+  assert.equal(plan.deployment.urlConfigured, true);
 
   const serialized = JSON.stringify(plan);
   assert.equal(serialized.includes(validEnv.CLOUDFLARE_API_TOKEN), false);
-  assert.equal(serialized.includes(validEnv.CLOUDFLARE_TUNNEL_TOKEN), false);
   assert.equal(serialized.includes(validEnv.CLOUDFLARE_ACCOUNT_ID), false);
 });
 
@@ -61,8 +57,7 @@ test("cloudflare secret plan accepts runtime overrides without leaking values", 
   const plan = buildCloudflareSecretPlan({
     fileEnv: {
       ...validEnv,
-      CLOUDFLARE_API_TOKEN: "placeholder",
-      WEB_ORIGIN: "https://oa.example.cn"
+      CLOUDFLARE_API_TOKEN: "placeholder"
     },
     repo: "17602842555/HR",
     runtimeEnv: {
@@ -79,16 +74,16 @@ test("cloudflare secret plan rejects unsafe production configuration", () => {
   const plan = buildCloudflareSecretPlan({
     fileEnv: {
       ...validEnv,
-      API_ORIGIN: "https://oa.example.cn",
       CLOUDFLARE_ACCOUNT_ID: "bad-account",
-      CLOUDFLARE_API_TOKEN: "todo"
+      CLOUDFLARE_API_TOKEN: "todo",
+      CLOUDFLARE_DEPLOYMENT_URL: "http://example.com"
     },
     repo: ""
   });
 
   assert.equal(plan.ok, false);
   assert.equal(plan.errors.some((error) => error.includes("GitHub repo")), true);
-  assert.equal(plan.errors.some((error) => error.includes("not the same origin")), true);
+  assert.equal(plan.errors.some((error) => error.includes("CLOUDFLARE_DEPLOYMENT_URL")), true);
   assert.equal(plan.errors.some((error) => error.includes("CLOUDFLARE_ACCOUNT_ID")), true);
   assert.equal(plan.errors.some((error) => error.includes("CLOUDFLARE_API_TOKEN")), true);
 });
@@ -120,13 +115,12 @@ test("cloudflare secret apply writes GitHub secrets through stdin", () => {
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.applied.length, 6);
+  assert.equal(result.applied.length, 3);
   assert.equal(calls.every((call) => call.command === "gh"), true);
   assert.equal(calls.every((call) => call.args[0] === "secret" && call.args[1] === "set"), true);
   assert.equal(calls.every((call) => call.args.includes("--repo") && call.args.includes("17602842555/HR")), true);
   assert.equal(calls.some((call) => call.input === validEnv.CLOUDFLARE_API_TOKEN), true);
   assert.equal(calls.some((call) => call.args.includes(validEnv.CLOUDFLARE_API_TOKEN)), false);
-  assert.equal(calls.some((call) => call.args.includes(validEnv.CLOUDFLARE_TUNNEL_TOKEN)), false);
 });
 
 test("cloudflare api token verification calls official endpoint without leaking token", async () => {

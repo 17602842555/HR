@@ -49,7 +49,7 @@ test("cloudflare worker rejects same-origin API proxy loops before fetching back
   try {
     const response = await worker.fetch(
       new Request("https://oa.example.cn/api/health"),
-      { API_ORIGIN: "https://oa.example.cn" }
+      { API_ORIGIN: "https://oa.example.cn", OA_API_MODE: "proxy" }
     );
     const payload = await responseJson(response);
 
@@ -76,7 +76,7 @@ test("cloudflare worker proxies valid backend origin with security headers", asy
       new Request("https://oa.example.cn/api/health?probe=1", {
         headers: { cookie: "oa_session=test" }
       }),
-      { API_ORIGIN: "https://api.oa.example.cn" }
+      { API_ORIGIN: "https://api.oa.example.cn", OA_API_MODE: "proxy" }
     );
     const payload = await responseJson(response);
 
@@ -91,4 +91,84 @@ test("cloudflare worker proxies valid backend origin with security headers", asy
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("cloudflare worker serves native API without API_ORIGIN", async () => {
+  const loginResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    {}
+  );
+  const loginPayload = await responseJson(loginResponse);
+  const cookie = loginResponse.headers.get("set-cookie");
+
+  assert.equal(loginResponse.status, 200);
+  assert.equal(loginPayload.user.email, undefined);
+  assert.match(cookie, /oa_cf_session=admin/);
+
+  const peopleResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/people", {
+      headers: { cookie }
+    }),
+    {}
+  );
+  const peoplePayload = await responseJson(peopleResponse);
+
+  assert.equal(peopleResponse.status, 200);
+  assert.equal(peoplePayload.people.employees.length, 72);
+  assert.equal(peoplePayload.people.leavers.length, 162);
+  assert.equal(peoplePayload.people.femaleEmployees.length, 43);
+  assert.equal(peoplePayload.people.monthLeavers.length, 4);
+  assert.equal(peoplePayload.people.employees.some((employee) => String(employee.school || employee.hukou || employee.major || "").includes("***")), true);
+});
+
+test("cloudflare worker native approval decisions require every current approver before next node", async () => {
+  const loginResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    {}
+  );
+  const cookie = loginResponse.headers.get("set-cookie");
+  const createdResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/approvals", {
+      body: JSON.stringify({ definitionId: "expense", formData: { amount: "800" } }),
+      headers: { "content-type": "application/json", cookie },
+      method: "POST"
+    }),
+    {}
+  );
+  const createdPayload = await responseJson(createdResponse);
+  const approval = createdPayload.approval;
+  const firstNode = approval.approvalNodes[approval.currentNodeIndex];
+
+  assert.equal(firstNode.decisions.length > 1, true);
+
+  const firstDecisionResponse = await worker.fetch(
+    new Request(`https://deep-oa-hr.example.workers.dev/api/approvals/${approval.id}/decision`, {
+      body: JSON.stringify({ approverName: firstNode.decisions[0].approver, decision: "pass" }),
+      headers: { "content-type": "application/json", cookie },
+      method: "POST"
+    }),
+    {}
+  );
+  const firstDecisionPayload = await responseJson(firstDecisionResponse);
+  assert.equal(firstDecisionPayload.approval.currentNodeIndex, approval.currentNodeIndex);
+  assert.equal(firstDecisionPayload.approval.status, "待审批");
+
+  const secondDecisionResponse = await worker.fetch(
+    new Request(`https://deep-oa-hr.example.workers.dev/api/approvals/${approval.id}/decision`, {
+      body: JSON.stringify({ approverName: firstNode.decisions[1].approver, decision: "pass" }),
+      headers: { "content-type": "application/json", cookie },
+      method: "POST"
+    }),
+    {}
+  );
+  const secondDecisionPayload = await responseJson(secondDecisionResponse);
+  assert.equal(secondDecisionPayload.approval.currentNodeIndex, approval.currentNodeIndex + 1);
 });

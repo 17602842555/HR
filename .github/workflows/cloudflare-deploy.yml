@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       require_deploy:
-        description: "Fail if Cloudflare deployment secrets, backend origin, or tunnel token are missing"
+        description: "Fail if Cloudflare deployment secrets or smoke URL are missing"
         required: true
         type: boolean
         default: true
@@ -23,12 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_READY: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
-      API_ORIGIN_READY: ${{ secrets.API_ORIGIN != '' }}
-      TUNNEL_TOKEN_READY: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN != '' }}
       DEPLOYMENT_URL_READY: ${{ secrets.CLOUDFLARE_DEPLOYMENT_URL != '' || vars.CLOUDFLARE_DEPLOYMENT_URL != '' }}
       REQUIRE_CLOUDFLARE_DEPLOY: ${{ github.event_name == 'workflow_dispatch' && inputs.require_deploy }}
       CLOUDFLARE_DEPLOYMENT_URL: ${{ secrets.CLOUDFLARE_DEPLOYMENT_URL || vars.CLOUDFLARE_DEPLOYMENT_URL }}
-      CLOUDFLARE_BACKEND_WEB_ORIGIN: ${{ secrets.CLOUDFLARE_BACKEND_WEB_ORIGIN || vars.CLOUDFLARE_BACKEND_WEB_ORIGIN || secrets.CLOUDFLARE_DEPLOYMENT_URL || vars.CLOUDFLARE_DEPLOYMENT_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -49,73 +46,31 @@ jobs:
           VITE_DEMO_FALLBACK: "0"
 
       - name: Require Cloudflare deployment configuration
-        if: ${{ env.REQUIRE_CLOUDFLARE_DEPLOY == 'true' && (env.CLOUDFLARE_READY != 'true' || env.API_ORIGIN_READY != 'true' || env.DEPLOYMENT_URL_READY != 'true' || env.TUNNEL_TOKEN_READY != 'true') }}
+        if: ${{ env.REQUIRE_CLOUDFLARE_DEPLOY == 'true' && (env.CLOUDFLARE_READY != 'true' || env.DEPLOYMENT_URL_READY != 'true') }}
         run: |
           echo "::error::Cloudflare deployment was explicitly required, but one or more required repository secrets or variables are missing."
-          echo "Required: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, API_ORIGIN, CLOUDFLARE_DEPLOYMENT_URL, and CLOUDFLARE_TUNNEL_TOKEN."
+          echo "Required: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_DEPLOYMENT_URL."
           echo "Use require_deploy=false only for a build-only workflow dry run."
           exit 1
 
-      - name: Validate Cloudflare backend server config
-        if: ${{ env.CLOUDFLARE_READY == 'true' && env.API_ORIGIN_READY == 'true' && env.DEPLOYMENT_URL_READY == 'true' && env.TUNNEL_TOKEN_READY == 'true' }}
-        run: |
-          set -euo pipefail
-          umask 077
-          backend_env="$(mktemp)"
-          trap 'rm -f "$backend_env"' EXIT
-          {
-            printf 'CLOUDFLARE_TUNNEL_TOKEN="%s"\n' "$CLOUDFLARE_TUNNEL_TOKEN"
-            printf 'API_ORIGIN="%s"\n' "$API_ORIGIN"
-            printf 'CLOUDFLARE_DEPLOYMENT_URL="%s"\n' "$CLOUDFLARE_DEPLOYMENT_URL"
-            printf 'WEB_ORIGIN="%s"\n' "$CLOUDFLARE_BACKEND_WEB_ORIGIN"
-            printf 'TRUST_PROXY="1"\n'
-            printf 'RUN_DB_SEED="0"\n'
-          } > "$backend_env"
-          npm run validate:cloudflare-backend -- --env "$backend_env" --json
-        env:
-          API_ORIGIN: ${{ secrets.API_ORIGIN }}
-          CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-
-      - name: Cloudflare backend server config not configured
-        if: ${{ env.CLOUDFLARE_READY == 'true' && env.API_ORIGIN_READY == 'true' && env.DEPLOYMENT_URL_READY == 'true' && env.TUNNEL_TOKEN_READY != 'true' }}
-        run: echo "Worker deploy can continue, but CLOUDFLARE_TUNNEL_TOKEN is missing so backend tunnel env validation was skipped."
-
-      - name: Prepare Cloudflare Worker secrets file
-        if: ${{ env.CLOUDFLARE_READY == 'true' && env.API_ORIGIN_READY == 'true' }}
-        run: |
-          set -euo pipefail
-          umask 077
-          printf 'API_ORIGIN="%s"\n' "$API_ORIGIN" > .cloudflare-worker-secrets.env
-          chmod 600 .cloudflare-worker-secrets.env
-        env:
-          API_ORIGIN: ${{ secrets.API_ORIGIN }}
-
-      - name: Deploy Worker with assets and API origin secret
-        if: ${{ env.CLOUDFLARE_READY == 'true' && env.API_ORIGIN_READY == 'true' }}
+      - name: Deploy Worker with assets and native API
+        if: ${{ env.CLOUDFLARE_READY == 'true' }}
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --secrets-file .cloudflare-worker-secrets.env
-
-      - name: Remove Cloudflare Worker secrets file
-        if: ${{ always() }}
-        run: rm -f .cloudflare-worker-secrets.env
-
-      - name: Cloudflare API origin not configured
-        if: ${{ env.CLOUDFLARE_READY == 'true' && env.API_ORIGIN_READY != 'true' }}
-        run: echo "Cloudflare deploy skipped because wrangler.toml requires the API_ORIGIN Worker secret before deployment."
+          command: deploy
 
       - name: Smoke deployed backend gateway
-        if: ${{ env.CLOUDFLARE_READY == 'true' && env.API_ORIGIN_READY == 'true' && env.DEPLOYMENT_URL_READY == 'true' }}
+        if: ${{ env.CLOUDFLARE_READY == 'true' && env.DEPLOYMENT_URL_READY == 'true' }}
         run: npm run smoke:cloudflare -- --url "$CLOUDFLARE_DEPLOYMENT_URL" --json
 
       - name: Cloudflare smoke URL not configured
-        if: ${{ env.CLOUDFLARE_READY == 'true' && env.API_ORIGIN_READY == 'true' && env.DEPLOYMENT_URL_READY != 'true' }}
-        run: echo "Worker deployed and API_ORIGIN configured, but CLOUDFLARE_DEPLOYMENT_URL is missing so deployed backend smoke was skipped."
+        if: ${{ env.CLOUDFLARE_READY == 'true' && env.DEPLOYMENT_URL_READY != 'true' }}
+        run: echo "Worker deployed, but CLOUDFLARE_DEPLOYMENT_URL is missing so deployed native API smoke was skipped."
 
       - name: Cloudflare secrets not configured
         if: ${{ env.CLOUDFLARE_READY != 'true' }}
         run: |
           echo "Cloudflare deploy skipped."
-          echo "Configure CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, API_ORIGIN, CLOUDFLARE_DEPLOYMENT_URL, and CLOUDFLARE_TUNNEL_TOKEN repository secrets or variables, then rerun this workflow."
+          echo "Configure CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_DEPLOYMENT_URL repository secrets or variables, then rerun this workflow."

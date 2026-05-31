@@ -26,7 +26,7 @@ function mockFetch(routes) {
   return fetchImpl;
 }
 
-test("cloudflare smoke args support deployment URL env and strict backend checks", () => {
+test("cloudflare smoke args support deployment URL env and native backend checks", () => {
   const args = parseCloudflareSmokeArgs(["--json", "--timeout-ms", "3000"], {
     CLOUDFLARE_DEPLOYMENT_URL: "https://deep-oa-hr.example.workers.dev",
     CLOUDFLARE_SMOKE_RETRIES: "5",
@@ -35,7 +35,7 @@ test("cloudflare smoke args support deployment URL env and strict backend checks
 
   assert.equal(args.url, "https://deep-oa-hr.example.workers.dev");
   assert.equal(args.json, true);
-  assert.equal(args.requireApiOrigin, true);
+  assert.equal(args.requireApiOrigin, false);
   assert.equal(args.retries, 5);
   assert.equal(args.retryDelayMs, 100);
   assert.equal(args.timeoutMs, 3000);
@@ -56,16 +56,17 @@ test("cloudflare deployment URL normalization rejects non-https production URLs"
   );
 });
 
-test("cloudflare smoke passes when edge health backend health and OpenAPI are reachable", async () => {
+test("cloudflare smoke passes when native edge health backend health and OpenAPI are reachable", async () => {
   const fetchImpl = mockFetch({
     "https://deep-oa-hr.example.workers.dev/api/edge/health": jsonResponse({
-      apiOriginConfigured: true,
+      apiMode: "cloudflare-native",
+      d1Configured: false,
       ok: true,
       service: "deep-oa-cloudflare-edge"
     }),
     "https://deep-oa-hr.example.workers.dev/api/health": jsonResponse({
       ok: true,
-      service: "deep-oa-api"
+      service: "deep-oa-cloudflare-api"
     }),
     "https://deep-oa-hr.example.workers.dev/api/openapi.json": jsonResponse({
       info: { title: "集团人事行政 OA Commercial API" },
@@ -75,6 +76,7 @@ test("cloudflare smoke passes when edge health backend health and OpenAPI are re
 
   const report = await runCloudflareSmoke({
     fetchImpl,
+    requireApiOrigin: true,
     retryDelayMs: 1,
     url: "https://deep-oa-hr.example.workers.dev"
   });
@@ -88,7 +90,7 @@ test("cloudflare smoke passes when edge health backend health and OpenAPI are re
   assert.equal(fetchImpl.calls.length, 3);
 });
 
-test("cloudflare smoke fails closed when API_ORIGIN is missing", async () => {
+test("cloudflare smoke can still fail closed when legacy API_ORIGIN is explicitly required", async () => {
   const report = await runCloudflareSmoke({
     fetchImpl: mockFetch({
       "https://deep-oa-hr.example.workers.dev/api/edge/health": jsonResponse({
@@ -97,6 +99,7 @@ test("cloudflare smoke fails closed when API_ORIGIN is missing", async () => {
         service: "deep-oa-cloudflare-edge"
       })
     }),
+    requireApiOrigin: true,
     retryDelayMs: 1,
     url: "https://deep-oa-hr.example.workers.dev"
   });
@@ -108,7 +111,8 @@ test("cloudflare smoke fails closed when API_ORIGIN is missing", async () => {
 
 test("cloudflare smoke fails closed when worker reports unsafe API_ORIGIN", async () => {
   const fetchImpl = mockFetch({
-    "https://deep-oa-hr.example.workers.dev/api/edge/health": jsonResponse({
+      "https://deep-oa-hr.example.workers.dev/api/edge/health": jsonResponse({
+      apiMode: "proxy",
       apiOriginConfigured: true,
       apiOriginError: "api_origin_unsafe",
       apiOriginValid: false,
@@ -119,6 +123,7 @@ test("cloudflare smoke fails closed when worker reports unsafe API_ORIGIN", asyn
 
   const report = await runCloudflareSmoke({
     fetchImpl,
+    requireApiOrigin: true,
     retryDelayMs: 1,
     url: "https://deep-oa-hr.example.workers.dev"
   });
@@ -133,6 +138,7 @@ test("cloudflare smoke fails when backend proxy does not return the OA API", asy
   const report = await runCloudflareSmoke({
     fetchImpl: mockFetch({
       "https://deep-oa-hr.example.workers.dev/api/edge/health": jsonResponse({
+        apiMode: "proxy",
         apiOriginConfigured: true,
         ok: true,
         service: "deep-oa-cloudflare-edge"

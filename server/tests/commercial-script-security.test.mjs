@@ -106,38 +106,29 @@ test("commercial signoff workflow materializes release inputs without uploading 
   assert.doesNotMatch(workflow, /path: \.env\.production/);
 });
 
-test("cloudflare deploy workflow verifies backend gateway after deploy", () => {
+test("cloudflare deploy workflow verifies native Worker API after deploy", () => {
   const workflow = readScript(".github/workflows/cloudflare-deploy.yml");
   const wrangler = readScript("wrangler.toml");
-  const gitignore = readScript(".gitignore");
 
   assert.match(workflow, /Deploy HR OA to Cloudflare/);
   assert.match(workflow, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"/);
   assert.match(workflow, /actions\/checkout@v6/);
   assert.match(workflow, /actions\/setup-node@v6/);
   assert.match(workflow, /cloudflare\/wrangler-action@v4/);
-  assert.match(workflow, /Prepare Cloudflare Worker secrets file/);
-  assert.match(workflow, /deploy --secrets-file \.cloudflare-worker-secrets\.env/);
-  assert.match(workflow, /rm -f \.cloudflare-worker-secrets\.env/);
-  assert.match(wrangler, /\[secrets\]/);
-  assert.match(wrangler, /required = \[ "API_ORIGIN" \]/);
-  assert.match(gitignore, /\.cloudflare-worker-secrets\.env/);
+  assert.match(workflow, /Deploy Worker with assets and native API/);
+  assert.match(workflow, /command: deploy/);
+  assert.match(wrangler, /\[vars\]/);
+  assert.match(wrangler, /OA_API_MODE = "native"/);
   assert.match(workflow, /CLOUDFLARE_DEPLOYMENT_URL/);
-  assert.match(workflow, /CLOUDFLARE_TUNNEL_TOKEN/);
   assert.match(workflow, /require_deploy:/);
   assert.match(workflow, /REQUIRE_CLOUDFLARE_DEPLOY/);
   assert.match(workflow, /Require Cloudflare deployment configuration/);
   assert.match(workflow, /Cloudflare deployment was explicitly required/);
   assert.match(workflow, /Use require_deploy=false only for a build-only workflow dry run/);
-  assert.match(workflow, /mktemp/);
-  assert.match(workflow, /umask 077/);
-  assert.match(workflow, /trap 'rm -f "\$backend_env"' EXIT/);
-  assert.match(workflow, /chmod 600 \.cloudflare-worker-secrets\.env/);
-  assert.match(workflow, /npm run validate:cloudflare-backend -- --env "\$backend_env" --json/);
   assert.match(workflow, /npm run smoke:cloudflare -- --url "\$CLOUDFLARE_DEPLOYMENT_URL" --json/);
   assert.match(workflow, /DEPLOYMENT_URL_READY/);
   assert.doesNotMatch(workflow, /actions\/upload-artifact@/);
-  assert.doesNotMatch(workflow, /cat "\$backend_env"/);
+  assert.doesNotMatch(workflow, /--secrets-file/);
   assert.doesNotMatch(workflow, /wrangler secret put API_ORIGIN/);
 });
 

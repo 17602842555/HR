@@ -24,9 +24,7 @@ test("backend server config packet writes private no-secret handoff with current
       now: new Date("2026-05-31T09:00:00.000Z"),
       repositorySecretNames: [
         "CLOUDFLARE_ACCOUNT_ID",
-        "CLOUDFLARE_DEPLOYMENT_URL",
-        "CLOUDFLARE_TUNNEL_TOKEN",
-        "CLOUDFLARE_BACKEND_WEB_ORIGIN"
+        "CLOUDFLARE_DEPLOYMENT_URL"
       ],
       environmentSecretNames: ["HR_DATA_SIGNOFF_B64"],
       repo: "17602842555/HR",
@@ -43,10 +41,9 @@ test("backend server config packet writes private no-secret handoff with current
     assert.equal(manifest.kind, "backend-server-configuration");
     assert.equal(manifest.noPlaintextSecretValues, true);
     assert.equal(manifest.production.exists, false);
-    assert.deepEqual(manifest.githubSecrets.missingRepositorySecrets.sort(), [
-      "API_ORIGIN",
-      "CLOUDFLARE_API_TOKEN"
-    ]);
+	    assert.deepEqual(manifest.githubSecrets.missingRepositorySecrets.sort(), [
+	      "CLOUDFLARE_API_TOKEN"
+	    ]);
     assert.deepEqual(manifest.githubSecrets.missingEnvironmentSecrets.sort(), [
       "FILE_STORAGE_SIGNOFF_B64",
       "PRODUCTION_ENV_B64",
@@ -92,9 +89,9 @@ test("backend server config can inspect GitHub secret names without values", asy
         stderr: ""
       };
     }
-    return {
-      status: 0,
-      stdout: "CLOUDFLARE_ACCOUNT_ID\t2026-05-30T00:00:00Z\nAPI_ORIGIN\t2026-05-31T00:00:00Z\nCLOUDFLARE_API_TOKEN\t2026-05-31T00:00:00Z\nCLOUDFLARE_DEPLOYMENT_URL\t2026-05-30T00:00:00Z\nCLOUDFLARE_TUNNEL_TOKEN\t2026-05-30T00:00:00Z\nCLOUDFLARE_BACKEND_WEB_ORIGIN\t2026-05-30T00:00:00Z\n",
+	    return {
+	      status: 0,
+	      stdout: "CLOUDFLARE_ACCOUNT_ID\t2026-05-30T00:00:00Z\nCLOUDFLARE_API_TOKEN\t2026-05-31T00:00:00Z\nCLOUDFLARE_DEPLOYMENT_URL\t2026-05-30T00:00:00Z\n",
       stderr: ""
     };
   };

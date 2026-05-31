@@ -3,10 +3,20 @@ main = "cloudflare/worker.js"
 compatibility_date = "2026-05-30"
 compatibility_flags = ["nodejs_compat"]
 
-[secrets]
-required = [ "API_ORIGIN" ]
+[vars]
+OA_API_MODE = "native"
 
 [assets]
 directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
+
+# Optional production persistence:
+# 1. Run `npx wrangler d1 create deep-oa-hr`
+# 2. Replace the placeholder id below and uncomment the block.
+# 3. Run `npx wrangler d1 execute deep-oa-hr --remote --file cloudflare/schema.sql`
+#
+# [[d1_databases]]
+# binding = "OA_DB"
+# database_name = "deep-oa-hr"
+# database_id = "replace-with-cloudflare-d1-database-id"

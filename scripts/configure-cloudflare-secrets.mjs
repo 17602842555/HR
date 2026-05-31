@@ -2,28 +2,17 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { parseDotenvText } from "./commercial-doctor-core.mjs";
-import { validateCloudflareBackendEnv } from "./validate-cloudflare-backend.mjs";
 
 const secretSpecs = Object.freeze([
   Object.freeze({ name: "CLOUDFLARE_API_TOKEN", sourceKey: "CLOUDFLARE_API_TOKEN" }),
   Object.freeze({ name: "CLOUDFLARE_ACCOUNT_ID", sourceKey: "CLOUDFLARE_ACCOUNT_ID" }),
-  Object.freeze({ name: "API_ORIGIN", sourceKey: "API_ORIGIN" }),
-  Object.freeze({ name: "CLOUDFLARE_DEPLOYMENT_URL", sourceKey: "CLOUDFLARE_DEPLOYMENT_URL" }),
-  Object.freeze({ name: "CLOUDFLARE_TUNNEL_TOKEN", sourceKey: "CLOUDFLARE_TUNNEL_TOKEN" }),
-  Object.freeze({ name: "CLOUDFLARE_BACKEND_WEB_ORIGIN", sourceKey: "CLOUDFLARE_BACKEND_WEB_ORIGIN" })
+  Object.freeze({ name: "CLOUDFLARE_DEPLOYMENT_URL", sourceKey: "CLOUDFLARE_DEPLOYMENT_URL" })
 ]);
 
 const runtimeOverrideKeys = Object.freeze([
-  "API_ORIGIN",
   "CLOUDFLARE_ACCOUNT_ID",
   "CLOUDFLARE_API_TOKEN",
-  "CLOUDFLARE_BACKEND_WEB_ORIGIN",
-  "CLOUDFLARE_DEPLOYMENT_URL",
-  "CLOUDFLARE_TUNNEL_TOKEN",
-  "DEFAULT_ADMIN_PASSWORD",
-  "RUN_DB_SEED",
-  "TRUST_PROXY",
-  "WEB_ORIGIN"
+  "CLOUDFLARE_DEPLOYMENT_URL"
 ]);
 
 const cloudflareTokenVerifyUrl = "https://api.cloudflare.com/client/v4/user/tokens/verify";
@@ -59,14 +48,6 @@ function sanitizeCloudflareMessage(value = "") {
     .replaceAll(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
     .replaceAll(/(token|secret|password|key)=\S+/gi, "$1=[REDACTED]")
     .slice(0, 240);
-}
-
-function publicOrigin(value) {
-  try {
-    return new URL(value).origin;
-  } catch {
-    return "";
-  }
 }
 
 function valueSource(key, fileEnv, runtimeEnv, computedKeys = new Set()) {
@@ -215,28 +196,24 @@ export function buildCloudflareSecretPlan({
     errors.push("GitHub repo must be provided as owner/name with --repo or resolvable from origin remote.");
   }
 
-  if (!isPresent(merged.CLOUDFLARE_BACKEND_WEB_ORIGIN)) {
-    const deploymentOrigin = publicOrigin(merged.CLOUDFLARE_DEPLOYMENT_URL);
-    if (deploymentOrigin) {
-      merged.CLOUDFLARE_BACKEND_WEB_ORIGIN = deploymentOrigin;
-      computedKeys.add("CLOUDFLARE_BACKEND_WEB_ORIGIN");
-    }
-  }
-
-  const backendEnv = {
-    ...merged,
-    WEB_ORIGIN: merged.WEB_ORIGIN || merged.CLOUDFLARE_BACKEND_WEB_ORIGIN || merged.CLOUDFLARE_DEPLOYMENT_URL
-  };
-  const backendReport = validateCloudflareBackendEnv(backendEnv);
-  backendReport.errors.forEach((error) => errors.push(error));
-  backendReport.warnings.forEach((warning) => warnings.push(warning));
-
   if (isPlaceholder(merged.CLOUDFLARE_API_TOKEN) || String(merged.CLOUDFLARE_API_TOKEN || "").trim().length < 20) {
     errors.push("CLOUDFLARE_API_TOKEN must be a real Cloudflare API token with Workers deploy permission.");
   }
 
   if (!/^[a-f0-9]{32}$/i.test(String(merged.CLOUDFLARE_ACCOUNT_ID || "").trim())) {
     errors.push("CLOUDFLARE_ACCOUNT_ID must be the 32-character Cloudflare account id.");
+  }
+
+  try {
+    const deploymentUrl = new URL(merged.CLOUDFLARE_DEPLOYMENT_URL || "");
+    if (deploymentUrl.protocol !== "https:") {
+      errors.push("CLOUDFLARE_DEPLOYMENT_URL must be the HTTPS workers.dev deployment URL.");
+    }
+    if (String(deploymentUrl.hostname || "").includes("example.")) {
+      errors.push("CLOUDFLARE_DEPLOYMENT_URL must not use an example host.");
+    }
+  } catch {
+    errors.push("CLOUDFLARE_DEPLOYMENT_URL must be the HTTPS workers.dev deployment URL.");
   }
 
   const secretValues = new Map();
@@ -258,7 +235,10 @@ export function buildCloudflareSecretPlan({
   const plan = {
     ok: errors.length === 0,
     repo: repoName || null,
-    backend: backendReport.summary,
+    deployment: {
+      mode: "cloudflare-native-worker",
+      urlConfigured: isPresent(merged.CLOUDFLARE_DEPLOYMENT_URL)
+    },
     errors,
     secrets,
     warnings

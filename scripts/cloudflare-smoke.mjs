@@ -43,7 +43,7 @@ export function parseCloudflareSmokeArgs(argv = process.argv.slice(2), env = pro
   const options = {
     allowLocal: boolFlag(env.CLOUDFLARE_SMOKE_ALLOW_LOCAL),
     json: boolFlag(env.CLOUDFLARE_SMOKE_JSON),
-    requireApiOrigin: !boolFlag(env.CLOUDFLARE_SMOKE_ALLOW_MISSING_API_ORIGIN),
+    requireApiOrigin: boolFlag(env.CLOUDFLARE_SMOKE_REQUIRE_API_ORIGIN),
     retries: parsePositiveInt(env.CLOUDFLARE_SMOKE_RETRIES, 3),
     retryDelayMs: parsePositiveInt(env.CLOUDFLARE_SMOKE_RETRY_DELAY_MS, 2000),
     timeoutMs: parsePositiveInt(env.CLOUDFLARE_SMOKE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS),
@@ -58,6 +58,8 @@ export function parseCloudflareSmokeArgs(argv = process.argv.slice(2), env = pro
       options.allowLocal = true;
     } else if (arg === "--allow-missing-api-origin") {
       options.requireApiOrigin = false;
+    } else if (arg === "--require-api-origin") {
+      options.requireApiOrigin = true;
     } else if (arg === "--timeout-ms") {
       options.timeoutMs = parsePositiveInt(argv[index + 1], options.timeoutMs);
       index += 1;
@@ -153,6 +155,12 @@ function edgeHealthCheck(result, requireApiOrigin) {
       status: result.status
     });
   }
+  if (payload.apiMode === "cloudflare-native") {
+    return status("pass", "edge-health", "Cloudflare Worker native API is reachable.", {
+      apiMode: payload.apiMode,
+      d1Configured: payload.d1Configured === true
+    });
+  }
   if (requireApiOrigin && payload.apiOriginConfigured !== true) {
     return status("fail", "edge-api-origin", "Cloudflare Worker is deployed but API_ORIGIN is not configured.", {
       apiOriginConfigured: payload.apiOriginConfigured === true
@@ -165,7 +173,7 @@ function edgeHealthCheck(result, requireApiOrigin) {
     });
   }
   if (payload.apiOriginConfigured !== true) {
-    return status("warn", "edge-api-origin", "Cloudflare Worker is deployed without API_ORIGIN; backend proxy smoke was skipped.", {
+    return status("warn", "edge-api-origin", "Cloudflare Worker is deployed without API_ORIGIN and did not report native API mode.", {
       apiOriginConfigured: false
     });
   }
@@ -181,13 +189,14 @@ function backendHealthCheck(result) {
       status: result.status
     });
   }
-  if (result.payload?.service !== "deep-oa-api") {
-    return status("fail", "backend-health", "Cloudflare Worker backend proxy did not return the OA API service.", {
+  if (!["deep-oa-api", "deep-oa-cloudflare-api"].includes(result.payload?.service)) {
+    return status("fail", "backend-health", "Cloudflare Worker backend did not return the OA API service.", {
       service: result.payload?.service || "",
       status: result.status
     });
   }
-  return status("pass", "backend-health", "Cloudflare Worker backend proxy reaches the OA API.", {
+  return status("pass", "backend-health", "Cloudflare Worker backend reaches the OA API.", {
+    service: result.payload?.service,
     status: result.status
   });
 }
@@ -215,7 +224,7 @@ function openApiCheck(result) {
 export async function runCloudflareSmoke({
   allowLocal = false,
   fetchImpl = globalThis.fetch,
-  requireApiOrigin = true,
+  requireApiOrigin = false,
   retries = 3,
   retryDelayMs = 2000,
   timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -234,8 +243,10 @@ export async function runCloudflareSmoke({
   checks.push(edgeCheck);
 
   const shouldCheckBackend = edgeResult.ok
-    && edgeResult.payload?.apiOriginConfigured === true
-    && edgeResult.payload?.apiOriginValid !== false;
+    && (
+      edgeResult.payload?.apiMode === "cloudflare-native"
+      || (edgeResult.payload?.apiOriginConfigured === true && edgeResult.payload?.apiOriginValid !== false)
+    );
   if (shouldCheckBackend) {
     checks.push(backendHealthCheck(await fetchJsonWithRetries(fetchImpl, `${deploymentUrl}/api/health`, {
       retries,

@@ -533,22 +533,22 @@ function checkDeploymentArtifacts() {
     "workflow_dispatch:",
     "require_deploy:",
     "REQUIRE_CLOUDFLARE_DEPLOY",
-    "Require Cloudflare deployment configuration",
-    "Cloudflare deployment was explicitly required",
-    "Use require_deploy=false only for a build-only workflow dry run",
-    "Prepare Cloudflare Worker secrets file",
-    "cloudflare/wrangler-action@v4",
-    "deploy --secrets-file .cloudflare-worker-secrets.env",
-    "wrangler.toml requires the API_ORIGIN Worker secret",
-    "npm run validate:cloudflare-backend -- --env \"$backend_env\" --json",
-    "npm run smoke:cloudflare -- --url \"$CLOUDFLARE_DEPLOYMENT_URL\" --json"
-  ].forEach((needle) => assertIncludes(cloudflareDeployWorkflow, needle, ".github/workflows/cloudflare-deploy.yml"));
+	    "Require Cloudflare deployment configuration",
+	    "Cloudflare deployment was explicitly required",
+	    "Use require_deploy=false only for a build-only workflow dry run",
+	    "Deploy Worker with assets and native API",
+	    "cloudflare/wrangler-action@v4",
+	    "command: deploy",
+	    "npm run smoke:cloudflare -- --url \"$CLOUDFLARE_DEPLOYMENT_URL\" --json"
+	  ].forEach((needle) => assertIncludes(cloudflareDeployWorkflow, needle, ".github/workflows/cloudflare-deploy.yml"));
 
-  const wranglerConfig = readText("wrangler.toml");
-  [
-    "[secrets]",
-    "required = [ \"API_ORIGIN\" ]"
-  ].forEach((needle) => assertIncludes(wranglerConfig, needle, "wrangler.toml"));
+	  const wranglerConfig = readText("wrangler.toml");
+	  [
+	    "[vars]",
+	    "OA_API_MODE = \"native\"",
+	    "[assets]",
+	    "binding = \"ASSETS\""
+	  ].forEach((needle) => assertIncludes(wranglerConfig, needle, "wrangler.toml"));
 
   const materializeReleaseInputs = readText("scripts/materialize-release-inputs.mjs");
   [
@@ -588,21 +588,21 @@ function checkDeploymentArtifacts() {
     "parseCloudflareSecretArgs",
     "buildCloudflareSecretPlan",
     "applyCloudflareSecretPlan",
-    "verifyCloudflareApiToken",
-    "https://api.cloudflare.com/client/v4/user/tokens/verify",
-    "--verify-token",
-    "validateCloudflareBackendEnv",
-    "placeholderFragments",
+	    "verifyCloudflareApiToken",
+	    "https://api.cloudflare.com/client/v4/user/tokens/verify",
+	    "--verify-token",
+	    "cloudflare-native-worker",
+	    "placeholderFragments",
     "sanitizeCloudflareMessage",
     "\"gh\", [\"secret\", \"set\"",
     "input: value",
     "secretValues"
   ].forEach((needle) => assertIncludes(cloudflareSecretConfig, needle, "scripts/configure-cloudflare-secrets.mjs"));
 
-  const cloudflareSecretTests = readText("server/tests/cloudflare-secrets.test.mjs");
-  [
-    "cloudflare secret plan validates backend values and redacts secret material",
-    "cloudflare secret apply writes GitHub secrets through stdin",
+	  const cloudflareSecretTests = readText("server/tests/cloudflare-secrets.test.mjs");
+	  [
+	    "cloudflare secret plan validates native Worker values and redacts secret material",
+	    "cloudflare secret apply writes GitHub secrets through stdin",
     "cloudflare api token verification calls official endpoint without leaking token",
     "cloudflare api token verification fails closed and sanitizes errors",
     "cloudflare secret plan rejects unsafe production configuration",
@@ -681,10 +681,13 @@ function checkDeploymentArtifacts() {
     "cloudflare deployment status uses API inspection when account id is provided but token is missing"
   ].forEach((needle) => assertIncludes(cloudflareDeploymentStatusTests, needle, "server/tests/cloudflare-deployment-status.test.mjs"));
 
-  const cloudflareWorker = readText("cloudflare/worker.js");
-  [
-    "validateApiOrigin",
-    "api_origin_invalid",
+	  const cloudflareWorker = readText("cloudflare/worker.js");
+	  [
+	    "handleNativeApi",
+	    "deep-oa-cloudflare-api",
+	    "OA_API_MODE",
+	    "validateApiOrigin",
+	    "api_origin_invalid",
     "api_origin_unsafe",
     "api_origin_loop",
     "apiOriginValid",
@@ -694,18 +697,22 @@ function checkDeploymentArtifacts() {
   ].forEach((needle) => assertIncludes(cloudflareWorker, needle, "cloudflare/worker.js"));
   assertNotIncludes(cloudflareWorker, "http://127.0.0.1", "cloudflare/worker.js");
 
-  const cloudflareWorkerTests = readText("server/tests/cloudflare-worker.test.mjs");
-  [
-    "cloudflare worker API origin validator accepts only safe HTTPS backend origins",
-    "cloudflare worker reports invalid API origin without leaking backend value",
-    "cloudflare worker rejects same-origin API proxy loops before fetching backend",
-    "cloudflare worker proxies valid backend origin with security headers"
-  ].forEach((needle) => assertIncludes(cloudflareWorkerTests, needle, "server/tests/cloudflare-worker.test.mjs"));
+	  const cloudflareWorkerTests = readText("server/tests/cloudflare-worker.test.mjs");
+	  [
+	    "cloudflare worker API origin validator accepts only safe HTTPS backend origins",
+	    "cloudflare worker reports invalid API origin without leaking backend value",
+	    "cloudflare worker rejects same-origin API proxy loops before fetching backend",
+	    "cloudflare worker proxies valid backend origin with security headers",
+	    "cloudflare worker serves native API without API_ORIGIN",
+	    "cloudflare worker native approval decisions require every current approver before next node"
+	  ].forEach((needle) => assertIncludes(cloudflareWorkerTests, needle, "server/tests/cloudflare-worker.test.mjs"));
 
-  const cloudflareSmoke = readText("scripts/cloudflare-smoke.mjs");
-  [
-    "apiOriginValid",
-    "Cloudflare Worker API_ORIGIN is configured but invalid or unsafe.",
+	  const cloudflareSmoke = readText("scripts/cloudflare-smoke.mjs");
+	  [
+	    "cloudflare-native",
+	    "deep-oa-cloudflare-api",
+	    "apiOriginValid",
+	    "Cloudflare Worker API_ORIGIN is configured but invalid or unsafe.",
     "backend-health",
     "openapi-contract"
   ].forEach((needle) => assertIncludes(cloudflareSmoke, needle, "scripts/cloudflare-smoke.mjs"));
