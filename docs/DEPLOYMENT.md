@@ -243,6 +243,14 @@ npm run release:github -- --apply --json
 
 The default command is a dry-run production release plan. It inspects GitHub repository secret names and the selected GitHub environment secret names only, writes `reports/commercial-evidence/github-release-orchestration/latest-manifest.json` with private `0600` permissions, and lists any missing backend or release-input secret names without reading secret values. With `--apply`, it fails closed until every required repository secret (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `API_ORIGIN`, `CLOUDFLARE_DEPLOYMENT_URL`, `CLOUDFLARE_TUNNEL_TOKEN`, `CLOUDFLARE_BACKEND_WEB_ORIGIN`) and environment secret (`PRODUCTION_ENV_B64`, `PRODUCTION_SECRETS_SIGNOFF_B64`, `HR_DATA_SIGNOFF_B64`, `FILE_STORAGE_SIGNOFF_B64`) is configured. Once ready, it triggers `commercial-signoff`, `commercial-drill`, and `cloudflare-deploy` with `require_deploy=true`, waits for those runs by default, and promotes GitHub signoff/drill artifacts back into the local evidence workspace with `--require-current-sha`. Use `--no-wait` only when an operator wants to trigger the workflows now and inspect/fetch evidence later. This orchestration is an operational wrapper; release acceptance still requires the full evidence package and `npm run release:gate -- reports/commercial-evidence/latest.json --json`.
 
+Commercial release status:
+
+```bash
+npm run release:status -- --json
+```
+
+This aggregates the GitHub release orchestration dry-run, `npm run release:gate -- --json`, latest GitHub runs for commercial CI/signoff/drill/Cloudflare, and the Cloudflare deploy job's actual Worker deploy/smoke steps into `reports/commercial-evidence/release-status/latest-status.json` with private `0600` permissions. It distinguishes a green build-only Cloudflare workflow from a real Worker deployment by inspecting the `Deploy Worker with assets and API origin secret` and `Smoke deployed backend gateway` steps, then lists concrete blockers and next actions. It reads only GitHub metadata and secret names, never secret values.
+
 Local commercial development stack with port collision avoidance:
 
 ```bash

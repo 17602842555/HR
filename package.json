@@ -40,6 +40,7 @@
     "dossier:commercial": "node scripts/commercial-release-dossier.mjs",
     "gap:report": "node scripts/commercial-gap-report.mjs",
     "candidate:commercial": "node scripts/commercial-release-candidate.mjs",
+    "release:status": "node scripts/commercial-release-status.mjs",
     "release:github": "node scripts/github-release-orchestrator.mjs",
     "release:gate": "node scripts/commercial-release-gate.mjs",
     "validate:file-backup": "node scripts/validate-file-backup.mjs",

@@ -144,6 +144,7 @@ function checkPackageScripts() {
     "backup:postgres",
     "dossier:commercial",
     "prune:backups",
+    "release:status",
     "release:github",
     "release:gate",
     "restore:postgres",
@@ -215,6 +216,7 @@ function checkDeploymentArtifacts() {
     "scripts/commercial-release-candidate.mjs",
     "scripts/commercial-release-dossier.mjs",
     "scripts/commercial-release-gate.mjs",
+    "scripts/commercial-release-status.mjs",
     "scripts/commercial-smoke.mjs",
     "scripts/configure-backend-server.mjs",
     "scripts/configure-cloudflare-secrets.mjs",
@@ -255,6 +257,7 @@ function checkDeploymentArtifacts() {
     "server/tests/cloudflare-secrets.test.mjs",
     "server/tests/configure-release-inputs.test.mjs",
     "server/tests/cloudflare-worker.test.mjs",
+    "server/tests/commercial-release-status.test.mjs",
     "server/tests/commercial-script-security.test.mjs",
     "server/tests/github-drill-evidence.test.mjs",
     "server/tests/github-release-orchestrator.test.mjs",
@@ -1342,6 +1345,7 @@ function checkCommercialEvidenceAutomation() {
   assertIncludes(pkg.scripts["evidence:commercial"], "scripts/commercial-evidence.mjs", "package.json evidence:commercial script");
   assertIncludes(pkg.scripts["evidence:github-drill"], "scripts/github-drill-evidence.mjs", "package.json evidence:github-drill script");
   assertIncludes(pkg.scripts["evidence:github-signoff"], "scripts/github-signoff-evidence.mjs", "package.json evidence:github-signoff script");
+  assertIncludes(pkg.scripts["release:status"], "scripts/commercial-release-status.mjs", "package.json release:status script");
   assertIncludes(pkg.scripts["release:github"], "scripts/github-release-orchestrator.mjs", "package.json release:github script");
   assertIncludes(pkg.scripts["audit:evidence-permissions"], "scripts/validate-evidence-permissions.mjs", "package.json audit:evidence-permissions script");
 
@@ -1382,6 +1386,7 @@ function checkCommercialEvidenceAutomation() {
     "scripts/commercial-readiness-audit.mjs",
     "scripts/commercial-release-candidate.mjs",
     "scripts/commercial-release-dossier.mjs",
+    "scripts/commercial-release-status.mjs",
     "scripts/generate-sbom.mjs",
     "scripts/materialize-release-inputs.mjs",
     "scripts/export-openapi.mjs",
@@ -1396,6 +1401,7 @@ function checkCommercialEvidenceAutomation() {
     "reports/commercial-evidence/signoff-drafts/latest-manifest.json",
     "reports/commercial-evidence/latest-github-signoff-evidence.json",
     "reports/commercial-evidence/github-release-orchestration/latest-manifest.json",
+    "reports/commercial-evidence/release-status/latest-status.json",
     "reports/commercial-evidence/signoff-validation/release-inputs.json",
     "reports/commercial-evidence/signoff-validation/production-env.json",
     "reports/commercial-evidence/signoff-validation/cloudflare-backend.json",
@@ -1509,6 +1515,29 @@ function checkCommercialEvidenceAutomation() {
     "GitHub release apply can trigger all workflows without waiting"
   ].forEach((needle) => assertIncludes(githubReleaseOrchestratorTests, needle, "server/tests/github-release-orchestrator.test.mjs"));
 
+  const commercialReleaseStatus = readText("scripts/commercial-release-status.mjs");
+  [
+    "parseReleaseStatusArgs",
+    "buildCommercialReleaseStatus",
+    "summarizeCloudflareDeploy",
+    "release:gate",
+    "releasePlan",
+    "latestRuns",
+    "Deploy HR OA to Cloudflare",
+    "Deploy Worker with assets and API origin secret",
+    "Smoke deployed backend gateway",
+    "Cloudflare Worker has not been deployed for the current SHA",
+    "latest-status.json"
+  ].forEach((needle) => assertIncludes(commercialReleaseStatus, needle, "scripts/commercial-release-status.mjs"));
+
+  const commercialReleaseStatusTests = readText("server/tests/commercial-release-status.test.mjs");
+  [
+    "commercial release status parser defaults to production repository status",
+    "commercial release status summarizes Cloudflare actual deployment versus build-only",
+    "commercial release status blocks missing secrets release gate and build-only Cloudflare",
+    "commercial release status passes only with green secrets gate CI deploy and smoke"
+  ].forEach((needle) => assertIncludes(commercialReleaseStatusTests, needle, "server/tests/commercial-release-status.test.mjs"));
+
   const evidencePermissions = readText("scripts/validate-evidence-permissions.mjs");
   [
     "auditEvidencePermissions",
@@ -1517,6 +1546,7 @@ function checkCommercialEvidenceAutomation() {
     "optionalEvidenceFiles",
     "latest-github-signoff-evidence.json",
     "github-release-orchestration/latest-manifest.json",
+    "release-status/latest-status.json",
     "latest-owner-handoff-manifest.json",
     "hr-data-review/latest-manifest.json",
     "production-env-prep/latest-manifest.json",
@@ -1564,11 +1594,13 @@ function checkCommercialEvidenceAutomation() {
     "npm run evidence:commercial",
     "npm run evidence:github-drill",
     "npm run evidence:github-signoff",
+    "npm run release:status",
     "npm run release:github",
     "reports/commercial-evidence/latest.json",
     "latest-github-drill-evidence.json",
     "latest-github-signoff-evidence.json",
     "github-release-orchestration/latest-manifest.json",
+    "release-status/latest-status.json",
     "--strict-readiness",
     "npm run audit:evidence-permissions",
     "evidence-permissions"
