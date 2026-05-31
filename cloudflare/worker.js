@@ -23,6 +23,9 @@ const DEFAULT_CORS_ORIGINS = new Set([
 const SESSION_COOKIE = "oa_cf_session";
 const STATE_KEY = "oa_state_v1";
 const STATE_SCHEMA_VERSION = 1;
+const AUDIT_INTEGRITY_ALGORITHM = "sha256-v1";
+const MAX_FILE_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_IMPORT_HTML_BYTES = 10 * 1024 * 1024;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
@@ -195,10 +198,61 @@ function validNewPassword(input) {
   return value.length >= 12 && /[A-Za-z]/.test(value) && /\d/.test(value);
 }
 
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort()
+      .reduce((result, key) => {
+        const next = value[key];
+        if (next !== undefined) result[key] = canonicalize(next);
+        return result;
+      }, {});
+  }
+  return value;
+}
+
+function hexFromBytes(bytes) {
+  return [...new Uint8Array(bytes)].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256HexBytes(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return hexFromBytes(digest);
+}
+
+async function sha256HexText(value) {
+  return sha256HexBytes(textEncoder.encode(String(value || "")));
+}
+
+async function sha256HexJson(value) {
+  return sha256HexText(JSON.stringify(canonicalize(value)));
+}
+
+function base64ToBytes(value) {
+  const input = String(value || "").trim();
+  if (!input) return new Uint8Array();
+  try {
+    const binary = atob(input);
+    return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+}
+
 async function nativePasswordHash(password, salt = crypto.randomUUID()) {
   const encoder = new TextEncoder();
   const bytes = await crypto.subtle.digest("SHA-256", encoder.encode(`${salt}:${password}`));
-  const digest = [...new Uint8Array(bytes)].map((value) => value.toString(16).padStart(2, "0")).join("");
+  const digest = hexFromBytes(bytes);
   return `sha256:${salt}:${digest}`;
 }
 
@@ -909,12 +963,132 @@ function makeAnalytics(state) {
   };
 }
 
-function makeAuditIntegrity(logs) {
+function auditIntegrityFromLog(log = {}) {
+  return log.integrity || log.metadata?.integrity || null;
+}
+
+function auditHashPayload(log = {}) {
+  const { hash: _hash, integrity: _integrity, metadata, ...rest } = log;
+  const cleanMetadata = metadata && typeof metadata === "object" && !Array.isArray(metadata)
+    ? Object.fromEntries(Object.entries(metadata).filter(([key]) => key !== "integrity"))
+    : metadata;
+  return { ...rest, ...(cleanMetadata ? { metadata: cleanMetadata } : {}) };
+}
+
+async function computeAuditRecordHash(log = {}, { previousHash = null, sequence = 1 } = {}) {
+  return sha256HexJson({
+    algorithm: AUDIT_INTEGRITY_ALGORITHM,
+    payload: auditHashPayload(log),
+    previousHash: previousHash || null,
+    sequence
+  });
+}
+
+async function buildAuditIntegrity(log = {}, { previousHash = null, sequence = 1 } = {}) {
+  const normalizedSequence = Number.isFinite(Number(sequence)) && Number(sequence) > 0 ? Number(sequence) : 1;
+  const normalizedPreviousHash = previousHash || null;
+  return {
+    algorithm: AUDIT_INTEGRITY_ALGORITHM,
+    previousHash: normalizedPreviousHash,
+    recordHash: await computeAuditRecordHash(log, {
+      previousHash: normalizedPreviousHash,
+      sequence: normalizedSequence
+    }),
+    sequence: normalizedSequence
+  };
+}
+
+async function ensureAuditLogIntegrity(logs = []) {
+  const rows = Array.isArray(logs) ? logs : [];
+  const ordered = [...rows].reverse();
+  let changed = false;
+  let previousHash = null;
+  let previousSequence = 0;
+  let broken = false;
+
+  for (const log of ordered) {
+    const integrity = auditIntegrityFromLog(log);
+    if (integrity) {
+      const sequence = Number(integrity.sequence);
+      const expectedHash = await computeAuditRecordHash(log, { previousHash, sequence });
+      if (
+        integrity.algorithm !== AUDIT_INTEGRITY_ALGORITHM
+        || !Number.isFinite(sequence)
+        || sequence !== previousSequence + 1
+        || (integrity.previousHash || null) !== previousHash
+        || integrity.recordHash !== expectedHash
+      ) {
+        broken = true;
+      }
+      previousHash = integrity.recordHash || null;
+      previousSequence = Number.isFinite(sequence) ? sequence : previousSequence;
+      continue;
+    }
+    if (broken) continue;
+    const nextIntegrity = await buildAuditIntegrity(log, {
+      previousHash,
+      sequence: previousSequence + 1
+    });
+    log.integrity = nextIntegrity;
+    log.hash = nextIntegrity.recordHash;
+    previousHash = nextIntegrity.recordHash;
+    previousSequence = nextIntegrity.sequence;
+    changed = true;
+  }
+
+  return { changed, logs: rows };
+}
+
+async function makeAuditIntegrity(logs = []) {
+  const rows = Array.isArray(logs) ? logs : [];
+  const signedRows = rows.filter((log) => Boolean(auditIntegrityFromLog(log)));
+  const unsignedRows = rows.length - signedRows.length;
+  const ordered = [...signedRows].sort((a, b) => Number(auditIntegrityFromLog(a)?.sequence || 0) - Number(auditIntegrityFromLog(b)?.sequence || 0));
+  const errors = [];
+  const warnings = [];
+  let previousHash = null;
+  let previousSequence = 0;
+
+  for (const log of ordered) {
+    const integrity = auditIntegrityFromLog(log);
+    const sequence = Number(integrity?.sequence);
+    if (integrity?.algorithm !== AUDIT_INTEGRITY_ALGORITHM) {
+      errors.push(`audit log ${log.id || "(unknown)"} uses unsupported integrity algorithm.`);
+    }
+    if (!Number.isFinite(sequence) || sequence <= 0) {
+      errors.push(`audit log ${log.id || "(unknown)"} has invalid integrity sequence.`);
+      continue;
+    }
+    if (sequence !== previousSequence + 1) {
+      errors.push(`audit log ${log.id || "(unknown)"} integrity sequence is not contiguous.`);
+    }
+    if ((integrity.previousHash || null) !== previousHash) {
+      errors.push(`audit log ${log.id || "(unknown)"} previousHash does not match prior recordHash.`);
+    }
+    const expectedHash = await computeAuditRecordHash(log, { previousHash, sequence });
+    if (integrity.recordHash !== expectedHash) {
+      errors.push(`audit log ${log.id || "(unknown)"} recordHash does not match payload.`);
+    }
+    previousHash = integrity.recordHash || null;
+    previousSequence = sequence;
+  }
+  if (unsignedRows > 0) warnings.push(`${unsignedRows} unsigned audit rows remain`);
+
   return {
     checkedAt: nowIso(),
-    latestHash: logs[0]?.hash || "seed",
-    ok: true,
-    total: logs.length
+    errors,
+    latestHash: previousHash,
+    ok: errors.length === 0,
+    summary: {
+      firstSequence: Number(auditIntegrityFromLog(ordered[0])?.sequence || 0) || null,
+      lastHash: previousHash,
+      lastSequence: previousSequence || null,
+      signedRows: signedRows.length,
+      totalRows: rows.length,
+      unsignedRows
+    },
+    total: rows.length,
+    warnings
   };
 }
 
@@ -980,7 +1154,7 @@ function makeInitialState(storageMode = "memory") {
     ],
     exportRecords: [],
     files: [
-      { id: "FILE-DEMO-1", fileName: "制度说明.txt", mimeType: "text/plain", sizeBytes: 128, checksum: "demo-seed", visibility: "TENANT", uploader: { name: "系统管理员" }, createdAt: "2026-05-29T10:00:00.000Z", contentBase64: "5Yi25bqm6K+05piO" }
+      { id: "FILE-DEMO-1", fileName: "制度说明.txt", mimeType: "text/plain", sizeBytes: 12, checksum: "e85d1da96f5f86ac47c9b2b1efda142db016f78e78a40bd402e4a25e087a75bc", visibility: "TENANT", uploader: { name: "系统管理员" }, createdAt: "2026-05-29T10:00:00.000Z", contentBase64: "5Yi25bqm6K+05piO" }
     ],
     financeRequests: [
       { id: "EXP-202605-0001", type: "EXPENSE", typeLabel: "费用报销", title: "办公室耗材报销", applicant: "张三", department: "行政部", amount: 2680, currency: "CNY", vendor: "京东企业购", paymentMethod: "银行转账", status: "待审批", workflowStatus: "PENDING" },
@@ -1029,7 +1203,6 @@ function makeInitialState(storageMode = "memory") {
   };
   state.approvals = makeInitialApprovals(people, approvalRules);
   state.analytics = makeAnalytics(state);
-  state.auditIntegrity = makeAuditIntegrity(state.auditLogs);
   state.iam = {
     ...initialIam,
     ...buildAccountLibrary(people, initialIam)
@@ -1067,13 +1240,18 @@ async function loadState(env) {
       if (cached) {
         const state = await cached.json();
         state.systemReadiness = makeReadiness("edge-cache");
+        await ensureAuditLogIntegrity(state.auditLogs || []);
+        state.auditIntegrity = await makeAuditIntegrity(state.auditLogs || []);
         return state;
       }
       memoryState = makeInitialState("edge-cache");
       await saveState(env, memoryState);
       return clone(memoryState);
     }
-    if (!memoryState) memoryState = makeInitialState(fallbackStorageMode());
+    if (!memoryState) {
+      memoryState = makeInitialState(fallbackStorageMode());
+      await saveState(env, memoryState);
+    }
     return clone(memoryState);
   }
 
@@ -1082,6 +1260,8 @@ async function loadState(env) {
   if (row?.value) {
     const state = JSON.parse(row.value);
     state.systemReadiness = makeReadiness("d1");
+    await ensureAuditLogIntegrity(state.auditLogs || []);
+    state.auditIntegrity = await makeAuditIntegrity(state.auditLogs || []);
     return state;
   }
 
@@ -1092,7 +1272,8 @@ async function loadState(env) {
 
 async function saveState(env, state) {
   state.analytics = makeAnalytics(state);
-  state.auditIntegrity = makeAuditIntegrity(state.auditLogs);
+  await ensureAuditLogIntegrity(state.auditLogs || []);
+  state.auditIntegrity = await makeAuditIntegrity(state.auditLogs);
   state.approvalRuleCoverage = makeApprovalRuleCoverage(state.approvalRules || []);
   state.iam = {
     ...(state.iam || {}),
@@ -1117,31 +1298,48 @@ async function saveState(env, state) {
     .run();
 }
 
-async function appendAudit(env, state, { action, actor = "张三", content, object = "系统", objectId = "-", result = "成功", type = action }) {
+async function appendAudit(env, state, {
+  action,
+  actor = "张三",
+  content,
+  exportRecord = null,
+  object = "系统",
+  objectId = "-",
+  request = null,
+  result = "成功",
+  type = action
+}) {
+  const meta = requestMeta(request);
   const event = {
     content: content || action,
     id: nextId("AUD"),
-    ip: "cloudflare-edge",
+    ip: meta.ip,
     object,
     objectId,
     operator: actor,
+    requestId: meta.requestId,
     result,
     time: localTime(),
-    type
+    type,
+    userAgent: meta.userAgent
   };
   state.auditLogs = [event, ...(state.auditLogs || [])].slice(0, 500);
-  if (action.includes("导出")) {
+  if (exportRecord || action.includes("导出")) {
+    const exportInput = exportRecord || {};
     state.exportRecords = [{
       action,
-      fileName: `${object}-${Date.now()}.csv`,
-      format: "csv",
+      businessReason: exportInput.businessReason || "",
+      fileName: exportInput.fileName || `${object}-${Date.now()}.csv`,
+      filters: exportInput.filters || {},
+      format: exportInput.format || "csv",
       id: nextId("EXP"),
       ip: event.ip,
       module: object,
       operator: actor,
+      requestId: event.requestId,
       result,
-      rowCount: 0,
-      scope: object,
+      rowCount: Number.isFinite(Number(exportInput.rowCount)) ? Number(exportInput.rowCount) : 0,
+      scope: exportInput.scope || object,
       time: event.time
     }, ...(state.exportRecords || [])];
   }
@@ -1270,6 +1468,41 @@ async function readJson(request) {
   } catch {
     throw new Error("请求体必须是 JSON。");
   }
+}
+
+function requestMeta(request) {
+  return {
+    ip: request?.headers?.get("cf-connecting-ip") || "cloudflare-edge",
+    requestId: request?.headers?.get("cf-ray") || nextId("REQ"),
+    userAgent: request?.headers?.get("user-agent") || ""
+  };
+}
+
+function normalizeExportBusinessReason(input = {}) {
+  return String(
+    input.businessReason
+    || input.exportReason
+    || input.reason
+    || input.filters?.businessReason
+    || input.metadata?.businessReason
+    || ""
+  ).trim().slice(0, 240);
+}
+
+async function exportContext(request, defaultScope) {
+  const body = await readJson(request);
+  const businessReason = normalizeExportBusinessReason(body);
+  if (businessReason.length < 4) {
+    return {
+      error: badRequest("导出需填写至少 4 个字符的业务用途说明。")
+    };
+  }
+  return {
+    body,
+    businessReason,
+    filters: body.filters && typeof body.filters === "object" && !Array.isArray(body.filters) ? body.filters : {},
+    scope: String(body.scope || defaultScope || "导出数据").trim()
+  };
 }
 
 function compactRowsToCsv(rows, columns) {
@@ -1473,6 +1706,18 @@ function applyApprovalDecision(approval, payload = {}) {
   return approval;
 }
 
+function principalCanActAs(state, actor, approverName) {
+  if (!actor || !approverName) return false;
+  if (hasPermission(state, actor, "system.admin")) return true;
+  const normalizedApprover = String(approverName || "").trim().toLowerCase();
+  return [
+    actor.name,
+    actor.email,
+    actor.employee?.name,
+    actor.employee?.email
+  ].some((value) => String(value || "").trim().toLowerCase() === normalizedApprover);
+}
+
 async function handleNativeApi(request, env) {
   const url = new URL(request.url);
   const pathname = url.pathname.replace(/^\/api/, "") || "/";
@@ -1642,13 +1887,24 @@ async function handleNativeApi(request, env) {
 
   if (pathname === "/analytics/overview" && method === "GET") return ok({ analytics: state.analytics });
   if (pathname === "/analytics/export" && method === "POST") {
-    await appendAudit(env, state, { action: "导出管理看板", actor: "张三", content: "导出管理看板 CSV", object: "管理看板" });
+    const exportInfo = await exportContext(request, "管理看板快照");
+    if (exportInfo.error) return exportInfo.error;
+    const rows = state.analytics.riskApprovals;
+    const filename = "analytics-snapshot.csv";
+    await appendAudit(env, state, {
+      action: "导出管理看板",
+      actor: actorName,
+      content: "导出管理看板 CSV",
+      exportRecord: { businessReason: exportInfo.businessReason, fileName: filename, filters: exportInfo.filters, rowCount: rows.length, scope: exportInfo.scope },
+      object: "管理看板",
+      request
+    });
     await saveState(env, state);
-    return csv(compactRowsToCsv(state.analytics.riskApprovals, [
+    return csv(compactRowsToCsv(rows, [
       { key: "title", label: "风险流程" },
       { key: "node", label: "当前节点" },
       { key: "status", label: "状态" }
-    ]), "analytics-snapshot.csv");
+    ]), filename);
   }
 
   if (pathname === "/people" && method === "GET") return ok({ people: state.people, revealSensitive: state.revealSensitive });
@@ -1659,20 +1915,31 @@ async function handleNativeApi(request, env) {
     const employee = state.people.employees.find((item) => item.id === decodeURIComponent(segments[2]));
     if (!employee) return notFound(pathname);
     Object.assign(employee, body);
-    await appendAudit(env, state, { action: "更新员工", actor: "张三", content: `更新员工 ${employee.name}`, object: "员工档案", objectId: employee.id });
+    await appendAudit(env, state, { action: "更新员工", actor: actorName, content: `更新员工 ${employee.name}`, object: "员工档案", objectId: employee.id, request });
     await saveState(env, state);
     return ok({ employee });
   }
   if (pathname === "/people/export" && method === "POST") {
-    await appendAudit(env, state, { action: "导出人员名册", actor: "张三", content: "导出脱敏人员名册", object: "人员名册" });
+    const exportInfo = await exportContext(request, "人员名册");
+    if (exportInfo.error) return exportInfo.error;
+    const rows = state.people.employees;
+    const filename = "people-export.csv";
+    await appendAudit(env, state, {
+      action: "导出人员名册",
+      actor: actorName,
+      content: "导出脱敏人员名册",
+      exportRecord: { businessReason: exportInfo.businessReason, fileName: filename, filters: exportInfo.filters, rowCount: rows.length, scope: exportInfo.scope },
+      object: "人员名册",
+      request
+    });
     await saveState(env, state);
-    return csv(compactRowsToCsv(state.people.employees, [
+    return csv(compactRowsToCsv(rows, [
       { key: "seq", label: "工号" },
       { key: "name", label: "姓名" },
       { key: "department", label: "部门" },
       { key: "role", label: "岗位" },
       { key: "status", label: "状态" }
-    ]), "people-export.csv");
+    ]), filename);
   }
 
   if (pathname === "/iam" && method === "GET") return ok({ iam: state.iam });
@@ -1697,7 +1964,7 @@ async function handleNativeApi(request, env) {
       return json({ code: "USER_EMAIL_EXISTS", message: "该登录账号已存在。", ok: false }, { status: 409 });
     }
     state.iam.users = [user, ...state.iam.users];
-    await appendAudit(env, state, { action: "创建账号", actor: "张三", content: `创建账号 ${user.email}`, object: "账号权限", objectId: user.id });
+    await appendAudit(env, state, { action: "创建账号", actor: actorName, content: `创建账号 ${user.email}`, object: "账号权限", objectId: user.id, request });
     await saveState(env, state);
     return ok({ temporaryPassword, user });
   }
@@ -1738,7 +2005,7 @@ async function handleNativeApi(request, env) {
       });
     }
     state.iam.users = [...createdUsers, ...state.iam.users];
-    await appendAudit(env, state, { action: "批量开户", actor: "张三", content: `为 ${createdUsers.length} 名员工生成账号`, object: "账号权限" });
+    await appendAudit(env, state, { action: "批量开户", actor: actorName, content: `为 ${createdUsers.length} 名员工生成账号`, object: "账号权限", request });
     await saveState(env, state);
     return ok({ createdCount: createdUsers.length, credentials, createdUsers });
   }
@@ -1754,7 +2021,7 @@ async function handleNativeApi(request, env) {
 	    }
 	    role.permissionCodes = nextPermissionCodes;
 	    role.permissions = permissionsByCode(role.permissionCodes);
-    await appendAudit(env, state, { action: "更新角色权限", actor: "张三", content: `更新 ${role.name} 权限`, object: "角色权限", objectId: role.id });
+    await appendAudit(env, state, { action: "更新角色权限", actor: actorName, content: `更新 ${role.name} 权限`, object: "角色权限", objectId: role.id, request });
     await saveState(env, state);
     return ok({ role });
   }
@@ -1784,7 +2051,7 @@ async function handleNativeApi(request, env) {
 	      user.mustChangePassword = true;
 	      user.sessionVersion = Number(user.sessionVersion || 0) + 1;
 	    }
-    await appendAudit(env, state, { action: "更新账号", actor: "张三", content: `更新账号 ${user.email}`, object: "账号权限", objectId: user.id });
+    await appendAudit(env, state, { action: "更新账号", actor: actorName, content: `更新账号 ${user.email}`, object: "账号权限", objectId: user.id, request });
     await saveState(env, state);
     return ok({ user });
   }
@@ -1795,7 +2062,7 @@ async function handleNativeApi(request, env) {
     const department = url.searchParams.get("department") || "行政部";
     const templateId = url.searchParams.get("templateId") || "expense";
     const rule = state.approvalRules.find((item) => item.department === department && item.templateId === templateId);
-    await appendAudit(env, state, { action: "预览审批规则", actor: "张三", content: `${department} / ${templateId}`, object: "审批规则" });
+    await appendAudit(env, state, { action: "预览审批规则", actor: actorName, content: `${department} / ${templateId}`, object: "审批规则", request });
     await saveState(env, state);
     return ok({ rule, route: rule?.nodes || [] });
   }
@@ -1804,7 +2071,7 @@ async function handleNativeApi(request, env) {
     const body = await readJson(request);
     const rule = { ...body, id: body.id || nextId("RULE"), updatedAt: localTime() };
     state.approvalRules = [rule, ...state.approvalRules.filter((item) => item.id !== rule.id)];
-    await appendAudit(env, state, { action: "新增审批规则", actor: "张三", content: `${rule.department} / ${rule.templateName}`, object: "审批规则", objectId: rule.id });
+    await appendAudit(env, state, { action: "新增审批规则", actor: actorName, content: `${rule.department} / ${rule.templateName}`, object: "审批规则", objectId: rule.id, request });
     await saveState(env, state);
     return ok({ rule });
   }
@@ -1812,14 +2079,14 @@ async function handleNativeApi(request, env) {
     const body = await readJson(request);
     const id = decodeURIComponent(segments[2]);
     state.approvalRules = state.approvalRules.map((rule) => rule.id === id ? { ...rule, ...body, id, updatedAt: localTime() } : rule);
-    await appendAudit(env, state, { action: "更新审批规则", actor: "张三", content: `更新规则 ${id}`, object: "审批规则", objectId: id });
+    await appendAudit(env, state, { action: "更新审批规则", actor: actorName, content: `更新规则 ${id}`, object: "审批规则", objectId: id, request });
     await saveState(env, state);
     return ok({ rule: state.approvalRules.find((rule) => rule.id === id) });
   }
   if (segments[0] === "approvals" && segments[1] === "rules" && segments[2] && method === "DELETE") {
     const id = decodeURIComponent(segments[2]);
     state.approvalRules = state.approvalRules.filter((rule) => rule.id !== id);
-    await appendAudit(env, state, { action: "删除审批规则", actor: "张三", content: `删除规则 ${id}`, object: "审批规则", objectId: id });
+    await appendAudit(env, state, { action: "删除审批规则", actor: actorName, content: `删除规则 ${id}`, object: "审批规则", objectId: id, request });
     await saveState(env, state);
     return ok({ id });
   }
@@ -1857,20 +2124,31 @@ async function handleNativeApi(request, env) {
       title: body.title || template.name
     };
     state.approvals = [approval, ...state.approvals];
-    await appendAudit(env, state, { action: "发起审批", actor: approval.applicant, content: `发起 ${approval.title}`, object: "OA审批", objectId: approval.id });
+    await appendAudit(env, state, { action: "发起审批", actor: actorName, content: `发起 ${approval.title}`, object: "OA审批", objectId: approval.id, request });
     await saveState(env, state);
     return ok({ approval });
   }
   if (pathname === "/approvals/export" && method === "POST") {
-    await appendAudit(env, state, { action: "导出审批列表", actor: "张三", content: "导出审批列表 CSV", object: "OA审批" });
+    const exportInfo = await exportContext(request, "审批列表");
+    if (exportInfo.error) return exportInfo.error;
+    const rows = state.approvals;
+    const filename = "approvals-export.csv";
+    await appendAudit(env, state, {
+      action: "导出审批列表",
+      actor: actorName,
+      content: "导出审批列表 CSV",
+      exportRecord: { businessReason: exportInfo.businessReason, fileName: filename, filters: exportInfo.filters, rowCount: rows.length, scope: exportInfo.scope },
+      object: "OA审批",
+      request
+    });
     await saveState(env, state);
-    return csv(compactRowsToCsv(state.approvals, [
+    return csv(compactRowsToCsv(rows, [
       { key: "id", label: "流程编号" },
       { key: "title", label: "标题" },
       { key: "applicant", label: "申请人" },
       { key: "department", label: "部门" },
       { key: "status", label: "状态" }
-    ]), "approvals-export.csv");
+    ]), filename);
   }
   if (segments[0] === "approvals" && segments[1] && method === "GET") {
     const approval = state.approvals.find((item) => item.id === decodeURIComponent(segments[1]));
@@ -1880,8 +2158,26 @@ async function handleNativeApi(request, env) {
     const body = await readJson(request);
     const approval = state.approvals.find((item) => item.id === decodeURIComponent(segments[1]));
     if (!approval) return notFound(pathname);
-    applyApprovalDecision(approval, body);
-    await appendAudit(env, state, { action: body.decision === "reject" ? "驳回审批" : "同意审批", actor: body.approverName || "张三", content: `${approval.title}：${approval.status}`, object: "OA审批", objectId: approval.id });
+    const currentNode = approval.approvalNodes?.[approval.currentNodeIndex];
+    const requestedApprover = String(body.approverName || actorName || "").trim();
+    const targetDecision = currentNode?.decisions?.find((item) => item.approver === requestedApprover);
+    if (!targetDecision || targetDecision.status !== "待审批") return badRequest("当前审批人不在待处理节点中。");
+    if (!principalCanActAs(state, actor, requestedApprover)) {
+      await appendAudit(env, state, {
+        action: "审批身份拒绝",
+        actor: actorName,
+        content: `${approval.title} 请求代表 ${requestedApprover} 审批被拒绝`,
+        object: "OA审批",
+        objectId: approval.id,
+        request,
+        result: "失败",
+        type: "权限拒绝"
+      });
+      await saveState(env, state);
+      return forbidden("workflow.approve");
+    }
+    applyApprovalDecision(approval, { ...body, approverName: requestedApprover });
+    await appendAudit(env, state, { action: body.decision === "reject" ? "驳回审批" : "同意审批", actor: actorName, content: `${approval.title}：${approval.status}（审批人 ${requestedApprover}）`, object: "OA审批", objectId: approval.id, request });
     await saveState(env, state);
     return ok({ approval });
   }
@@ -1890,10 +2186,26 @@ async function handleNativeApi(request, env) {
     const approval = state.approvals.find((item) => item.id === decodeURIComponent(segments[1]));
     if (!approval) return notFound(pathname);
     const currentNode = approval.approvalNodes?.[approval.currentNodeIndex];
-    const decision = currentNode?.decisions?.find((item) => item.approver === body.sourceApproverName) || currentNode?.decisions?.find((item) => item.status === "待审批");
+    const sourceApprover = String(body.sourceApproverName || actorName || "").trim();
+    const decision = currentNode?.decisions?.find((item) => item.approver === sourceApprover);
+    if (!decision || decision.status !== "待审批") return badRequest("当前转交人不在待处理节点中。");
+    if (!principalCanActAs(state, actor, sourceApprover)) {
+      await appendAudit(env, state, {
+        action: "转交身份拒绝",
+        actor: actorName,
+        content: `${approval.title} 请求代表 ${sourceApprover} 转交被拒绝`,
+        object: "OA审批",
+        objectId: approval.id,
+        request,
+        result: "失败",
+        type: "权限拒绝"
+      });
+      await saveState(env, state);
+      return forbidden("workflow.approve");
+    }
     if (decision) decision.approver = body.target || "财务负责人";
-    approval.timeline = [...(approval.timeline || []), { id: nextId("TL"), time: localTime(), actor: "张三", action: "转交审批", node: currentNode?.name || approval.node }];
-    await appendAudit(env, state, { action: "转交审批", actor: "张三", content: `${approval.title} 转交给 ${body.target}`, object: "OA审批", objectId: approval.id });
+    approval.timeline = [...(approval.timeline || []), { id: nextId("TL"), time: localTime(), actor: actorName, action: `代表 ${sourceApprover} 转交审批`, node: currentNode?.name || approval.node }];
+    await appendAudit(env, state, { action: "转交审批", actor: actorName, content: `${approval.title} 转交给 ${body.target}`, object: "OA审批", objectId: approval.id, request });
     await saveState(env, state);
     return ok({ approval });
   }
@@ -1901,8 +2213,8 @@ async function handleNativeApi(request, env) {
     const approval = state.approvals.find((item) => item.id === decodeURIComponent(segments[1]));
     if (!approval) return notFound(pathname);
     approval.status = "已撤回";
-    approval.timeline = [...(approval.timeline || []), { id: nextId("TL"), time: localTime(), actor: "张三", action: "撤回审批", node: approval.node }];
-    await appendAudit(env, state, { action: "撤回审批", actor: "张三", content: approval.title, object: "OA审批", objectId: approval.id });
+    approval.timeline = [...(approval.timeline || []), { id: nextId("TL"), time: localTime(), actor: actorName, action: "撤回审批", node: approval.node }];
+    await appendAudit(env, state, { action: "撤回审批", actor: actorName, content: approval.title, object: "OA审批", objectId: approval.id, request });
     await saveState(env, state);
     return ok({ approval });
   }
@@ -1910,9 +2222,9 @@ async function handleNativeApi(request, env) {
     const body = await readJson(request);
     const approval = state.approvals.find((item) => item.id === decodeURIComponent(segments[1]));
     if (!approval) return notFound(pathname);
-    const comment = { id: nextId("CMT"), author: "张三", content: body.content || "", time: localTime() };
+    const comment = { id: nextId("CMT"), author: actorName, content: body.content || "", time: localTime() };
     approval.comments = [...(approval.comments || []), comment];
-    await appendAudit(env, state, { action: "新增审批评论", actor: "张三", content: approval.title, object: "OA审批", objectId: approval.id });
+    await appendAudit(env, state, { action: "新增审批评论", actor: actorName, content: approval.title, object: "OA审批", objectId: approval.id, request });
     await saveState(env, state);
     return ok({ comment });
   }
@@ -1923,7 +2235,7 @@ async function handleNativeApi(request, env) {
     const body = await readJson(request);
     const asset = { id: body.id || nextId("ADM"), qrVersion: 1, status: "空闲", ...body };
     state.assets = [asset, ...state.assets];
-    await appendAudit(env, state, { action: "录入资产", actor: "张三", content: `录入资产 ${asset.name}`, object: "行政资产", objectId: asset.id });
+    await appendAudit(env, state, { action: "录入资产", actor: actorName, content: `录入资产 ${asset.name}`, object: "行政资产", objectId: asset.id, request });
     await saveState(env, state);
     return ok({ asset });
   }
@@ -1934,9 +2246,9 @@ async function handleNativeApi(request, env) {
     const status = assetStatusForAction(body.action);
     if (status) asset.status = status;
     if (body.owner) asset.owner = body.owner;
-    const event = { id: nextId("AE"), assetId: asset.id, time: localTime(), type: body.action || "更新", operator: "张三", content: body.result || `资产状态更新为 ${asset.status}` };
+    const event = { id: nextId("AE"), assetId: asset.id, time: localTime(), type: body.action || "更新", operator: actorName, content: body.result || `资产状态更新为 ${asset.status}` };
     state.assetEvents = [event, ...state.assetEvents];
-    await appendAudit(env, state, { action: "资产动作", actor: "张三", content: `${asset.name} ${event.content}`, object: "行政资产", objectId: asset.id });
+    await appendAudit(env, state, { action: "资产动作", actor: actorName, content: `${asset.name} ${event.content}`, object: "行政资产", objectId: asset.id, request });
     await saveState(env, state);
     return ok({ asset, event });
   }
@@ -1944,7 +2256,7 @@ async function handleNativeApi(request, env) {
     const asset = state.assets.find((item) => item.id === decodeURIComponent(segments[1]));
     if (!asset) return notFound(pathname);
     asset.qrVersion = Number(asset.qrVersion || 1) + 1;
-    await appendAudit(env, state, { action: "重新生成资产二维码", actor: "张三", content: asset.name, object: "行政资产", objectId: asset.id });
+    await appendAudit(env, state, { action: "重新生成资产二维码", actor: actorName, content: asset.name, object: "行政资产", objectId: asset.id, request });
     await saveState(env, state);
     return ok({ asset });
   }
@@ -1953,20 +2265,31 @@ async function handleNativeApi(request, env) {
     const asset = state.assets.find((item) => item.id === decodeURIComponent(segments[1]));
     if (!asset) return notFound(pathname);
     Object.assign(asset, body);
-    await appendAudit(env, state, { action: "更新资产", actor: "张三", content: asset.name, object: "行政资产", objectId: asset.id });
+    await appendAudit(env, state, { action: "更新资产", actor: actorName, content: asset.name, object: "行政资产", objectId: asset.id, request });
     await saveState(env, state);
     return ok({ asset });
   }
   if (pathname === "/assets/export" && method === "POST") {
-    await appendAudit(env, state, { action: "导出资产台账", actor: "张三", content: "导出资产台账 CSV", object: "行政资产" });
+    const exportInfo = await exportContext(request, "资产台账");
+    if (exportInfo.error) return exportInfo.error;
+    const rows = state.assets;
+    const filename = "assets-export.csv";
+    await appendAudit(env, state, {
+      action: "导出资产台账",
+      actor: actorName,
+      content: "导出资产台账 CSV",
+      exportRecord: { businessReason: exportInfo.businessReason, fileName: filename, filters: exportInfo.filters, rowCount: rows.length, scope: exportInfo.scope },
+      object: "行政资产",
+      request
+    });
     await saveState(env, state);
-    return csv(compactRowsToCsv(state.assets, [
+    return csv(compactRowsToCsv(rows, [
       { key: "id", label: "资产编号" },
       { key: "name", label: "资产名称" },
       { key: "category", label: "类别" },
       { key: "owner", label: "使用人" },
       { key: "status", label: "状态" }
-    ]), "assets-export.csv");
+    ]), filename);
   }
 
   if (pathname === "/attendance/records" && method === "GET") return ok({ attendanceRecords: state.attendanceRecords });
@@ -1975,7 +2298,7 @@ async function handleNativeApi(request, env) {
     const body = await readJson(request);
     const record = { id: nextId("ATT"), ...body };
     state.attendanceRecords = [record, ...state.attendanceRecords];
-    await appendAudit(env, state, { action: "新增考勤", actor: "张三", content: record.employee || "-", object: "假勤" });
+    await appendAudit(env, state, { action: "新增考勤", actor: actorName, content: record.employee || "-", object: "假勤", request });
     await saveState(env, state);
     return ok({ record });
   }
@@ -1983,19 +2306,30 @@ async function handleNativeApi(request, env) {
     const body = await readJson(request);
     const leave = { id: nextId("LEAVE"), status: "待审批", ...body };
     state.leaves = [leave, ...state.leaves];
-    await appendAudit(env, state, { action: "提交请假", actor: leave.employee || "张三", content: `${leave.type || "请假"} ${leave.dates || ""}`, object: "假勤" });
+    await appendAudit(env, state, { action: "提交请假", actor: actorName, content: `${leave.type || "请假"} ${leave.dates || ""}`, object: "假勤", request });
     await saveState(env, state);
     return ok({ leave });
   }
   if (pathname === "/attendance/records/export" && method === "POST") {
-    await appendAudit(env, state, { action: "导出考勤", actor: "张三", content: "导出考勤记录 CSV", object: "假勤" });
+    const exportInfo = await exportContext(request, "考勤记录");
+    if (exportInfo.error) return exportInfo.error;
+    const rows = state.attendanceRecords;
+    const filename = "attendance-export.csv";
+    await appendAudit(env, state, {
+      action: "导出考勤",
+      actor: actorName,
+      content: "导出考勤记录 CSV",
+      exportRecord: { businessReason: exportInfo.businessReason, fileName: filename, filters: exportInfo.filters, rowCount: rows.length, scope: exportInfo.scope },
+      object: "假勤",
+      request
+    });
     await saveState(env, state);
-    return csv(compactRowsToCsv(state.attendanceRecords, [
+    return csv(compactRowsToCsv(rows, [
       { key: "employee", label: "员工" },
       { key: "department", label: "部门" },
       { key: "workDate", label: "日期" },
       { key: "status", label: "状态" }
-    ]), "attendance-export.csv");
+    ]), filename);
   }
 
   if (pathname === "/finance/requests" && method === "GET") return ok({ financeRequests: state.financeRequests });
@@ -2004,7 +2338,7 @@ async function handleNativeApi(request, env) {
     const body = await readJson(request);
     const requestRow = { ...body, applicant: actorName, id: nextId(body.type === "PAYMENT" ? "PAY" : "EXP"), status: "待审批", workflowStatus: "PENDING" };
     state.financeRequests = [requestRow, ...state.financeRequests];
-    await appendAudit(env, state, { action: "提交财务单据", actor: requestRow.applicant || "张三", content: requestRow.title || requestRow.typeLabel || "财务单据", object: "财务行政", objectId: requestRow.id });
+    await appendAudit(env, state, { action: "提交财务单据", actor: actorName, content: requestRow.title || requestRow.typeLabel || "财务单据", object: "财务行政", objectId: requestRow.id, request });
     await saveState(env, state);
     return ok({ financeRequest: requestRow });
   }
@@ -2012,7 +2346,7 @@ async function handleNativeApi(request, env) {
     const body = await readJson(request);
     const payroll = { id: nextId("PAYROLL"), status: "待复核", owner: "财务中心", ...body };
     state.payrolls = [payroll, ...state.payrolls];
-    await appendAudit(env, state, { action: "创建工资单", actor: "财务中心", content: payroll.cycle || payroll.id, object: "财务行政", objectId: payroll.id });
+    await appendAudit(env, state, { action: "创建工资单", actor: actorName, content: payroll.cycle || payroll.id, object: "财务行政", objectId: payroll.id, request });
     await saveState(env, state);
     return ok({ payroll });
   }
@@ -2020,19 +2354,30 @@ async function handleNativeApi(request, env) {
     const payroll = state.payrolls.find((item) => item.id === decodeURIComponent(segments[2]));
     if (!payroll) return notFound(pathname);
     payroll.status = "已发布";
-    await appendAudit(env, state, { action: "复核工资单", actor: "张三", content: payroll.cycle || payroll.id, object: "财务行政", objectId: payroll.id });
+    await appendAudit(env, state, { action: "复核工资单", actor: actorName, content: payroll.cycle || payroll.id, object: "财务行政", objectId: payroll.id, request });
     await saveState(env, state);
     return ok({ payroll });
   }
   if (pathname === "/finance/requests/export" && method === "POST") {
-    await appendAudit(env, state, { action: "导出财务单据", actor: "张三", content: "导出财务单据 CSV", object: "财务行政" });
+    const exportInfo = await exportContext(request, "财务单据");
+    if (exportInfo.error) return exportInfo.error;
+    const rows = state.financeRequests;
+    const filename = "finance-export.csv";
+    await appendAudit(env, state, {
+      action: "导出财务单据",
+      actor: actorName,
+      content: "导出财务单据 CSV",
+      exportRecord: { businessReason: exportInfo.businessReason, fileName: filename, filters: exportInfo.filters, rowCount: rows.length, scope: exportInfo.scope },
+      object: "财务行政",
+      request
+    });
     await saveState(env, state);
-    return csv(compactRowsToCsv(state.financeRequests, [
+    return csv(compactRowsToCsv(rows, [
       { key: "id", label: "单据编号" },
       { key: "title", label: "标题" },
       { key: "amount", label: "金额" },
       { key: "status", label: "状态" }
-    ]), "finance-export.csv");
+    ]), filename);
   }
 
   if (pathname === "/resources" && method === "GET") return ok({ resources: state.resources, windowStart: state.resourceWindowStart });
@@ -2043,7 +2388,7 @@ async function handleNativeApi(request, env) {
     if (conflict) return badRequest("该资源时间段已有预约。");
     const booking = { ...body, id: nextId("BOOK"), applicant: actorName, status: "已预约" };
     state.resourceBookings = [booking, ...state.resourceBookings];
-    await appendAudit(env, state, { action: "资源预约", actor: booking.applicant, content: `${booking.resourceName} ${booking.period || ""}`, object: "资源预约", objectId: booking.id });
+    await appendAudit(env, state, { action: "资源预约", actor: actorName, content: `${booking.resourceName} ${booking.period || ""}`, object: "资源预约", objectId: booking.id, request });
     await saveState(env, state);
     return ok({ booking });
   }
@@ -2051,45 +2396,69 @@ async function handleNativeApi(request, env) {
     const booking = state.resourceBookings.find((item) => item.id === decodeURIComponent(segments[2]));
     if (!booking) return notFound(pathname);
     booking.status = "已取消";
-    await appendAudit(env, state, { action: "取消预约", actor: "张三", content: booking.resourceName, object: "资源预约", objectId: booking.id });
+    await appendAudit(env, state, { action: "取消预约", actor: actorName, content: booking.resourceName, object: "资源预约", objectId: booking.id, request });
     await saveState(env, state);
     return ok({ booking });
   }
   if (pathname === "/resources/bookings/export" && method === "POST") {
-    await appendAudit(env, state, { action: "导出资源预约", actor: "张三", content: "导出资源预约 CSV", object: "资源预约" });
+    const exportInfo = await exportContext(request, "资源预约台账");
+    if (exportInfo.error) return exportInfo.error;
+    const rows = state.resourceBookings;
+    const filename = "resources-export.csv";
+    await appendAudit(env, state, {
+      action: "导出资源预约",
+      actor: actorName,
+      content: "导出资源预约 CSV",
+      exportRecord: { businessReason: exportInfo.businessReason, fileName: filename, filters: exportInfo.filters, rowCount: rows.length, scope: exportInfo.scope },
+      object: "资源预约",
+      request
+    });
     await saveState(env, state);
-    return csv(compactRowsToCsv(state.resourceBookings, [
+    return csv(compactRowsToCsv(rows, [
       { key: "resourceName", label: "资源" },
       { key: "period", label: "时间" },
       { key: "applicant", label: "申请人" },
       { key: "status", label: "状态" }
-    ]), "resources-export.csv");
+    ]), filename);
   }
 
   if (pathname === "/files" && method === "GET") return ok({ files: state.files });
   if (pathname === "/files" && method === "POST") {
     const body = await readJson(request);
+    if (!body.fileName || !body.contentBase64) return badRequest("文件名和 base64 内容必填。");
+    const bytes = base64ToBytes(body.contentBase64);
+    if (!bytes) return badRequest("文件内容必须是有效 base64。");
+    if (bytes.length > MAX_FILE_UPLOAD_BYTES) {
+      return json({ code: "FILE_TOO_LARGE", message: "文件超过 Worker 上传大小限制。", ok: false }, { status: 413 });
+    }
+    const checksum = await sha256HexBytes(bytes);
     const file = {
-      checksum: nextId("CHK"),
+      ...body,
+      checksum,
+      contentBase64: bytesToBase64(bytes),
       createdAt: nowIso(),
       id: nextId("FILE"),
-      sizeBytes: Math.round((body.contentBase64 || "").length * 0.75),
+      sizeBytes: bytes.length,
       uploader: { name: actorName },
-      visibility: "PRIVATE",
-      ...body
+      visibility: body.visibility || "PRIVATE"
     };
     state.files = [file, ...state.files];
-    await appendAudit(env, state, { action: "上传附件", actor: "张三", content: file.fileName, object: "文件附件", objectId: file.id });
+    await appendAudit(env, state, { action: "上传附件", actor: actorName, content: file.fileName, object: "文件附件", objectId: file.id, request });
     await saveState(env, state);
     return ok({ file });
   }
   if (segments[0] === "files" && segments[1] && segments[2] === "download" && method === "GET") {
     const file = state.files.find((item) => item.id === decodeURIComponent(segments[1]));
     if (!file) return notFound(pathname);
-    await appendAudit(env, state, { action: "下载附件", actor: "张三", content: file.fileName, object: "文件附件", objectId: file.id });
+    const bytes = base64ToBytes(file.contentBase64 || "");
+    const actualChecksum = bytes ? await sha256HexBytes(bytes) : "";
+    if (!bytes || (file.checksum && file.checksum !== actualChecksum)) {
+      await appendAudit(env, state, { action: "下载附件校验失败", actor: actorName, content: file.fileName, object: "文件附件", objectId: file.id, request, result: "失败" });
+      await saveState(env, state);
+      return json({ code: "FILE_CHECKSUM_MISMATCH", error: "file_checksum_mismatch", message: "附件校验失败，已阻止下载。", ok: false }, { status: 409 });
+    }
+    await appendAudit(env, state, { action: "下载附件", actor: actorName, content: file.fileName, object: "文件附件", objectId: file.id, request });
     await saveState(env, state);
-    const binary = atob(file.contentBase64 || "5LiL6L295paH5Lu2");
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
     return new Response(bytes, {
       headers: {
         "content-disposition": `attachment; filename="${file.fileName || "attachment.bin"}"`,
@@ -2101,24 +2470,71 @@ async function handleNativeApi(request, env) {
 
   if (pathname === "/imports" && method === "GET") return ok({ importRuns: state.importRuns });
   if (pathname === "/imports/dashboard-html" && method === "POST") {
+    const body = await readJson(request);
+    let html = String(body.html || body.content || "").trim();
+    if (!html && body.contentBase64) {
+      const bytes = base64ToBytes(body.contentBase64);
+      if (!bytes) return badRequest("导入内容必须是有效 base64。");
+      if (bytes.length > MAX_IMPORT_HTML_BYTES) {
+        return json({ code: "IMPORT_HTML_TOO_LARGE", message: "导入 HTML 超过大小限制。", ok: false }, { status: 413 });
+      }
+      html = textDecoder.decode(bytes).trim();
+    }
+    const htmlBytes = textEncoder.encode(html);
+    if (!html || htmlBytes.length === 0) return badRequest("导入 HTML 内容不能为空。");
+    if (htmlBytes.length > MAX_IMPORT_HTML_BYTES) {
+      return json({ code: "IMPORT_HTML_TOO_LARGE", message: "导入 HTML 超过大小限制。", ok: false }, { status: 413 });
+    }
+    const sourceName = String(body.sourceName || body.fileName || "uploaded-oa-dashboard.html").trim();
+    const sourceChecksum = await sha256HexBytes(htmlBytes);
+    const duplicate = (state.importRuns || []).find((item) => (
+      item.status === "SUCCESS"
+      && item.sourceName === sourceName
+      && item.sourceChecksum === sourceChecksum
+    ));
+    if (duplicate) {
+      await appendAudit(env, state, { action: "导入仪表盘数据", actor: actorName, content: `重复导入 ${sourceName} 已阻止`, object: "数据导入", objectId: duplicate.id, request, result: "失败" });
+      await saveState(env, state);
+      return json({ code: "DUPLICATE_IMPORT", duplicateImportId: duplicate.id, error: "duplicate_import", message: "相同来源文件已成功导入，已阻止重复导入。", ok: false }, { status: 409 });
+    }
     const run = {
-      actor: { name: "张三" },
+      actor: { name: actorName },
       finishedAt: nowIso(),
       id: nextId("IMPORT"),
       recordCounts: nativeSeedData.counts,
-      sourceChecksum: nextId("SRC"),
-      sourceName: "uploaded-oa-dashboard.html",
+      sourceChecksum,
+      sourceContentBase64: bytesToBase64(htmlBytes),
+      sourceName,
+      sourceSizeBytes: htmlBytes.length,
       sourceType: "html-dashboard",
       startedAt: nowIso(),
       status: "SUCCESS"
     };
     state.importRuns = [run, ...state.importRuns];
-    await appendAudit(env, state, { action: "导入仪表盘数据", actor: "张三", content: "导入 oa-dashboard.html 数据", object: "数据导入", objectId: run.id });
+    await appendAudit(env, state, { action: "导入仪表盘数据", actor: actorName, content: `导入 ${sourceName} 数据`, object: "数据导入", objectId: run.id, request });
     await saveState(env, state);
     return ok({ importRun: run, people: state.people });
   }
   if (segments[0] === "imports" && segments[2] === "source" && method === "GET") {
-    return text("oa-dashboard.html source is retained in the repository package.");
+    const run = state.importRuns.find((item) => item.id === decodeURIComponent(segments[1]));
+    if (!run) return notFound(pathname);
+    const bytes = base64ToBytes(run.sourceContentBase64 || "");
+    if (!bytes) return notFound(pathname);
+    const actualChecksum = await sha256HexBytes(bytes);
+    if (run.sourceChecksum && actualChecksum !== run.sourceChecksum) {
+      await appendAudit(env, state, { action: "下载导入来源校验失败", actor: actorName, content: run.sourceName || run.id, object: "数据导入", objectId: run.id, request, result: "失败" });
+      await saveState(env, state);
+      return json({ code: "SOURCE_ARTIFACT_CHECKSUM_MISMATCH", error: "source_artifact_checksum_mismatch", message: "导入来源文件校验失败。", ok: false }, { status: 409 });
+    }
+    await appendAudit(env, state, { action: "下载导入来源", actor: actorName, content: run.sourceName || run.id, object: "数据导入", objectId: run.id, request });
+    await saveState(env, state);
+    return new Response(bytes, {
+      headers: {
+        "content-disposition": `attachment; filename="${run.sourceName || "oa-dashboard.html"}"`,
+        "content-type": "text/html; charset=utf-8",
+        ...SECURITY_HEADERS
+      }
+    });
   }
 
   if (pathname === "/audit" && method === "GET") return ok({ auditLogs: state.auditLogs, exportRecords: state.exportRecords, revealSensitive: state.revealSensitive });
@@ -2127,20 +2543,31 @@ async function handleNativeApi(request, env) {
   if (pathname === "/audit/sensitive-access" && method === "POST") {
     const body = await readJson(request);
     state.revealSensitive = Boolean(body.enabled);
-    await appendAudit(env, state, { action: state.revealSensitive ? "开启敏感字段访问" : "关闭敏感字段访问", actor: "张三", content: "Cloudflare Worker seed 数据仍保持脱敏", object: "权限审计" });
+    await appendAudit(env, state, { action: state.revealSensitive ? "开启敏感字段访问" : "关闭敏感字段访问", actor: actorName, content: "Cloudflare Worker seed 数据仍保持脱敏", object: "权限审计", request });
     await saveState(env, state);
     return ok({ revealSensitive: state.revealSensitive });
   }
   if (pathname === "/audit/export" && method === "POST") {
-    await appendAudit(env, state, { action: "导出审计日志", actor: "张三", content: "导出审计日志 CSV", object: "权限审计" });
+    const exportInfo = await exportContext(request, "审计日志");
+    if (exportInfo.error) return exportInfo.error;
+    const rows = state.auditLogs;
+    const filename = "audit-export.csv";
+    await appendAudit(env, state, {
+      action: "导出审计日志",
+      actor: actorName,
+      content: "导出审计日志 CSV",
+      exportRecord: { businessReason: exportInfo.businessReason, fileName: filename, filters: exportInfo.filters, rowCount: rows.length, scope: exportInfo.scope },
+      object: "权限审计",
+      request
+    });
     await saveState(env, state);
-    return csv(compactRowsToCsv(state.auditLogs, [
+    return csv(compactRowsToCsv(rows, [
       { key: "time", label: "时间" },
       { key: "operator", label: "操作人" },
       { key: "type", label: "动作" },
       { key: "object", label: "对象" },
       { key: "result", label: "结果" }
-    ]), "audit-export.csv");
+    ]), filename);
   }
 
   if (pathname === "/system/readiness" && method === "GET") return ok({ systemReadiness: state.systemReadiness });

@@ -147,7 +147,7 @@ test("commercial GitHub workflows use Node 24 action runtime", () => {
   });
 });
 
-test("cloudflare compose exposes API through an outbound tunnel only", () => {
+test("production env defaults to no-domain native Worker and keeps tunnel optional", () => {
   const compose = readScript("docker-compose.cloudflare.yml");
   const envExample = readScript(".env.production.example");
 
@@ -159,6 +159,8 @@ test("cloudflare compose exposes API through an outbound tunnel only", () => {
   assert.match(compose, /cap_drop:\n\s+- ALL/);
   assert.doesNotMatch(compose, /ports:/);
   assert.match(envExample, /CLOUDFLARE_TUNNEL_TOKEN=/);
-  assert.match(envExample, /API_ORIGIN=https:\/\/api\.oa\.example\.com/);
-  assert.match(envExample, /CLOUDFLARE_DEPLOYMENT_URL=https:\/\/oa\.example\.com/);
+  assert.match(envExample, /API_ORIGIN=\n/);
+  assert.match(envExample, /CLOUDFLARE_DEPLOYMENT_URL=https:\/\/deep-oa-hr\.2445776963\.workers\.dev/);
+  assert.match(envExample, /WEB_ORIGIN=https:\/\/17602842555\.github\.io/);
+  assert.match(envExample, /Leave API_ORIGIN and CLOUDFLARE_TUNNEL_TOKEN blank unless/);
 });

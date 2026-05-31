@@ -1,9 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import worker, { validateApiOrigin } from "../../cloudflare/worker.js";
 
 async function responseJson(response) {
   return JSON.parse(await response.text());
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 test("cloudflare worker API origin validator accepts only safe HTTPS backend origins", () => {
@@ -272,6 +277,175 @@ test("cloudflare worker IAM guards prevent admin lockout and revoke target sessi
   assert.equal(oldSession.status, 401);
 });
 
+test("cloudflare worker native exports require business reason and record trusted export metadata", async () => {
+  const loginResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    {}
+  );
+  const cookie = loginResponse.headers.get("set-cookie");
+
+  const missingReason = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/people/export", {
+      headers: { "content-type": "application/json", cookie },
+      method: "POST"
+    }),
+    {}
+  );
+  const missingPayload = await responseJson(missingReason);
+  assert.equal(missingReason.status, 400);
+  assert.match(missingPayload.message, /业务用途/);
+
+  const exportResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/people/export", {
+      body: JSON.stringify({
+        businessReason: "人事月度核对",
+        filters: { scope: "active" },
+        scope: "在职员工"
+      }),
+      headers: { "content-type": "application/json", cookie },
+      method: "POST"
+    }),
+    {}
+  );
+  assert.equal(exportResponse.status, 200);
+  assert.equal(exportResponse.headers.get("content-disposition"), 'attachment; filename="people-export.csv"');
+
+  const recordsResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/audit/export-records", { headers: { cookie } }),
+    {}
+  );
+  const records = (await responseJson(recordsResponse)).exportRecords;
+  const record = records.find((item) => item.fileName === "people-export.csv");
+  assert.ok(record);
+  assert.equal(record.businessReason, "人事月度核对");
+  assert.equal(record.operator, "张三");
+  assert.equal(record.rowCount, 72);
+  assert.deepEqual(record.filters, { scope: "active" });
+});
+
+test("cloudflare worker audit integrity returns a real signed hash chain", async () => {
+  const loginResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    {}
+  );
+  const cookie = loginResponse.headers.get("set-cookie");
+  const integrityResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/audit/integrity", { headers: { cookie } }),
+    {}
+  );
+  const payload = await responseJson(integrityResponse);
+
+  assert.equal(integrityResponse.status, 200);
+  assert.equal(payload.auditIntegrity.ok, true);
+  assert.match(payload.auditIntegrity.latestHash, /^[a-f0-9]{64}$/);
+  assert.equal(payload.auditIntegrity.summary.signedRows > 0, true);
+  assert.equal(payload.auditIntegrity.summary.unsignedRows, 0);
+});
+
+test("cloudflare worker file upload and download use real checksum guards", async () => {
+  const loginResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    {}
+  );
+  const cookie = loginResponse.headers.get("set-cookie");
+  const invalidUpload = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/files", {
+      body: JSON.stringify({ contentBase64: "not-valid-%%%base64", fileName: "bad.txt" }),
+      headers: { "content-type": "application/json", cookie },
+      method: "POST"
+    }),
+    {}
+  );
+  assert.equal(invalidUpload.status, 400);
+
+  const content = Buffer.from("worker attachment integrity", "utf8");
+  const uploadResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/files", {
+      body: JSON.stringify({
+        contentBase64: content.toString("base64"),
+        fileName: "integrity.txt",
+        mimeType: "text/plain"
+      }),
+      headers: { "content-type": "application/json", cookie },
+      method: "POST"
+    }),
+    {}
+  );
+  const uploadPayload = await responseJson(uploadResponse);
+  assert.equal(uploadResponse.status, 200);
+  assert.equal(uploadPayload.file.sizeBytes, content.length);
+  assert.equal(uploadPayload.file.checksum, sha256(content));
+
+  const downloadResponse = await worker.fetch(
+    new Request(`https://deep-oa-hr.example.workers.dev/api/files/${uploadPayload.file.id}/download`, {
+      headers: { cookie }
+    }),
+    {}
+  );
+  assert.equal(downloadResponse.status, 200);
+  assert.equal(await downloadResponse.text(), "worker attachment integrity");
+});
+
+test("cloudflare worker dashboard import stores source checksum blocks duplicates and downloads source", async () => {
+  const loginResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    {}
+  );
+  const cookie = loginResponse.headers.get("set-cookie");
+  const sourceName = `worker-source-${Date.now()}.html`;
+  const html = `<html><body>OA ${Date.now()}</body></html>`;
+  const importResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/imports/dashboard-html", {
+      body: JSON.stringify({ html, sourceName }),
+      headers: { "content-type": "application/json", cookie },
+      method: "POST"
+    }),
+    {}
+  );
+  const importPayload = await responseJson(importResponse);
+  assert.equal(importResponse.status, 200);
+  assert.equal(importPayload.importRun.sourceChecksum, sha256(html));
+  assert.equal(importPayload.importRun.sourceSizeBytes, Buffer.byteLength(html));
+
+  const sourceResponse = await worker.fetch(
+    new Request(`https://deep-oa-hr.example.workers.dev/api/imports/${importPayload.importRun.id}/source`, {
+      headers: { cookie }
+    }),
+    {}
+  );
+  assert.equal(sourceResponse.status, 200);
+  assert.equal(await sourceResponse.text(), html);
+
+  const duplicateResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/imports/dashboard-html", {
+      body: JSON.stringify({ html, sourceName }),
+      headers: { "content-type": "application/json", cookie },
+      method: "POST"
+    }),
+    {}
+  );
+  const duplicatePayload = await responseJson(duplicateResponse);
+  assert.equal(duplicateResponse.status, 409);
+  assert.equal(duplicatePayload.error, "duplicate_import");
+  assert.equal(duplicatePayload.duplicateImportId, importPayload.importRun.id);
+});
+
 test("cloudflare worker forces generated employee accounts through first login setup", async () => {
   const adminLogin = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
@@ -437,4 +611,62 @@ test("cloudflare worker native approval decisions require every current approver
   );
   const secondDecisionPayload = await responseJson(secondDecisionResponse);
   assert.equal(secondDecisionPayload.approval.currentNodeIndex, approval.currentNodeIndex + 1);
+});
+
+test("cloudflare worker approval decisions reject non-admin approver impersonation", async () => {
+  const adminLogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    {}
+  );
+  const adminCookie = adminLogin.headers.get("set-cookie");
+  const createUser = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/iam/users", {
+      body: JSON.stringify({
+        email: `fake-approver-${Date.now()}@oa.local`,
+        mustChangePassword: false,
+        name: "伪审批经理",
+        newPassword: "FakePass12345",
+        roleCodes: ["department-manager"]
+      }),
+      headers: { "content-type": "application/json", cookie: adminCookie },
+      method: "POST"
+    }),
+    {}
+  );
+  const createdUser = (await responseJson(createUser)).user;
+  const approvalResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/approvals", {
+      body: JSON.stringify({ definitionId: "expense", formData: { amount: "1200" } }),
+      headers: { "content-type": "application/json", cookie: adminCookie },
+      method: "POST"
+    }),
+    {}
+  );
+  const approval = (await responseJson(approvalResponse)).approval;
+  const firstApprover = approval.approvalNodes[approval.currentNodeIndex].decisions[0].approver;
+  const managerLogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: createdUser.email, password: "FakePass12345" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    {}
+  );
+  const managerCookie = managerLogin.headers.get("set-cookie");
+
+  const decisionResponse = await worker.fetch(
+    new Request(`https://deep-oa-hr.example.workers.dev/api/approvals/${approval.id}/decision`, {
+      body: JSON.stringify({ approverName: firstApprover, decision: "pass" }),
+      headers: { "content-type": "application/json", cookie: managerCookie },
+      method: "POST"
+    }),
+    {}
+  );
+  const decisionPayload = await responseJson(decisionResponse);
+  assert.equal(decisionResponse.status, 403);
+  assert.equal(decisionPayload.error, "permission_denied");
 });

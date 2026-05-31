@@ -11,6 +11,7 @@
     "configure:cloudflare": "node scripts/configure-cloudflare-secrets.mjs",
     "configure:cloudflare-tunnel": "node scripts/configure-cloudflare-tunnel.mjs",
     "smoke:cloudflare": "node scripts/cloudflare-smoke.mjs",
+    "smoke:no-domain-public": "node scripts/no-domain-public-smoke.mjs",
     "postgres:local": "node scripts/local-postgres.mjs",
     "api:local": "node scripts/local-api-service.mjs",
     "configure:backend-server": "node scripts/configure-backend-server.mjs",

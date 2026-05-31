@@ -2,7 +2,21 @@
 
 ## Expected Runtime
 
-The commercial deployment should run as separate app/API/Postgres services. The scripts in `scripts/` assume a Docker Compose Postgres service by default and can also run against a local `DATABASE_URL` when explicitly requested.
+Current no-domain launch path:
+
+- Frontend: GitHub Pages at `https://17602842555.github.io/HR/`.
+- Backend: Cloudflare native Worker/D1 at `https://deep-oa-hr.2445776963.workers.dev`.
+- No custom domain, `API_ORIGIN`, or Cloudflare Tunnel is required for the first public release.
+
+Use this one-command public smoke check after GitHub Pages and Worker deploy:
+
+```bash
+npm run smoke:no-domain-public -- --pages-url https://17602842555.github.io/HR/ --worker-url https://deep-oa-hr.2445776963.workers.dev --json
+```
+
+The Docker Compose/Fastify/PostgreSQL runtime below remains the self-hosted or future custom-domain path. It is also used by local commercial drills and broader backend verification.
+
+The self-hosted commercial deployment should run as separate app/API/Postgres services. The scripts in `scripts/` assume a Docker Compose Postgres service by default and can also run against a local `DATABASE_URL` when explicitly requested.
 
 Minimum environment variables:
 
