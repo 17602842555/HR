@@ -117,6 +117,65 @@ export function listGithubSecrets({
   };
 }
 
+function githubRepoApiPath(repo) {
+  const value = String(repo || "").trim();
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) {
+    throw new Error("GitHub repo must be provided as owner/name.");
+  }
+  return `repos/${value}`;
+}
+
+function githubEnvironmentName(environment) {
+  const value = String(environment || "").trim();
+  if (!value || !/^[A-Za-z0-9_.-]+$/.test(value)) {
+    throw new Error("GitHub environment name must contain only letters, numbers, dots, dashes, or underscores.");
+  }
+  return value;
+}
+
+export function ensureGithubEnvironment({
+  environment = "production",
+  repo = defaultRepo,
+  runner = spawnSync
+} = {}) {
+  const normalizedEnvironment = githubEnvironmentName(environment);
+  const endpoint = `${githubRepoApiPath(repo)}/environments/${encodeURIComponent(normalizedEnvironment)}`;
+  const body = `${JSON.stringify({
+    deployment_branch_policy: null,
+    wait_timer: 0
+  })}\n`;
+  const result = runner("gh", ["api", "-X", "PUT", endpoint, "--input", "-"], {
+    encoding: "utf8",
+    input: body,
+    maxBuffer: 1024 * 1024
+  });
+
+  if (result.status !== 0) {
+    return {
+      environment: normalizedEnvironment,
+      errors: [redactMessage(result.stderr || result.stdout || "gh environment create/update failed.")],
+      ok: false,
+      repo,
+      status: result.status ?? 1
+    };
+  }
+
+  let parsed = {};
+  try {
+    parsed = JSON.parse(result.stdout || "{}");
+  } catch {
+    parsed = {};
+  }
+  return {
+    environment: normalizedEnvironment,
+    errors: [],
+    ok: true,
+    repo,
+    status: 0,
+    urlPresent: Boolean(parsed.url || parsed.html_url)
+  };
+}
+
 function buildSecretStatus({ environmentSecretNames = [], repositorySecretNames = [] } = {}) {
   const repoSet = new Set(repositorySecretNames);
   const envSet = new Set(environmentSecretNames);
@@ -447,6 +506,21 @@ export function configureBackendServerPackage(options = {}) {
     now
   });
 
+  const environmentEnsure = options.ensureGithubEnvironment
+    ? ensureGithubEnvironment({
+      environment,
+      repo,
+      runner: options.runner || spawnSync
+    })
+    : {
+      environment,
+      errors: [],
+      ok: false,
+      repo,
+      skipped: true,
+      status: null
+    };
+
   let repositorySecretInspection = {
     environment: null,
     errors: [],
@@ -505,6 +579,12 @@ export function configureBackendServerPackage(options = {}) {
     outputDir: pathForManifest(rootDir, runDir),
     production,
     githubInspection: {
+      environmentEnsure: {
+        environment: environmentEnsure.environment,
+        errorCount: Array.isArray(environmentEnsure.errors) ? environmentEnsure.errors.length : 0,
+        ok: environmentEnsure.ok,
+        skipped: Boolean(environmentEnsure.skipped)
+      },
       environment: {
         environment: environmentSecretInspection.environment,
         errorCount: environmentSecretInspection.errors.length,
@@ -562,6 +642,7 @@ export function parseBackendServerConfigArgs(argv = []) {
   const options = {
     environment: "production",
     envPath: ".env.production",
+    ensureGithubEnvironment: argv.includes("--ensure-github-environment"),
     fileStorageDir: "",
     inspectGithubSecrets: argv.includes("--inspect-github-secrets"),
     json: argv.includes("--json"),
@@ -576,6 +657,8 @@ export function parseBackendServerConfigArgs(argv = []) {
     if (arg === "--environment") {
       options.environment = argv[index + 1] || options.environment;
       index += 1;
+    } else if (arg === "--ensure-github-environment") {
+      // Already handled by includes().
     } else if (arg === "--env") {
       options.envPath = argv[index + 1] || options.envPath;
       index += 1;

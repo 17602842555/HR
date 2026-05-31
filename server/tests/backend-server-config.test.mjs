@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   configureBackendServerPackage,
+  ensureGithubEnvironment,
   listGithubSecrets,
   parseBackendServerConfigArgs,
   parseGithubSecretList
@@ -121,6 +122,55 @@ test("backend server config can inspect GitHub secret names without values", asy
   }
 });
 
+test("backend server config can ensure a GitHub environment before inspecting secrets", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "oa-backend-config-env-"));
+  const calls = [];
+  const runner = (command, args, options = {}) => {
+    calls.push({ args, command, input: options.input });
+    if (args[0] === "api") {
+      return {
+        status: 0,
+        stdout: "{\"name\":\"production\",\"url\":\"https://api.github.test/env\"}",
+        stderr: ""
+      };
+    }
+    return {
+      status: 0,
+      stdout: "",
+      stderr: ""
+    };
+  };
+
+  try {
+    const result = configureBackendServerPackage({
+      rootDir: process.cwd(),
+      outputDir: dir,
+      ensureGithubEnvironment: true,
+      inspectGithubSecrets: true,
+      runner,
+      now: new Date("2026-05-31T09:00:00.000Z")
+    });
+    const manifest = JSON.parse(await readFile(result.files.manifest, "utf8"));
+    const apiCall = calls.find((call) => call.args[0] === "api");
+
+    assert(apiCall);
+    assert.equal(apiCall.command, "gh");
+    assert.deepEqual(apiCall.args, [
+      "api",
+      "-X",
+      "PUT",
+      "repos/17602842555/HR/environments/production",
+      "--input",
+      "-"
+    ]);
+    assert.equal(apiCall.input.includes("wait_timer"), true);
+    assert.equal(manifest.githubInspection.environmentEnsure.ok, true);
+    assert.equal(manifest.githubInspection.environmentEnsure.skipped, false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("backend server config parser reads deployment options", () => {
   const parsed = parseBackendServerConfigArgs([
     "--output",
@@ -139,6 +189,7 @@ test("backend server config parser reads deployment options", () => {
     "/app/storage/files",
     "--tunnel",
     "tunnel-id",
+    "--ensure-github-environment",
     "--inspect-github-secrets",
     "--json"
   ]);
@@ -150,11 +201,12 @@ test("backend server config parser reads deployment options", () => {
   assert.equal(parsed.storageDriver, "s3");
   assert.equal(parsed.fileStorageDir, "/app/storage/files");
   assert.equal(parsed.tunnel, "tunnel-id");
+  assert.equal(parsed.ensureGithubEnvironment, true);
   assert.equal(parsed.inspectGithubSecrets, true);
   assert.equal(parsed.json, true);
 });
 
-test("github secret list parser and inspector keep only secret names", () => {
+test("github environment and secret helpers keep command output redacted", () => {
   assert.deepEqual(parseGithubSecretList("CLOUDFLARE_API_TOKEN\t2026-05-31\nbad value\nAPI_ORIGIN\t2026-05-31\n"), [
     "CLOUDFLARE_API_TOKEN",
     "API_ORIGIN"
@@ -174,4 +226,13 @@ test("github secret list parser and inspector keep only secret names", () => {
   assert.equal(failed.ok, false);
   assert.equal(JSON.stringify(failed).includes("super-secret-token"), false);
   assert.equal(failed.errors.some((error) => error.includes("token=[REDACTED]")), true);
+
+  const ensured = ensureGithubEnvironment({
+    environment: "production",
+    repo: "owner/repo",
+    runner: () => ({ status: 1, stdout: "", stderr: "token=super-secret-token failed" })
+  });
+  assert.equal(ensured.ok, false);
+  assert.equal(JSON.stringify(ensured).includes("super-secret-token"), false);
+  assert.equal(ensured.errors.some((error) => error.includes("token=[REDACTED]")), true);
 });

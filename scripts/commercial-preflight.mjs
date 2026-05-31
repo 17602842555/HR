@@ -729,12 +729,15 @@ function checkDeploymentArtifacts() {
   const backendServerConfig = readText("scripts/configure-backend-server.mjs");
   [
     "configureBackendServerPackage",
+    "ensureGithubEnvironment",
     "requiredBackendRepositorySecrets",
     "requiredReleaseEnvironmentSecrets",
     "prepareProductionEnv",
     "generateSignoffDrafts",
     "prepareHrDataReview",
     "listGithubSecrets",
+    "--ensure-github-environment",
+    "gh\", [\"api\", \"-X\", \"PUT\"",
     "noPlaintextSecretValues",
     "base64 < .env.production",
     "configure:cloudflare-tunnel",
@@ -745,8 +748,9 @@ function checkDeploymentArtifacts() {
   [
     "backend server config packet writes private no-secret handoff with current blockers",
     "backend server config can inspect GitHub secret names without values",
+    "backend server config can ensure a GitHub environment before inspecting secrets",
     "backend server config parser reads deployment options",
-    "github secret list parser and inspector keep only secret names",
+    "github environment and secret helpers keep command output redacted",
     "CLOUDFLARE_API_TOKEN",
     "PRODUCTION_ENV_B64"
   ].forEach((needle) => assertIncludes(backendServerConfigTests, needle, "server/tests/backend-server-config.test.mjs"));
