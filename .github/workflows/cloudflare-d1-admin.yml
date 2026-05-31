@@ -1,0 +1,43 @@
+name: Cloudflare D1 Admin
+
+on:
+  workflow_dispatch:
+    inputs:
+      database_name:
+        description: "D1 database name"
+        required: true
+        default: "deep-oa-hr"
+      location:
+        description: "D1 location hint"
+        required: true
+        default: "apac"
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+jobs:
+  create-d1:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Create D1 database
+        run: |
+          set -euo pipefail
+          echo "Creating Cloudflare D1 database: ${{ inputs.database_name }}"
+          npx wrangler d1 create "${{ inputs.database_name }}" --location "${{ inputs.location }}" --binding OA_DB
