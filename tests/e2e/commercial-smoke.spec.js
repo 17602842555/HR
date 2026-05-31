@@ -54,7 +54,8 @@ test("backend 401 shows commercial login form", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("商业版后台登录")).toBeVisible();
   await expect(page.getByLabel("租户")).toHaveValue("default");
-  await expect(page.getByLabel("邮箱")).toHaveValue("admin@oa.local");
+  await expect(page.getByLabel("邮箱")).toHaveValue(apiRequired ? "" : "admin@oa.local");
+  await expect(page.getByLabel("密码")).toHaveValue(apiRequired ? "" : "admin123456");
   await expect(page.getByRole("button", { name: /登录系统/ })).toBeVisible();
 });
 
