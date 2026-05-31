@@ -10,7 +10,8 @@ Create these in `Settings -> Secrets and variables -> Actions -> Repository secr
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | A Cloudflare API token with Workers Scripts edit/deploy permission for this account. |
 | `CLOUDFLARE_ACCOUNT_ID` | The 32-character Cloudflare account id. |
-| `CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD` | A strong temporary bootstrap password for `admin@oa.local`; do not use `admin123456`, `changeme`, or other placeholders. The admin account is forced through first-login setup by default. |
+| `CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN` | Optional. Set this to a mobile login such as `17602842555` when the bootstrap administrator should use phone-number login instead of the legacy `admin@oa.local`. |
+| `CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD` | A strong temporary bootstrap password for the bootstrap administrator; do not use `admin123456`, `changeme`, or other placeholders. The admin account is forced through first-login setup by default. |
 | `CLOUDFLARE_DEPLOYMENT_URL` | The Worker public URL, for example `https://deep-oa-hr.2445776963.workers.dev`. |
 
 Do not add `API_ORIGIN` for scheme C. The Worker runs the API directly.
@@ -76,4 +77,4 @@ Because this project currently has no custom domain, validate the live deploymen
 npm run doctor:cloudflare -- --repo 17602842555/HR --url https://deep-oa-hr.2445776963.workers.dev --json
 ```
 
-This should pass with the four repository secrets required for scheme C: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD`, and `CLOUDFLARE_DEPLOYMENT_URL`. Tunnel-only checks are not required unless a future custom domain and Cloudflare Tunnel are introduced.
+This should pass with the required repository secrets for scheme C: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD`, and `CLOUDFLARE_DEPLOYMENT_URL`. Add optional `CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN` when the bootstrap administrator should use a mobile-number login. Tunnel-only checks are not required unless a future custom domain and Cloudflare Tunnel are introduced.

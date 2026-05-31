@@ -6,6 +6,7 @@ import { parseDotenvText } from "./commercial-doctor-core.mjs";
 const secretSpecs = Object.freeze([
   Object.freeze({ name: "CLOUDFLARE_API_TOKEN", sourceKey: "CLOUDFLARE_API_TOKEN" }),
   Object.freeze({ name: "CLOUDFLARE_ACCOUNT_ID", sourceKey: "CLOUDFLARE_ACCOUNT_ID" }),
+  Object.freeze({ name: "CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN", optional: true, sourceKey: "CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN" }),
   Object.freeze({ name: "CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD", sourceKey: "CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD" }),
   Object.freeze({ name: "CLOUDFLARE_DEPLOYMENT_URL", sourceKey: "CLOUDFLARE_DEPLOYMENT_URL" })
 ]);
@@ -13,6 +14,7 @@ const secretSpecs = Object.freeze([
 const runtimeOverrideKeys = Object.freeze([
   "CLOUDFLARE_ACCOUNT_ID",
   "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN",
   "CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD",
   "CLOUDFLARE_DEPLOYMENT_URL"
 ]);
@@ -43,6 +45,11 @@ function isPlaceholder(value) {
     || placeholderFragments.some((fragment) => normalized.includes(fragment))
     || normalized.includes("<")
     || normalized.includes("example.com");
+}
+
+function isValidLoginIdentifier(value) {
+  const login = String(value || "").trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login) || /^1[3-9]\d{9}$/.test(login);
 }
 
 function sanitizeCloudflareMessage(value = "") {
@@ -215,6 +222,10 @@ export function buildCloudflareSecretPlan({
   ) {
     errors.push("CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD must be a strong non-placeholder temporary admin password with at least 12 characters, letters, and digits.");
   }
+  const bootstrapLogin = String(merged.CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN || "").trim();
+  if (bootstrapLogin && !isValidLoginIdentifier(bootstrapLogin)) {
+    errors.push("CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN must be a valid mainland China mobile number or an email-compatible legacy login.");
+  }
 
   try {
     const deploymentUrl = new URL(merged.CLOUDFLARE_DEPLOYMENT_URL || "");
@@ -235,13 +246,14 @@ export function buildCloudflareSecretPlan({
     return {
       configured: Boolean(value),
       name: spec.name,
+      optional: Boolean(spec.optional),
       scope: "repository",
       source: valueSource(spec.sourceKey, fileEnv, runtimeEnv, computedKeys)
     };
   });
 
   secrets
-    .filter((item) => !item.configured)
+    .filter((item) => !item.configured && !item.optional)
     .forEach((item) => errors.push(`${item.name} is required for the Cloudflare deployment workflow.`));
 
   const plan = {
@@ -249,6 +261,7 @@ export function buildCloudflareSecretPlan({
     repo: repoName || null,
     deployment: {
       adminBootstrapConfigured: isPresent(merged.CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD),
+      adminBootstrapLoginConfigured: isPresent(merged.CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN),
       mode: "cloudflare-native-worker",
       urlConfigured: isPresent(merged.CLOUDFLARE_DEPLOYMENT_URL)
     },
@@ -276,6 +289,7 @@ export function applyCloudflareSecretPlan(plan, { runner = spawnSync } = {}) {
   const errors = [];
   for (const secret of plan.secrets) {
     const value = plan.secretValues.get(secret.name);
+    if (!secret.configured) continue;
     const result = runner("gh", ["secret", "set", secret.name, "--repo", plan.repo], {
       encoding: "utf8",
       input: value

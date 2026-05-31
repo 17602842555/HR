@@ -117,7 +117,7 @@ function validateTargetProfile(profile) {
 function releaseRequiredChecks(profile, requireE2e) {
   const nativeWorker = profile?.backendMode === "native-worker";
   const ids = baseRequiredChecks.filter((id) => {
-    if (nativeWorker) return !["production-env", "cloudflare-backend", "doctor"].includes(id);
+    if (nativeWorker) return !["production-env", "cloudflare-backend", "doctor", "drill-evidence"].includes(id);
     return !["cloudflare-deployment", "no-domain-public"].includes(id);
   });
   return requireE2e ? [...ids, "e2e"] : ids;
@@ -125,7 +125,7 @@ function releaseRequiredChecks(profile, requireE2e) {
 
 function releaseBlockingWarningCheck(check, profile) {
   if (profile?.backendMode === "native-worker") {
-    return !["production-env", "cloudflare-backend", "doctor"].includes(check.id);
+    return !["production-env", "cloudflare-backend", "doctor", "drill-evidence"].includes(check.id);
   }
   return !["cloudflare-deployment", "no-domain-public"].includes(check.id);
 }

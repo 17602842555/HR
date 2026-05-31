@@ -5,15 +5,20 @@ import { parseProductionEnvText, validateProductionEnv } from "./validate-produc
 
 export const requiredApprovalRoles = Object.freeze(["Security owner", "Deployment owner"]);
 export const requiredNativeManagedSecrets = Object.freeze([
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD"
+]);
+export const requiredTunnelManagedSecrets = Object.freeze([
+  "POSTGRES_PASSWORD",
+  "JWT_SECRET",
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_TUNNEL_TOKEN"
+]);
+export const requiredManagedSecrets = Object.freeze([
   "POSTGRES_PASSWORD",
   "JWT_SECRET",
   "CLOUDFLARE_API_TOKEN"
 ]);
-export const requiredTunnelManagedSecrets = Object.freeze([
-  ...requiredNativeManagedSecrets,
-  "CLOUDFLARE_TUNNEL_TOKEN"
-]);
-export const requiredManagedSecrets = requiredNativeManagedSecrets;
 
 const placeholderFragments = Object.freeze([
   "example",
@@ -99,6 +104,7 @@ function findPlaintextSecretFields(value, path = []) {
       "jwtsecret",
       "defaultadminpassword",
       "cloudflareapitoken",
+      "cloudflarebootstrapadminpassword",
       "cloudflaretunneltoken",
       "apitoken",
       "tokenvalue",
@@ -129,13 +135,15 @@ export function validateSecretsSignoff(signoff, {
   const permitPlaceholders = allowExample && signoff?.example === true;
   const envResult = env ? validateProductionEnv(env) : null;
   const envSummary = envResult?.summary || {};
+  const explicitMode = mode || signoff?.backendMode || signoff?.deployment?.mode || env?.CLOUDFLARE_BACKEND_MODE || env?.OA_API_MODE || "";
   let backendMode = "native-worker";
   try {
-    backendMode = normalizeSecretsBackendMode(mode || signoff?.backendMode || signoff?.deployment?.mode || env?.CLOUDFLARE_BACKEND_MODE || env?.OA_API_MODE);
+    backendMode = normalizeSecretsBackendMode(explicitMode);
   } catch (error) {
     errors.push(error.message);
   }
   const requiredSecrets = managedSecretsForMode(backendMode);
+  const nativeWorkerWithoutProductionEnv = backendMode === "native-worker" && !env && !isBlank(explicitMode);
 
   if (!signoff || typeof signoff !== "object" || Array.isArray(signoff)) {
     return { ok: false, errors: ["Secrets signoff payload must be a JSON object."], warnings, summary: {} };
@@ -154,7 +162,7 @@ export function validateSecretsSignoff(signoff, {
     errors.push(`signoff must not contain plaintext secret fields: ${plaintextFindings.join(", ")}.`);
   }
 
-  if (!env && !permitPlaceholders) {
+  if (!env && !permitPlaceholders && !nativeWorkerWithoutProductionEnv) {
     errors.push("A real production env file must be provided for secrets signoff validation.");
   }
   if (envResult && !envResult.ok) {
@@ -163,19 +171,23 @@ export function validateSecretsSignoff(signoff, {
 
   const signedEnvChecksum = normalizeChecksum(environmentFile.sha256);
   const actualEnvChecksum = normalizeChecksum(envChecksum);
-  if (!/^[a-f0-9]{64}$/.test(signedEnvChecksum)) {
-    errors.push("environmentFile.sha256 must be a SHA-256 hex digest.");
-  } else if (actualEnvChecksum && signedEnvChecksum !== actualEnvChecksum) {
-    errors.push("environmentFile.sha256 does not match the production env file.");
-  }
-  if (!permitPlaceholders && hasPlaceholder(environmentFile.path)) {
-    errors.push("environmentFile.path must be reviewed and non-placeholder.");
-  }
-  if (envPath && environmentFile.path && basename(environmentFile.path) !== basename(envPath)) {
-    errors.push("environmentFile.path must identify the validated production env file.");
-  }
-  if (!String(environmentFile.validatedWith || "").includes("validate:production-env")) {
-    errors.push("environmentFile.validatedWith must reference npm run validate:production-env.");
+  if (!nativeWorkerWithoutProductionEnv) {
+    if (!/^[a-f0-9]{64}$/.test(signedEnvChecksum)) {
+      errors.push("environmentFile.sha256 must be a SHA-256 hex digest.");
+    } else if (actualEnvChecksum && signedEnvChecksum !== actualEnvChecksum) {
+      errors.push("environmentFile.sha256 does not match the production env file.");
+    }
+    if (!permitPlaceholders && hasPlaceholder(environmentFile.path)) {
+      errors.push("environmentFile.path must be reviewed and non-placeholder.");
+    }
+    if (envPath && environmentFile.path && basename(environmentFile.path) !== basename(envPath)) {
+      errors.push("environmentFile.path must identify the validated production env file.");
+    }
+    if (!String(environmentFile.validatedWith || "").includes("validate:production-env")) {
+      errors.push("environmentFile.validatedWith must reference npm run validate:production-env.");
+    }
+  } else if (environmentFile.required === true) {
+    errors.push("environmentFile.required must not be true when native-worker signoff intentionally has no .env.production.");
   }
 
   ["provider", "namespace", "rotationOwner", "rotationRunbook", "emergencyRollback"].forEach((key) => {
@@ -222,6 +234,9 @@ export function validateSecretsSignoff(signoff, {
   if (typeof bootstrapSeedPolicy.runDbSeed !== "boolean") errors.push("bootstrapSeedPolicy.runDbSeed must be boolean.");
   if (env && Boolean(bootstrapSeedPolicy.runDbSeed) !== Boolean(envSummary.runDbSeed)) {
     errors.push("bootstrapSeedPolicy.runDbSeed must match RUN_DB_SEED from the production env file.");
+  }
+  if (nativeWorkerWithoutProductionEnv && bootstrapSeedPolicy.runDbSeed === true) {
+    errors.push("bootstrapSeedPolicy.runDbSeed must be false when native-worker signoff has no Fastify production env.");
   }
   if (bootstrapSeedPolicy.runDbSeed === true && bootstrapSeedPolicy.defaultAdminPasswordManaged !== true) {
     errors.push("bootstrapSeedPolicy.defaultAdminPasswordManaged must be true when runDbSeed is true.");

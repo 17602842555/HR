@@ -9,6 +9,7 @@ import {
   parseSecretsSignoffArgs,
   requiredApprovalRoles,
   requiredManagedSecrets,
+  requiredNativeManagedSecrets,
   requiredTunnelManagedSecrets,
   sha256Text,
   validateSecretsSignoff
@@ -49,6 +50,7 @@ function validEnvText(overrides = {}) {
 function validSecretsSignoff(overrides = {}, envText = validEnvText()) {
   return {
     schemaVersion: 1,
+    backendMode: "native-worker",
     documentId: "PROD-SECRETS-SIGNOFF-20260530",
     environment: "production",
     signedAt: "2026-05-30T12:00:00.000Z",
@@ -60,7 +62,7 @@ function validSecretsSignoff(overrides = {}, envText = validEnvText()) {
     secretStore: {
       provider: "Company Secret Manager",
       namespace: "oa/production",
-      managedSecrets: ["POSTGRES_PASSWORD", "JWT_SECRET", "CLOUDFLARE_API_TOKEN"],
+      managedSecrets: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD"],
       injectedAtRuntime: true,
       noPlaintextInRepo: true,
       accessRestricted: true,
@@ -115,15 +117,17 @@ test("secrets signoff validator accepts reviewed secret store and origin evidenc
   assert.equal(result.summary.productionEnvValidated, true);
   assert.equal(result.summary.backendMode, "native-worker");
   assert.deepEqual(result.summary.approvedOrigins, ["https://oa.company.test"]);
+  assert.deepEqual(requiredNativeManagedSecrets, ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD"]);
   assert.deepEqual(requiredManagedSecrets, ["POSTGRES_PASSWORD", "JWT_SECRET", "CLOUDFLARE_API_TOKEN"]);
   assert.deepEqual(requiredTunnelManagedSecrets, ["POSTGRES_PASSWORD", "JWT_SECRET", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_TUNNEL_TOKEN"]);
+  assert.deepEqual(managedSecretsForMode("native-worker"), requiredNativeManagedSecrets);
   assert.deepEqual(managedSecretsForMode("tunnel"), requiredTunnelManagedSecrets);
   assert.deepEqual(requiredApprovalRoles, ["Security owner", "Deployment owner"]);
 });
 
 test("secrets signoff validator requires tunnel token only in tunnel mode", () => {
   const envText = validEnvText({ CLOUDFLARE_BACKEND_MODE: "tunnel" });
-  const result = validateSecretsSignoff(validSecretsSignoff({}, envText), {
+  const result = validateSecretsSignoff(validSecretsSignoff({ backendMode: "tunnel" }, envText), {
     env: parseProductionEnvText(envText),
     envChecksum: sha256Text(envText),
     envPath: ".env.production"
@@ -134,6 +138,7 @@ test("secrets signoff validator requires tunnel token only in tunnel mode", () =
   assert(result.errors.some((error) => error.includes("CLOUDFLARE_TUNNEL_TOKEN")));
 
   const accepted = validateSecretsSignoff(validSecretsSignoff({
+    backendMode: "tunnel",
     secretStore: {
       ...validSecretsSignoff({}, envText).secretStore,
       managedSecrets: requiredTunnelManagedSecrets
@@ -167,6 +172,7 @@ test("secrets signoff validator rejects example release evidence and production 
 test("secrets signoff validator rejects invalid env checksum origin and secret store controls", () => {
   const envText = validEnvText();
   const result = validateSecretsSignoff(validSecretsSignoff({
+    backendMode: "tunnel",
     environmentFile: {
       path: ".env.production",
       sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
@@ -207,6 +213,34 @@ test("secrets signoff validator rejects invalid env checksum origin and secret s
   assert(result.errors.some((error) => error.includes("JWT_SECRET")));
   assert(result.errors.some((error) => error.includes("approvedOrigins must match")));
   assert(result.errors.some((error) => error.includes("approvedOrigins must use https")));
+});
+
+test("secrets signoff validator accepts native-worker signoff without Fastify env", () => {
+  const signoff = validSecretsSignoff({
+    environmentFile: {
+      required: false,
+      path: "",
+      sha256: "",
+      validatedWith: "native-worker Worker/D1 signoff does not materialize .env.production"
+    },
+    secretStore: {
+      ...validSecretsSignoff().secretStore,
+      managedSecrets: requiredNativeManagedSecrets
+    },
+    originPolicy: {
+      approvedOrigins: ["https://17602842555.github.io", "https://deep-oa-hr.2445776963.workers.dev"],
+      httpsOnly: true,
+      noWildcard: true,
+      owner: "Security Platform Team"
+    }
+  });
+
+  const result = validateSecretsSignoff(signoff);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.summary.backendMode, "native-worker");
+  assert.deepEqual(result.summary.requiredManagedSecrets, requiredNativeManagedSecrets);
+  assert.equal(result.summary.productionEnvValidated, false);
 });
 
 test("secrets signoff validator rejects plaintext secret fields and missing seed secret", () => {

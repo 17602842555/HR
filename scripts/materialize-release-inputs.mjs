@@ -11,7 +11,7 @@ const defaultInputSpecs = Object.freeze([
     envName: "PRODUCTION_ENV_B64",
     kind: "dotenv",
     outputPath: ".env.production",
-    required: true,
+    requiredModes: Object.freeze(["tunnel"]),
     validateProduction: true
   }),
   Object.freeze({
@@ -59,6 +59,22 @@ function resolveInsideRoot(rootDir, targetPath) {
 
 function sha256Text(text) {
   return createHash("sha256").update(String(text || "")).digest("hex");
+}
+
+function normalizeReleaseBackendMode(value = "native-worker") {
+  const mode = String(value || "native-worker").trim().toLowerCase();
+  if (["native", "native-worker", "worker", "cloudflare-native"].includes(mode)) return "native-worker";
+  if (["tunnel", "cloudflare-tunnel", "proxy", "fastify-postgres", "postgres"].includes(mode)) return "tunnel";
+  throw new Error("Release input backend mode must be native-worker or tunnel.");
+}
+
+function releaseBackendModeFromEnv(env = process.env, fallback = "") {
+  return normalizeReleaseBackendMode(fallback || env.RELEASE_BACKEND_MODE || env.CLOUDFLARE_BACKEND_MODE || env.OA_API_MODE || "native-worker");
+}
+
+function specRequiredForMode(spec, backendMode) {
+  if (Array.isArray(spec.requiredModes)) return spec.requiredModes.includes(backendMode);
+  return spec.required !== false;
 }
 
 function decodeBase64Env(env, envName) {
@@ -183,17 +199,22 @@ function rollbackMaterializedFiles({ errors, fsOps = defaultFsOps, snapshots, st
 }
 
 export function materializeReleaseInputs({
+  backendMode = "",
   env = process.env,
   fsOps = defaultFsOps,
   inputSpecs = defaultInputSpecs,
   rootDir = process.cwd()
 } = {}) {
+  const resolvedBackendMode = releaseBackendModeFromEnv(env, backendMode);
   const decodedInputs = [];
   const stagedFiles = [];
   const written = [];
   const errors = [];
 
   for (const spec of inputSpecs) {
+    const required = specRequiredForMode(spec, resolvedBackendMode);
+    const hasValue = Boolean(String(env[spec.envName] || "").trim());
+    if (!hasValue && !required) continue;
     try {
       const text = decodeBase64Env(env, spec.envName);
       validateDecodedContent({
@@ -206,7 +227,7 @@ export function materializeReleaseInputs({
       const outputPath = resolveInsideRoot(rootDir, spec.outputPath);
       decodedInputs.push({ spec, text, outputPath });
     } catch (error) {
-      if (spec.required !== false) {
+      if (required || hasValue) {
         errors.push(error.message);
       }
     }
@@ -214,6 +235,7 @@ export function materializeReleaseInputs({
 
   if (errors.length > 0) {
     return {
+      backendMode: resolvedBackendMode,
       ok: false,
       errors,
       written: []
@@ -233,6 +255,7 @@ export function materializeReleaseInputs({
   if (errors.length > 0) {
     rollbackMaterializedFiles({ errors, fsOps, snapshots: [], stagedFiles });
     return {
+      backendMode: resolvedBackendMode,
       ok: false,
       errors,
       written: []
@@ -261,6 +284,7 @@ export function materializeReleaseInputs({
     errors.push(`Release input materialization failed during commit: ${error.message}`);
     rollbackMaterializedFiles({ errors, fsOps, snapshots, stagedFiles });
     return {
+      backendMode: resolvedBackendMode,
       ok: false,
       errors,
       written: []
@@ -268,6 +292,7 @@ export function materializeReleaseInputs({
   }
 
   return {
+    backendMode: resolvedBackendMode,
     ok: errors.length === 0,
     errors,
     written
@@ -276,6 +301,7 @@ export function materializeReleaseInputs({
 
 export function parseMaterializeReleaseInputsArgs(argv = []) {
   const options = {
+    backendMode: "",
     json: argv.includes("--json"),
     outputPath: ""
   };
@@ -283,6 +309,9 @@ export function parseMaterializeReleaseInputsArgs(argv = []) {
     const arg = argv[index];
     if (arg === "--output") {
       options.outputPath = argv[index + 1] || "";
+      index += 1;
+    } else if (arg === "--mode") {
+      options.backendMode = normalizeReleaseBackendMode(argv[index + 1] || "");
       index += 1;
     }
   }
@@ -302,7 +331,7 @@ export function writeMaterializeReleaseInputsResult(result, {
 
 async function main(argv = process.argv.slice(2)) {
   const options = parseMaterializeReleaseInputsArgs(argv);
-  const result = materializeReleaseInputs();
+  const result = materializeReleaseInputs({ backendMode: options.backendMode });
   const redacted = {
     ...result,
     errors: result.errors.map((error) => redactEvidenceText(error))

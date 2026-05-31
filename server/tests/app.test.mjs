@@ -4063,7 +4063,7 @@ test("leave workflow defaults applicant to the authenticated user", async () => 
   await app.close();
 });
 
-test("approval rule save normalizes department approvers as AND-sign nodes", async () => {
+test("approval rule save rejects unresolved approver account bindings", async () => {
   const app = await buildApp({
     logger: false,
     prisma: await makePrismaMock({
@@ -4093,13 +4093,57 @@ test("approval rule save normalizes department approvers as AND-sign nodes", asy
     }
   });
 
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.json().error, "approval_rule_approvers_unresolved");
+  assert.deepEqual(response.json().details.unresolvedApprovers, ["财务专员"]);
+
+  const rules = await app.inject({ method: "GET", url: "/api/approvals/rules", headers });
+  assert.equal(rules.json().approvalRules.some((rule) => (
+    rule.department === "财务中心" && rule.templateId === "expense"
+  )), false);
+
+  await app.close();
+});
+
+test("approval rule save accepts bound approvers and preserves current approver authorization", async () => {
+  const app = await buildApp({
+    logger: false,
+    prisma: await makePrismaMock({
+      permissionCodes: ["workflow.read", "workflow.write", "workflow.approve", "audit.read"],
+      roleCode: "approver",
+      roleName: "普通审批人",
+      userName: "王五",
+      extraUsers: [
+        { id: "user-li", name: "李四", email: "lisi@oa.local" },
+        { id: "user-finance", name: "财务负责人", email: "finance-lead@oa.local" }
+      ]
+    }),
+    config: { jwtSecret: "test-secret" }
+  });
+  const headers = await loginHeaders(app);
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/approvals/rules",
+    headers,
+    payload: {
+      department: "  财务中心  ",
+      templateId: "expense",
+      templateName: "费用报销",
+      nodes: [
+        { id: "manager", name: "  部门会签  ", mode: "OR", approvers: ["王五", " 王五 ", "李四"] },
+        { id: "finance", name: "财务复核", approvers: "财务负责人" }
+      ]
+    }
+  });
+
   assert.equal(response.statusCode, 201);
   assert.equal(response.json().department, "财务中心");
   assert.equal(response.json().nodes[0].mode, "AND");
   assert.deepEqual(response.json().nodes[0].approvers, ["王五", "李四"]);
-  assert.deepEqual(response.json().nodes[0].approverUsers.map((item) => item.userId), ["user-wang", "user-li"]);
-  assert.deepEqual(response.json().nodes[1].approvers, ["财务负责人", "财务专员"]);
-  assert.deepEqual(response.json().nodes[1].approverUsers.map((item) => item.userId), ["user-finance", null]);
+  assert.deepEqual(response.json().nodes[0].approverUsers.map((item) => item.userId), ["user-admin", "user-li"]);
+  assert.deepEqual(response.json().nodes[1].approvers, ["财务负责人"]);
+  assert.deepEqual(response.json().nodes[1].approverUsers.map((item) => item.userId), ["user-finance"]);
 
   const created = await app.inject({
     method: "POST",
@@ -4114,7 +4158,38 @@ test("approval rule save normalizes department approvers as AND-sign nodes", asy
   });
   assert.equal(created.statusCode, 201);
   const workflow = await app.prisma.workflowInstance.findFirst({ where: { id: created.json().approval.id } });
-  assert.deepEqual(workflow.nodes[0].approvers.map((item) => item.userId), ["user-wang", "user-li"]);
+  assert.deepEqual(workflow.nodes[0].approvers.map((item) => item.userId), ["user-admin", "user-li"]);
+
+  const impersonated = await app.inject({
+    method: "POST",
+    url: `/api/approvals/${created.json().approval.id}/decision`,
+    headers,
+    payload: {
+      approverName: "李四",
+      decision: "pass",
+      idempotencyKey: "bound-rule-impersonate-li"
+    }
+  });
+  assert.equal(impersonated.statusCode, 403);
+  assert.equal(impersonated.json().error, "approver_identity_denied");
+
+  const selfApproved = await app.inject({
+    method: "POST",
+    url: `/api/approvals/${created.json().approval.id}/decision`,
+    headers,
+    payload: {
+      approverName: "王五",
+      decision: "pass",
+      idempotencyKey: "bound-rule-self-wang"
+    }
+  });
+  assert.equal(selfApproved.statusCode, 200);
+
+  const approvals = await app.inject({ method: "GET", url: "/api/approvals", headers });
+  const approval = approvals.json().approvals.find((item) => item.id === created.json().approval.id);
+  assert.equal(approval.status, "待审批");
+  assert.equal(approval.approvalNodes[0].decisions.find((item) => item.approver === "王五").status, "已同意");
+  assert.equal(approval.approvalNodes[0].decisions.find((item) => item.approver === "李四").status, "待审批");
 
   await app.close();
 });

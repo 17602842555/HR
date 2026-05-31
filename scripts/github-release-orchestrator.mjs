@@ -37,6 +37,13 @@ function boolFlag(args, name) {
   return args.includes(name);
 }
 
+function normalizeReleaseBackendMode(value = "native-worker") {
+  const mode = String(value || "native-worker").trim().toLowerCase();
+  if (["native", "native-worker", "worker", "cloudflare-native"].includes(mode)) return "native-worker";
+  if (["tunnel", "cloudflare-tunnel", "proxy", "fastify-postgres", "postgres"].includes(mode)) return "tunnel";
+  throw new Error("GitHub release backend mode must be native-worker or tunnel.");
+}
+
 function safeId(value, label) {
   const text = String(value || "").trim();
   if (!/^[A-Za-z0-9_.:/-]+$/.test(text)) {
@@ -132,6 +139,7 @@ export function parseGithubReleaseArgs(argv = [], env = process.env) {
   const args = [...argv];
   return {
     apply: boolFlag(args, "--apply"),
+    backendMode: normalizeReleaseBackendMode(valueFlag(args, "--backend-mode") || env.GITHUB_RELEASE_BACKEND_MODE || env.RELEASE_BACKEND_MODE || env.CLOUDFLARE_BACKEND_MODE || "native-worker"),
     branch: safeId(valueFlag(args, "--branch") || env.GITHUB_RELEASE_BRANCH || defaultBranch, "Branch"),
     deployWorkflow: safeId(valueFlag(args, "--deploy-workflow") || workflowNames.deploy, "Deploy workflow"),
     drillWorkflow: safeId(valueFlag(args, "--drill-workflow") || workflowNames.drill, "Drill workflow"),
@@ -144,6 +152,14 @@ export function parseGithubReleaseArgs(argv = [], env = process.env) {
     signoffWorkflow: safeId(valueFlag(args, "--signoff-workflow") || workflowNames.signoff, "Signoff workflow"),
     wait: !boolFlag(args, "--no-wait")
   };
+}
+
+export function releaseEnvironmentSecretsForMode(mode = "native-worker") {
+  const normalized = normalizeReleaseBackendMode(mode);
+  if (normalized === "native-worker") {
+    return requiredReleaseEnvironmentSecrets.filter((name) => name !== "PRODUCTION_ENV_B64");
+  }
+  return [...requiredReleaseEnvironmentSecrets];
 }
 
 export function buildWorkflowRunArgs({ branch, inputs = {}, repo, workflow }) {
@@ -199,12 +215,12 @@ function listSecretNames({ environment = "", options, rootDir, commandRunner }) 
 }
 
 function workflowPlanSteps(options) {
-  return [
+  const steps = [
     {
       id: "commercial-signoff",
       command: formatCommand("gh", buildWorkflowRunArgs({
         branch: options.branch,
-        inputs: { target_environment: options.environment },
+        inputs: { target_environment: options.environment, backend_mode: options.backendMode },
         repo: options.repo,
         workflow: options.signoffWorkflow
       })),
@@ -216,7 +232,11 @@ function workflowPlanSteps(options) {
       ]),
       required: true,
       workflow: options.signoffWorkflow
-    },
+    }
+  ];
+
+  if (options.backendMode !== "native-worker") {
+    steps.push(
     {
       id: "commercial-drill",
       command: formatCommand("gh", buildWorkflowRunArgs({
@@ -233,7 +253,10 @@ function workflowPlanSteps(options) {
       ]),
       required: true,
       workflow: options.drillWorkflow
-    },
+    });
+  }
+
+  steps.push(
     {
       id: "cloudflare-deploy",
       command: formatCommand("gh", buildWorkflowRunArgs({
@@ -245,7 +268,8 @@ function workflowPlanSteps(options) {
       required: true,
       workflow: options.deployWorkflow
     }
-  ];
+  );
+  return steps;
 }
 
 export function buildGithubReleasePlan({
@@ -258,7 +282,8 @@ export function buildGithubReleasePlan({
   repositorySecretErrors = []
 }) {
   const repositorySecrets = secretStatus(requiredBackendRepositorySecrets, repositorySecretNames, "repository");
-  const environmentSecrets = secretStatus(requiredReleaseEnvironmentSecrets, environmentSecretNames, "environment");
+  const environmentSecretRequirements = releaseEnvironmentSecretsForMode(options.backendMode);
+  const environmentSecrets = secretStatus(environmentSecretRequirements, environmentSecretNames, "environment");
   const missingRepositorySecrets = repositorySecrets.filter((item) => !item.configured).map((item) => item.name);
   const missingEnvironmentSecrets = environmentSecrets.filter((item) => !item.configured).map((item) => item.name);
   const blockers = [
@@ -272,6 +297,7 @@ export function buildGithubReleasePlan({
     apply: Boolean(options.apply),
     blockers,
     branch: options.branch,
+    backendMode: options.backendMode,
     currentSha,
     environment: options.environment,
     environmentSecrets,
@@ -325,7 +351,7 @@ function executeWorkflowStep({ commandRunner, currentSha, options, rootDir, step
   const triggerArgs = step.id === "commercial-signoff"
     ? buildWorkflowRunArgs({
       branch: options.branch,
-      inputs: { target_environment: options.environment },
+      inputs: { target_environment: options.environment, backend_mode: options.backendMode },
       repo: options.repo,
       workflow: step.workflow
     })

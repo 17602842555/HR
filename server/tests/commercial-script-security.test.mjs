@@ -91,15 +91,18 @@ test("commercial signoff workflow materializes release inputs without uploading 
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"/);
   assert.match(workflow, /environment: \$\{\{ inputs\.target_environment \}\}/);
+  assert.match(workflow, /backend_mode:/);
+  assert.match(workflow, /RELEASE_BACKEND_MODE: \$\{\{ inputs\.backend_mode \}\}/);
   assert.match(workflow, /PRODUCTION_ENV_B64: \$\{\{ secrets\.PRODUCTION_ENV_B64 \}\}/);
   assert.match(workflow, /umask 077/);
   assert.equal(countMatches(workflow, /umask 077/g), 6);
   assert.equal(countMatches(workflow, /set -euo pipefail/g), 6);
-  assert.match(workflow, /npm run prepare:release-inputs -- --json --output reports\/commercial-evidence\/signoff-validation\/release-inputs\.json/);
+  assert.match(workflow, /npm run prepare:release-inputs -- --mode "\$RELEASE_BACKEND_MODE" --json --output reports\/commercial-evidence\/signoff-validation\/release-inputs\.json/);
   assert.match(workflow, /npm run validate:production-env -- \.env\.production --json/);
   assert.match(workflow, /npm run validate:cloudflare-backend -- --env \.env\.production --json/);
   assert.match(workflow, /reports\/commercial-evidence\/signoff-validation\/cloudflare-backend\.json/);
-  assert.match(workflow, /npm run validate:secrets-signoff -- docs\/production-secrets-signoff\.json --env \.env\.production --json/);
+  assert.match(workflow, /env_args=\(\)/);
+  assert.match(workflow, /npm run validate:secrets-signoff -- docs\/production-secrets-signoff\.json "\$\{env_args\[@\]\}" --mode "\$RELEASE_BACKEND_MODE" --json/);
   assert.match(workflow, /npm run validate:hr-signoff -- docs\/hr-data-signoff\.json --source oa-dashboard\.html --json/);
   assert.match(workflow, /npm run validate:storage-signoff -- "\$\{args\[@\]\}"/);
   assert.match(workflow, /commercial-signoff-validation/);
@@ -120,6 +123,7 @@ test("cloudflare deploy workflow verifies native Worker API after deploy", () =>
   assert.match(wrangler, /\[vars\]/);
   assert.match(wrangler, /OA_API_MODE = "native"/);
   assert.match(workflow, /CLOUDFLARE_DEPLOYMENT_URL/);
+  assert.match(workflow, /CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN/);
   assert.match(workflow, /CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD/);
   assert.match(workflow, /ADMIN_BOOTSTRAP_READY/);
   assert.match(workflow, /require_deploy:/);
@@ -128,6 +132,7 @@ test("cloudflare deploy workflow verifies native Worker API after deploy", () =>
   assert.match(workflow, /Cloudflare deployment was explicitly required/);
   assert.match(workflow, /Use require_deploy=false only for a build-only workflow dry run/);
   assert.match(workflow, /Configure Worker bootstrap admin secret/);
+  assert.match(workflow, /wrangler secret put CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN/);
   assert.match(workflow, /wrangler secret put CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD/);
   assert.match(workflow, /npm run smoke:cloudflare -- --url "\$CLOUDFLARE_DEPLOYMENT_URL" --json/);
   assert.match(workflow, /DEPLOYMENT_URL_READY/);

@@ -121,9 +121,29 @@ function coverageState(coverageRows, rules, department, templateId) {
 
 function approverBindingText(node) {
   const total = node?.approvers?.length || 0;
-  const bound = (node?.approverUsers || []).filter((item) => item.userId).length;
+  const approverUsers = Array.isArray(node?.approverUsers) ? node.approverUsers : [];
+  const bound = approverUsers.filter((item) => item.userId).length;
+  const unresolved = approverUsers.filter((item) => !item.userId).map((item) => item.name).filter(Boolean);
   if (!total) return "未选择审批人";
+  if (!approverUsers.length) return "保存时校验实名账号";
+  if (unresolved.length) return `实名账号 ${bound}/${total} · 未绑定 ${unresolved.join("、")}`;
   return `实名账号 ${bound}/${total}`;
+}
+
+function knownUnresolvedApprovers(rule) {
+  if (rule?.enabled === false) return [];
+  const unresolved = (rule?.nodes || []).flatMap((node) => {
+    if (!Array.isArray(node?.approverUsers) || !node.approverUsers.length) return [];
+    return node.approverUsers.filter((item) => !item.userId).map((item) => item.name).filter(Boolean);
+  });
+  return [...new Set(unresolved)];
+}
+
+function saveRuleErrorMessage(result) {
+  const payload = result?.error?.details || {};
+  const unresolved = payload.details?.unresolvedApprovers || payload.unresolvedApprovers || [];
+  if (unresolved.length) return `未绑定真实账号：${unresolved.join("、")}`;
+  return result?.error?.message || "保存失败";
 }
 
 function ApprovalRuleEditor({ actions, state, templates }) {
@@ -150,17 +170,23 @@ function ApprovalRuleEditor({ actions, state, templates }) {
     || buildDefaultRule(department, template)
   ), [department, state.approvalRules, template, templateId]);
   const [draft, setDraft] = useState(() => cloneRule(activeRule));
+  const [saveStatus, setSaveStatus] = useState("");
   const errors = validateRule(draft);
+  const unresolvedApproverNames = knownUnresolvedApprovers(draft);
+  const bindingErrors = unresolvedApproverNames.length ? [`未绑定真实账号：${unresolvedApproverNames.join("、")}`] : [];
+  const blockingErrors = [...errors, ...bindingErrors];
 
   useEffect(() => {
     setDraft(cloneRule(activeRule));
     setRulePreview(null);
     setPreviewStatus("");
+    setSaveStatus("");
   }, [activeRule]);
 
   if (!draft) return null;
 
   const updateNode = (nodeIndex, patch) => {
+    setSaveStatus("");
     setDraft((current) => ({
       ...current,
       nodes: current.nodes.map((node, index) => (index === nodeIndex ? { ...node, ...patch } : node))
@@ -168,6 +194,7 @@ function ApprovalRuleEditor({ actions, state, templates }) {
   };
 
   const removeNode = (nodeIndex) => {
+    setSaveStatus("");
     setDraft((current) => ({
       ...current,
       nodes: current.nodes.filter((_, index) => index !== nodeIndex)
@@ -175,6 +202,7 @@ function ApprovalRuleEditor({ actions, state, templates }) {
   };
 
   const moveNode = (nodeIndex, direction) => {
+    setSaveStatus("");
     setDraft((current) => {
       const targetIndex = nodeIndex + direction;
       if (targetIndex < 0 || targetIndex >= current.nodes.length) return current;
@@ -185,9 +213,12 @@ function ApprovalRuleEditor({ actions, state, templates }) {
     });
   };
 
-  const saveDraft = () => {
-    if (errors.length) return;
-    actions.saveApprovalRule({
+  const saveDraft = async () => {
+    if (blockingErrors.length) {
+      setSaveStatus(blockingErrors.join("；"));
+      return;
+    }
+    const payload = {
       ...draft,
       templateName: template.name,
       nodes: draft.nodes.map((node, index) => ({
@@ -195,7 +226,18 @@ function ApprovalRuleEditor({ actions, state, templates }) {
         id: node.id || `${draft.templateId}-${index + 1}`,
         mode: "AND"
       }))
-    });
+    };
+    setSaveStatus("正在保存并校验实名账号");
+    try {
+      const result = await actions.saveApprovalRule(payload);
+      if (result?.ok === false) {
+        setSaveStatus(saveRuleErrorMessage(result));
+        return;
+      }
+      setSaveStatus("已保存，实名账号校验通过");
+    } catch (error) {
+      setSaveStatus(error?.message || "保存失败");
+    }
   };
 
   const resetDraft = () => {
@@ -247,7 +289,7 @@ function ApprovalRuleEditor({ actions, state, templates }) {
             <option value="disabled">停用</option>
           </select>
         </label>
-        <button className="primary" disabled={errors.length > 0} type="button" onClick={saveDraft}>保存配置</button>
+        <button className="primary" disabled={blockingErrors.length > 0} type="button" onClick={saveDraft}>保存配置</button>
       </div>
 
       <div className="rule-editor-actions">
@@ -300,7 +342,8 @@ function ApprovalRuleEditor({ actions, state, templates }) {
       <div className="rule-editor-notice">
         <strong>{draft.department} · {draft.templateName}</strong>
         <span>每个节点固定为会签，同节点审批人全部同意后才进入下一流程。新发起的审批会保存当前规则快照，后续改规则不影响已提交流程。</span>
-        {errors.length ? <em>{errors.join("；")}</em> : null}
+        {blockingErrors.length ? <em>{blockingErrors.join("；")}</em> : null}
+        {saveStatus ? <em aria-live="polite">{saveStatus}</em> : null}
       </div>
 
       <div className="rule-flow-preview">

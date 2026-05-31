@@ -266,6 +266,7 @@ test("release input configurator validates files and writes private dry-run mani
       rootDir: process.cwd(),
       outputDir: dir,
       ...paths,
+      backendMode: "tunnel",
       now: new Date("2026-05-31T06:40:00.000Z")
     });
 
@@ -305,6 +306,7 @@ test("release input configurator applies GitHub environment secrets through stdi
       outputDir: dir,
       ...paths,
       apply: true,
+      backendMode: "tunnel",
       ensureGithubEnvironment: true,
       runner,
       now: new Date("2026-05-31T06:40:00.000Z")
@@ -339,6 +341,7 @@ test("release input configurator blocks uploads when validation fails", async ()
       outputDir: dir,
       ...paths,
       apply: true,
+      backendMode: "tunnel",
       runner: (command, args, options = {}) => {
         calls.push({ args, command, input: options.input });
         return { status: 0, stdout: "", stderr: "" };
@@ -370,6 +373,8 @@ test("release input configurator parser reads file paths apply and environment f
   const parsed = parseConfigureReleaseInputsArgs([
     "--apply",
     "--ensure-github-environment",
+    "--mode",
+    "tunnel",
     "--environment",
     "staging",
     "--env",
@@ -391,6 +396,7 @@ test("release input configurator parser reads file paths apply and environment f
 
   assert.equal(parsed.apply, true);
   assert.equal(parsed.ensureGithubEnvironment, true);
+  assert.equal(parsed.backendMode, "tunnel");
   assert.equal(parsed.environment, "staging");
   assert.equal(parsed.envPath, "release/.env.production");
   assert.equal(parsed.secretsSignoffPath, "release/secrets.json");

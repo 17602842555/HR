@@ -44,11 +44,15 @@ function checkMap(report) {
   return new Map((Array.isArray(report?.checks) ? report.checks : []).map((check) => [check.id, check]));
 }
 
-function ruleChecks(rule, options = {}) {
-  return [
+function ruleChecks(id, rule, options = {}) {
+  const checks = [
     ...(rule.checks || []),
     ...(options.requireE2e === false ? [] : (rule.e2eChecks || []))
   ];
+  if (options.backendMode === "native-worker") {
+    return checks.filter((checkId) => checkId !== "drill-evidence");
+  }
+  return checks;
 }
 
 function evaluateRuleEvidence({ id, rule, report, options = {} }) {
@@ -57,7 +61,7 @@ function evaluateRuleEvidence({ id, rule, report, options = {} }) {
   const blockers = [];
   const evidence = [];
 
-  ruleChecks(rule, options).forEach((checkId) => {
+  ruleChecks(id, rule, options).forEach((checkId) => {
     const check = checks.get(checkId);
     if (!check) {
       blockers.push(`missing evidence check: ${checkId}`);

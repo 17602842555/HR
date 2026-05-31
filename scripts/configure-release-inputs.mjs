@@ -108,7 +108,15 @@ function sha256ForText(text) {
   return sha256Text(text);
 }
 
+function normalizeReleaseBackendMode(value = "native-worker") {
+  const mode = String(value || "native-worker").trim().toLowerCase();
+  if (["native", "native-worker", "worker", "cloudflare-native"].includes(mode)) return "native-worker";
+  if (["tunnel", "cloudflare-tunnel", "proxy", "fastify-postgres", "postgres"].includes(mode)) return "tunnel";
+  throw new Error("Release input backend mode must be native-worker or tunnel.");
+}
+
 function readAndValidateInputs({
+  backendMode = "native-worker",
   environment,
   envPath,
   hrSignoffPath,
@@ -117,16 +125,25 @@ function readAndValidateInputs({
   sourcePath,
   storageSignoffPath
 }) {
+  const resolvedBackendMode = normalizeReleaseBackendMode(backendMode);
   const absoluteEnvPath = resolveFromRoot(rootDir, envPath);
   const absoluteSecretsPath = resolveFromRoot(rootDir, secretsSignoffPath);
   const absoluteHrPath = resolveFromRoot(rootDir, hrSignoffPath);
   const absoluteStoragePath = resolveFromRoot(rootDir, storageSignoffPath);
   const absoluteSourcePath = resolveFromRoot(rootDir, sourcePath);
 
-  const envText = readRequiredText(absoluteEnvPath, "Production env");
-  const env = parseProductionEnvText(envText);
-  const productionEnvReport = validateProductionEnv(env);
-  const cloudflareBackendReport = validateCloudflareBackendEnv(env);
+  const envRequired = resolvedBackendMode !== "native-worker";
+  const envText = existsSync(absoluteEnvPath)
+    ? readRequiredText(absoluteEnvPath, "Production env")
+    : "";
+  if (envRequired && !envText) throw new Error(`Production env file does not exist: ${absoluteEnvPath}`);
+  const env = envText ? parseProductionEnvText(envText) : {};
+  const productionEnvReport = envText
+    ? validateProductionEnv(env)
+    : { ok: true, errors: [], warnings: [], summary: { skipped: true, mode: resolvedBackendMode } };
+  const cloudflareBackendReport = envText
+    ? validateCloudflareBackendEnv(env, { mode: resolvedBackendMode })
+    : { ok: true, errors: [], warnings: [], summary: { skipped: true, mode: resolvedBackendMode } };
 
   const secrets = readRequiredJson(absoluteSecretsPath, "Production secrets signoff");
   const hr = readRequiredJson(absoluteHrPath, "HR data signoff");
@@ -134,9 +151,10 @@ function readAndValidateInputs({
 
   if (!existsSync(absoluteSourcePath)) throw new Error(`Dashboard source file does not exist: ${absoluteSourcePath}`);
   const secretsReport = validateSecretsSignoff(secrets.parsed, {
-    env,
-    envChecksum: sha256ForText(envText),
-    envPath: absoluteEnvPath
+    env: envText ? env : null,
+    envChecksum: envText ? sha256ForText(envText) : "",
+    envPath: absoluteEnvPath,
+    mode: resolvedBackendMode
   });
   const hrReport = validateHrDataSignoff(hr.parsed, {
     expectedCounts: dashboardSignoffCounts(absoluteSourcePath),
@@ -145,16 +163,16 @@ function readAndValidateInputs({
   });
   const storageReport = validateStorageSignoff(storage.parsed, {
     expectedEnvironment: environment,
-    expectedFileStorageDir: env.FILE_STORAGE_DRIVER === "local" ? env.FILE_STORAGE_DIR : ""
+    expectedFileStorageDir: envText && env.FILE_STORAGE_DRIVER === "local" ? env.FILE_STORAGE_DIR : ""
   });
 
-  const payloads = [
-    {
+  const payloadInputs = [
+    ...(envText ? [{
       envName: "PRODUCTION_ENV_B64",
       kind: "dotenv",
       path: absoluteEnvPath,
       text: envText
-    },
+    }] : []),
     {
       envName: "PRODUCTION_SECRETS_SIGNOFF_B64",
       kind: "json",
@@ -173,7 +191,8 @@ function readAndValidateInputs({
       path: absoluteStoragePath,
       text: storage.text
     }
-  ].map((item) => ({
+  ];
+  const payloads = payloadInputs.map((item) => ({
     ...item,
     base64: b64(item.text),
     bytes: Buffer.byteLength(item.text),
@@ -234,6 +253,7 @@ export function configureReleaseInputs(options = {}) {
   const now = options.now || new Date();
   const generatedAt = nowIso(now);
   const environment = String(options.environment || "production").trim() || "production";
+  const backendMode = normalizeReleaseBackendMode(options.backendMode || "native-worker");
   const repo = String(options.repo || defaultRepo).trim() || defaultRepo;
   const outputDir = resolveFromRoot(rootDir, options.outputDir || defaultOutputDir);
   const runOutputPath = join(outputDir, `release-input-upload-${slugTimestamp(generatedAt)}.json`);
@@ -249,6 +269,7 @@ export function configureReleaseInputs(options = {}) {
 
   try {
     inputReport = readAndValidateInputs({
+      backendMode,
       environment,
       envPath: options.envPath || ".env.production",
       hrSignoffPath: options.hrSignoffPath || "docs/hr-data-signoff.json",
@@ -279,6 +300,7 @@ export function configureReleaseInputs(options = {}) {
     generatedAt,
     apply: Boolean(options.apply),
     environment,
+    backendMode,
     repo,
     noPlaintextSecretValues: true,
     githubEnvironment: {
@@ -305,6 +327,7 @@ export function configureReleaseInputs(options = {}) {
 export function parseConfigureReleaseInputsArgs(argv = []) {
   const options = {
     apply: argv.includes("--apply"),
+    backendMode: "native-worker",
     ensureGithubEnvironment: argv.includes("--ensure-github-environment"),
     environment: "production",
     envPath: ".env.production",
@@ -322,6 +345,9 @@ export function parseConfigureReleaseInputsArgs(argv = []) {
       // Already handled by includes().
     } else if (arg === "--environment") {
       options.environment = argv[index + 1] || options.environment;
+      index += 1;
+    } else if (arg === "--mode") {
+      options.backendMode = normalizeReleaseBackendMode(argv[index + 1] || "");
       index += 1;
     } else if (arg === "--env") {
       options.envPath = argv[index + 1] || options.envPath;

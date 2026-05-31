@@ -31,22 +31,15 @@ const textDecoder = new TextDecoder();
 
 let memoryState = null;
 
-function hasEdgeCache() {
-  return typeof caches !== "undefined" && Boolean(caches.default);
-}
-
 function fallbackStorageMode() {
-  return hasEdgeCache() ? "edge-cache" : "memory";
-}
-
-function stateCacheKey() {
-  return new Request(`https://deep-oa-state.invalid/${STATE_KEY}`);
+  return "memory";
 }
 
 function json(payload, init = {}) {
   return new Response(JSON.stringify(payload), {
     ...init,
     headers: {
+      "cache-control": "no-store, private",
       "content-type": "application/json; charset=utf-8",
       ...SECURITY_HEADERS,
       ...(init.headers || {})
@@ -58,6 +51,7 @@ function text(payload, init = {}) {
   return new Response(payload, {
     ...init,
     headers: {
+      "cache-control": "no-store, private",
       "content-type": "text/plain; charset=utf-8",
       ...SECURITY_HEADERS,
       ...(init.headers || {})
@@ -258,6 +252,11 @@ function configuredBootstrapAdminPassword(env = {}) {
   return String(env.CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD || env.WORKER_ADMIN_PASSWORD || env.DEFAULT_ADMIN_PASSWORD || "").trim();
 }
 
+function configuredBootstrapAdminLogin(env = {}) {
+  const configured = normalizeLoginEmail(env.CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN || env.WORKER_ADMIN_LOGIN || env.DEFAULT_ADMIN_EMAIL || "admin@oa.local");
+  return validLoginIdentifier(configured) ? configured : "";
+}
+
 function validBootstrapAdminPassword(env = {}) {
   const password = configuredBootstrapAdminPassword(env);
   if (!validNewPassword(password)) return "";
@@ -265,10 +264,32 @@ function validBootstrapAdminPassword(env = {}) {
   return password;
 }
 
+function isAdminAccount(user = {}) {
+  return Array.isArray(user.roleCodes) && user.roleCodes.includes("admin");
+}
+
 async function ensureBootstrapAdmin(state, env = {}) {
-  const admin = state?.iam?.users?.find((user) => normalizeLoginEmail(user.email) === "admin@oa.local");
+  const users = Array.isArray(state?.iam?.users) ? state.iam.users : [];
+  const bootstrapLogin = configuredBootstrapAdminLogin(env);
+  if (!bootstrapLogin) return { adminReady: false, changed: false, configured: false };
+
+  let changed = false;
+  const configuredAccount = users.find((user) => normalizeLoginEmail(user.email) === bootstrapLogin);
+  if (configuredAccount && !isAdminAccount(configuredAccount)) {
+    return { adminReady: false, changed: false, configured: true };
+  }
+
+  const admin = configuredAccount
+    || users.find((user) => normalizeLoginEmail(user.email) === "admin@oa.local")
+    || users.find(isAdminAccount);
   if (!admin) return { adminReady: false, changed: false, configured: false };
-  if (admin.passwordHash) return { adminReady: true, changed: false, configured: true };
+  if (normalizeLoginEmail(admin.email) !== bootstrapLogin) {
+    admin.email = bootstrapLogin;
+    changed = true;
+  }
+  admin.status = "ACTIVE";
+
+  if (admin.passwordHash) return { adminReady: true, changed, configured: true };
 
   const bootstrapPassword = validBootstrapAdminPassword(env);
   if (!bootstrapPassword) return { adminReady: false, changed: false, configured: false };
@@ -276,7 +297,7 @@ async function ensureBootstrapAdmin(state, env = {}) {
   admin.passwordHash = await nativePasswordHash(bootstrapPassword);
   admin.mustChangePassword = String(env.CLOUDFLARE_BOOTSTRAP_ADMIN_FORCE_CHANGE || "1") !== "0";
   admin.sessionVersion = Number(admin.sessionVersion || 0) + 1;
-  admin.status = "ACTIVE";
+  changed = true;
   return { adminReady: true, changed: true, configured: true };
 }
 
@@ -332,11 +353,17 @@ function bytesToBase64(bytes) {
 }
 
 function publicFileRecord(file = {}) {
-  const { contentBase64, ...safeFile } = file;
   return {
-    ...safeFile,
-    contentAvailable: Boolean(contentBase64),
-    downloadAvailable: Boolean(contentBase64)
+    checksum: file.checksum || "",
+    contentAvailable: Boolean(file.contentBase64),
+    createdAt: file.createdAt || "",
+    downloadAvailable: Boolean(file.contentBase64),
+    fileName: file.fileName || "",
+    id: file.id,
+    mimeType: file.mimeType || "application/octet-stream",
+    sizeBytes: Number(file.sizeBytes || 0),
+    uploader: file.uploader ? { name: file.uploader.name || "" } : null,
+    visibility: file.visibility || "PRIVATE"
   };
 }
 
@@ -383,6 +410,108 @@ function publicIamState(iam = {}) {
     accounts: (iam.accounts || []).map(publicAccountRecord),
     users: (iam.users || []).map(publicUserRecord)
   };
+}
+
+function normalizeFileVisibility(input) {
+  const value = String(input || "PRIVATE").trim().toUpperCase();
+  return ["PRIVATE", "TENANT", "PUBLIC"].includes(value) ? value : "PRIVATE";
+}
+
+function maskSensitiveText(value) {
+  const text = String(value || "");
+  return text ? `${text.slice(0, 2)}***` : "";
+}
+
+function publicEmployeeRecord(employee = {}, revealSensitive = false) {
+  const {
+    address,
+    bankAccount,
+    bankCard,
+    contactPhone,
+    contentBase64,
+    idCard,
+    identityCard,
+    mobile,
+    passwordHash,
+    phone,
+    salary,
+    sensitiveInfo,
+    telephone,
+    tokenHash,
+    ...safeEmployee
+  } = employee || {};
+  return {
+    ...safeEmployee,
+    hukou: revealSensitive ? (employee.hukou || "") : maskSensitiveText(employee.hukou),
+    major: revealSensitive ? (employee.major || "") : maskSensitiveText(employee.major),
+    school: revealSensitive ? (employee.school || "") : maskSensitiveText(employee.school)
+  };
+}
+
+function publicPeopleState(people = {}, revealSensitive = false) {
+  return {
+    ...people,
+    employees: (people.employees || []).map((item) => publicEmployeeRecord(item, revealSensitive)),
+    femaleEmployees: (people.femaleEmployees || []).map((item) => publicEmployeeRecord(item, revealSensitive)),
+    inactiveEmployees: (people.inactiveEmployees || []).map((item) => publicEmployeeRecord(item, revealSensitive)),
+    leavers: (people.leavers || []).map((item) => publicEmployeeRecord(item, revealSensitive)),
+    monthLeavers: (people.monthLeavers || []).map((item) => publicEmployeeRecord(item, revealSensitive))
+  };
+}
+
+const EMPLOYEE_PATCH_FIELDS = new Set(["department", "departmentName", "leaveDate", "role", "roleTitle", "status"]);
+const EMPLOYEE_PATCH_STATUS = new Set(["ACTIVE", "LEAVED", "SUSPENDED", "在职", "离职", "停用"]);
+
+function normalizeEmployeePatch(body = {}) {
+  const keys = Object.keys(body || {});
+  const rejectedFields = keys.filter((key) => !EMPLOYEE_PATCH_FIELDS.has(key));
+  if (rejectedFields.length) {
+    return {
+      error: json({
+        code: "EMPLOYEE_FIELD_NOT_EDITABLE",
+        error: "employee_field_not_editable",
+        fields: rejectedFields.sort(),
+        message: "员工维护只允许修改部门、岗位、状态和离职日期；敏感字段必须走专用授权流程。",
+        ok: false
+      }, { status: 400 })
+    };
+  }
+  const patch = {};
+  if (body.department !== undefined || body.departmentName !== undefined) {
+    patch.department = String(body.department ?? body.departmentName ?? "").trim();
+  }
+  if (body.role !== undefined || body.roleTitle !== undefined) {
+    patch.role = String(body.role ?? body.roleTitle ?? "").trim();
+  }
+  if (body.status !== undefined) {
+    const status = String(body.status || "").trim();
+    if (!EMPLOYEE_PATCH_STATUS.has(status)) {
+      return {
+        error: json({
+          code: "INVALID_EMPLOYEE_STATUS",
+          error: "invalid_employee_status",
+          message: "员工状态只能是 ACTIVE、LEAVED、SUSPENDED、在职、离职或停用。",
+          ok: false
+        }, { status: 400 })
+      };
+    }
+    patch.status = status;
+  }
+  if (body.leaveDate !== undefined) {
+    const leaveDate = String(body.leaveDate || "").trim();
+    if (leaveDate && !/^\d{4}-\d{2}-\d{2}$/.test(leaveDate)) {
+      return {
+        error: json({
+          code: "INVALID_LEAVE_DATE",
+          error: "invalid_leave_date",
+          message: "离职日期必须使用 YYYY-MM-DD 格式。",
+          ok: false
+        }, { status: 400 })
+      };
+    }
+    patch.leaveDate = leaveDate;
+  }
+  return { patch };
 }
 
 async function nativePasswordHash(password, salt = crypto.randomUUID()) {
@@ -1416,19 +1545,6 @@ async function ensureD1(env) {
 
 async function loadState(env) {
   if (!env.OA_DB) {
-    if (hasEdgeCache()) {
-      const cached = await caches.default.match(stateCacheKey());
-      if (cached) {
-        const state = await cached.json();
-        state.systemReadiness = makeReadiness("edge-cache");
-        await ensureAuditLogIntegrity(state.auditLogs || []);
-        state.auditIntegrity = await makeAuditIntegrity(state.auditLogs || []);
-        return state;
-      }
-      memoryState = makeInitialState("edge-cache");
-      await saveState(env, memoryState);
-      return clone(memoryState);
-    }
     if (!memoryState) {
       memoryState = makeInitialState(fallbackStorageMode());
       await saveState(env, memoryState);
@@ -1461,16 +1577,8 @@ async function saveState(env, state) {
     ...buildAccountLibrary(state.people || { employees: [] }, state.iam || { roles: [], users: [] })
   };
   if (!env.OA_DB) {
+    state.systemReadiness = makeReadiness(fallbackStorageMode());
     memoryState = clone(state);
-    if (hasEdgeCache()) {
-      state.systemReadiness = makeReadiness("edge-cache");
-      await caches.default.put(stateCacheKey(), new Response(JSON.stringify(state), {
-        headers: {
-          "cache-control": "public, max-age=86400",
-          "content-type": "application/json; charset=utf-8"
-        }
-      }));
-    }
     return;
   }
   await ensureD1(env);
@@ -2153,17 +2261,23 @@ async function handleNativeApi(request, env) {
     ]), filename);
   }
 
-  if (pathname === "/people" && method === "GET") return ok({ people: state.people, revealSensitive: state.revealSensitive });
-  if (pathname === "/people/employees" && method === "GET") return ok({ employees: state.people.employees });
-  if (pathname === "/people/leavers" && method === "GET") return ok({ leavers: state.people.leavers });
+  if (pathname === "/people" && method === "GET") return ok({ people: publicPeopleState(state.people, state.revealSensitive), revealSensitive: state.revealSensitive });
+  if (pathname === "/people/employees" && method === "GET") {
+    return ok({ employees: (state.people.employees || []).map((item) => publicEmployeeRecord(item, state.revealSensitive)) });
+  }
+  if (pathname === "/people/leavers" && method === "GET") {
+    return ok({ leavers: (state.people.leavers || []).map((item) => publicEmployeeRecord(item, state.revealSensitive)) });
+  }
   if (segments[0] === "people" && segments[1] === "employees" && segments[2] && method === "PATCH") {
     const body = await readJson(request);
     const employee = state.people.employees.find((item) => item.id === decodeURIComponent(segments[2]));
     if (!employee) return notFound(pathname);
-    Object.assign(employee, body);
+    const normalized = normalizeEmployeePatch(body);
+    if (normalized.error) return normalized.error;
+    Object.assign(employee, normalized.patch);
     await appendAudit(env, state, { action: "更新员工", actor: actorName, content: `更新员工 ${employee.name}`, object: "员工档案", objectId: employee.id, request });
     await saveState(env, state);
-    return ok({ employee });
+    return ok({ employee: publicEmployeeRecord(employee, state.revealSensitive) });
   }
   if (pathname === "/people/export" && method === "POST") {
     const exportInfo = await exportContext(request, "人员名册");
@@ -2731,14 +2845,15 @@ async function handleNativeApi(request, env) {
     }
     const checksum = await sha256HexBytes(bytes);
     const file = {
-      ...body,
       checksum,
       contentBase64: bytesToBase64(bytes),
       createdAt: nowIso(),
+      fileName: String(body.fileName || "attachment.bin").trim(),
       id: nextId("FILE"),
+      mimeType: String(body.mimeType || "application/octet-stream").trim(),
       sizeBytes: bytes.length,
       uploader: { name: actorName },
-      visibility: body.visibility || "PRIVATE"
+      visibility: normalizeFileVisibility(body.visibility)
     };
     state.files = [file, ...state.files];
     await appendAudit(env, state, { action: "上传附件", actor: actorName, content: file.fileName, object: "文件附件", objectId: file.id, request });
@@ -2759,6 +2874,7 @@ async function handleNativeApi(request, env) {
     await saveState(env, state);
     return new Response(bytes, {
       headers: {
+        "cache-control": "no-store, private",
         "content-disposition": `attachment; filename="${file.fileName || "attachment.bin"}"`,
         "content-type": file.mimeType || "application/octet-stream",
         ...SECURITY_HEADERS
@@ -2811,7 +2927,7 @@ async function handleNativeApi(request, env) {
     state.importRuns = [run, ...state.importRuns];
     await appendAudit(env, state, { action: "导入仪表盘数据", actor: actorName, content: `导入 ${sourceName} 数据`, object: "数据导入", objectId: run.id, request });
     await saveState(env, state);
-    return ok({ importRun: publicImportRun(run), people: state.people });
+    return ok({ importRun: publicImportRun(run) });
   }
   if (segments[0] === "imports" && segments[2] === "source" && method === "GET") {
     const run = state.importRuns.find((item) => item.id === decodeURIComponent(segments[1]));
@@ -2828,6 +2944,7 @@ async function handleNativeApi(request, env) {
     await saveState(env, state);
     return new Response(bytes, {
       headers: {
+        "cache-control": "no-store, private",
         "content-disposition": `attachment; filename="${run.sourceName || "oa-dashboard.html"}"`,
         "content-type": "text/html; charset=utf-8",
         ...SECURITY_HEADERS

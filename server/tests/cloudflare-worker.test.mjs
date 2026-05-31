@@ -399,7 +399,10 @@ test("cloudflare worker file upload and download use real checksum guards", asyn
   assert.equal(uploadResponse.status, 200);
   assert.equal(uploadPayload.file.sizeBytes, content.length);
   assert.equal(uploadPayload.file.checksum, sha256(content));
+  assert.equal(uploadResponse.headers.get("cache-control"), "no-store, private");
   assert.equal("contentBase64" in uploadPayload.file, false);
+  assert.equal("storageKey" in uploadPayload.file, false);
+  assert.equal("passwordHash" in uploadPayload.file, false);
   assert.equal(uploadPayload.file.downloadAvailable, true);
 
   const listResponse = await worker.fetch(
@@ -413,6 +416,8 @@ test("cloudflare worker file upload and download use real checksum guards", asyn
   assert.equal(listResponse.status, 200);
   assert.equal(Boolean(listedFile), true);
   assert.equal("contentBase64" in listedFile, false);
+  assert.equal("storageKey" in listedFile, false);
+  assert.equal("passwordHash" in listedFile, false);
   assert.equal(listedFile.downloadAvailable, true);
 
   const downloadResponse = await worker.fetch(
@@ -422,6 +427,7 @@ test("cloudflare worker file upload and download use real checksum guards", asyn
     TEST_ENV
   );
   assert.equal(downloadResponse.status, 200);
+  assert.equal(downloadResponse.headers.get("cache-control"), "no-store, private");
   assert.equal(await downloadResponse.text(), "worker attachment integrity");
 });
 
@@ -450,6 +456,8 @@ test("cloudflare worker dashboard import stores source checksum blocks duplicate
   assert.equal(importPayload.importRun.sourceChecksum, sha256(html));
   assert.equal(importPayload.importRun.sourceSizeBytes, Buffer.byteLength(html));
   assert.equal("sourceContentBase64" in importPayload.importRun, false);
+  assert.equal("people" in importPayload, false);
+  assert.equal(importResponse.headers.get("cache-control"), "no-store, private");
   assert.equal(importPayload.importRun.metadata.sourceArtifact.downloadAvailable, true);
 
   const importsResponse = await worker.fetch(
@@ -472,6 +480,7 @@ test("cloudflare worker dashboard import stores source checksum blocks duplicate
     TEST_ENV
   );
   assert.equal(sourceResponse.status, 200);
+  assert.equal(sourceResponse.headers.get("cache-control"), "no-store, private");
   assert.equal(await sourceResponse.text(), html);
 
   const duplicateResponse = await worker.fetch(
@@ -715,7 +724,7 @@ test("cloudflare worker supports employee activation with phone-number login", a
   assert.equal(auditText.includes("PhoneLoginPass123"), false);
 });
 
-test("cloudflare worker bulk account sync prefers employee phone as login", async () => {
+test("cloudflare worker people API redacts sensitive fields and rejects sensitive PATCH", async () => {
   const adminLogin = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
       body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
@@ -735,38 +744,44 @@ test("cloudflare worker bulk account sync prefers employee phone as login", asyn
   assert.ok(missingAccount);
 
   const phone = `177${String(Date.now()).slice(-8)}`;
-  const patchResponse = await worker.fetch(
+  const rejectedPatch = await worker.fetch(
     new Request(`https://deep-oa-hr.example.workers.dev/api/people/employees/${encodeURIComponent(missingAccount.employeeId)}`, {
-      body: JSON.stringify({ phone }),
+      body: JSON.stringify({ passwordHash: "leak", phone, salary: "999999" }),
       headers: { "content-type": "application/json", cookie: adminCookie },
       method: "PATCH"
     }),
     TEST_ENV
   );
-  assert.equal(patchResponse.status, 200);
+  const rejectedPayload = await responseJson(rejectedPatch);
+  assert.equal(rejectedPatch.status, 400);
+  assert.equal(rejectedPayload.error, "employee_field_not_editable");
+  assert.deepEqual(rejectedPayload.fields, ["passwordHash", "phone", "salary"]);
 
-  const syncResponse = await worker.fetch(
-    new Request("https://deep-oa-hr.example.workers.dev/api/iam/accounts/sync-employees", {
-      body: JSON.stringify({ roleCodes: ["employee-self-service"] }),
+  const allowedPatch = await worker.fetch(
+    new Request(`https://deep-oa-hr.example.workers.dev/api/people/employees/${encodeURIComponent(missingAccount.employeeId)}`, {
+      body: JSON.stringify({ role: "安全合规专员", status: "在职" }),
       headers: { "content-type": "application/json", cookie: adminCookie },
-      method: "POST"
+      method: "PATCH"
     }),
     TEST_ENV
   );
-  const syncPayload = await responseJson(syncResponse);
-  assert.equal(syncResponse.status, 200);
-  const credential = syncPayload.credentials.find((item) => item.employeeId === missingAccount.employeeId);
-  assert.equal(credential?.email, phone);
+  const allowedPayload = await responseJson(allowedPatch);
+  assert.equal(allowedPatch.status, 200);
+  assert.equal(allowedPayload.employee.role, "安全合规专员");
+  assert.equal(Object.hasOwn(allowedPayload.employee, "phone"), false);
+  assert.equal(Object.hasOwn(allowedPayload.employee, "passwordHash"), false);
 
-  const phoneLogin = await worker.fetch(
-    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
-      body: JSON.stringify({ login: phone, password: credential.temporaryPassword }),
-      headers: { "content-type": "application/json" },
-      method: "POST"
+  const peopleResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/people", {
+      headers: { cookie: adminCookie }
     }),
     TEST_ENV
   );
-  assert.equal(phoneLogin.status, 200);
+  const peopleText = await peopleResponse.text();
+  assert.equal(peopleResponse.status, 200);
+  assert.equal(peopleText.includes(phone), false);
+  assert.equal(peopleText.includes("passwordHash"), false);
+  assert.equal(peopleText.includes("salary"), false);
 });
 
 test("cloudflare worker native approval decisions require every current approver before next node", async () => {
@@ -873,4 +888,24 @@ test("cloudflare worker approval decisions reject non-admin approver impersonati
   const decisionPayload = await responseJson(decisionResponse);
   assert.equal(decisionResponse.status, 403);
   assert.equal(decisionPayload.error, "permission_denied");
+});
+
+test("cloudflare worker bootstrap admin can use phone-number login", async () => {
+  const phoneLogin = "17602842555";
+  const response = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ login: phoneLogin, password: ADMIN_PASSWORD }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    {
+      ...TEST_ENV,
+      CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN: phoneLogin
+    }
+  );
+  const payload = await responseJson(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.user.email, phoneLogin);
+  assert.equal(payload.user.roles.some((role) => role.code === "admin"), true);
 });

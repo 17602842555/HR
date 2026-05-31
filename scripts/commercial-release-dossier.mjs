@@ -92,7 +92,9 @@ function targetProfileLines(profile) {
   if (!profile) return ["- Target profile: missing"];
   const database = profile.database || {};
   const signoffChecks = profile.signoffChecks || {};
-  const databaseTarget = database.configured !== true
+  const databaseTarget = profile.backendMode === "native-worker" || database.target === "cloudflare-d1"
+    ? "cloudflare-d1"
+    : database.configured !== true
     ? "unconfigured"
     : database.isLocal === true
       ? "local-postgresql"

@@ -116,6 +116,22 @@ test("commercial readiness audit does not assign Docker-only doctor failure to d
   assert(!result.failures.some((failure) => failure.includes("GAP-003: evidence check failed: doctor")));
 });
 
+test("commercial readiness audit skips Docker drill evidence for native Worker D1 mode", () => {
+  const result = auditCommercialReadiness(greenEvidence({
+    checks: greenChecks().filter((check) => !["drill-evidence", "doctor"].includes(check.id)),
+    summary: {
+      ok: true,
+      readiness: null
+    }
+  }), { backendMode: "native-worker" });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.gaps.find((gap) => gap.id === "GAP-002").evidenceReady, true);
+  assert.equal(result.gaps.find((gap) => gap.id === "GAP-004").evidence.some((item) => item.id === "storage-signoff"), true);
+  assert.equal(result.failures.some((failure) => failure.includes("drill-evidence")), false);
+  assert.equal(result.failures.some((failure) => failure.includes("canRunDockerDrill")), false);
+});
+
 test("commercial readiness audit blocks removed gap rows before evidence is green", () => {
   const result = auditCommercialReadiness(greenEvidence({
     knownGaps: closedGaps().filter((gap) => gap.id !== "GAP-002"),

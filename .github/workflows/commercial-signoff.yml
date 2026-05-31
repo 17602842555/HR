@@ -11,6 +11,14 @@ on:
         options:
           - staging
           - production
+      backend_mode:
+        description: "Release backend path to validate"
+        required: true
+        default: native-worker
+        type: choice
+        options:
+          - native-worker
+          - tunnel
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -25,6 +33,8 @@ jobs:
 
     env:
       TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+      RELEASE_BACKEND_MODE: ${{ inputs.backend_mode }}
+      CLOUDFLARE_BACKEND_MODE: ${{ inputs.backend_mode }}
       PRODUCTION_ENV_B64: ${{ secrets.PRODUCTION_ENV_B64 }}
       PRODUCTION_SECRETS_SIGNOFF_B64: ${{ secrets.PRODUCTION_SECRETS_SIGNOFF_B64 }}
       HR_DATA_SIGNOFF_B64: ${{ secrets.HR_DATA_SIGNOFF_B64 }}
@@ -48,13 +58,18 @@ jobs:
           set -euo pipefail
           umask 077
           mkdir -p reports/commercial-evidence/signoff-validation
-          npm run prepare:release-inputs -- --json --output reports/commercial-evidence/signoff-validation/release-inputs.json
+          npm run prepare:release-inputs -- --mode "$RELEASE_BACKEND_MODE" --json --output reports/commercial-evidence/signoff-validation/release-inputs.json
 
       - name: Validate production env
         if: always()
         run: |
           set -euo pipefail
           umask 077
+          if [ "$RELEASE_BACKEND_MODE" = "native-worker" ] && [ ! -f .env.production ]; then
+            printf '{"ok":true,"skipped":true,"mode":"native-worker","reason":"native-worker signoff does not require Fastify .env.production"}\n' \
+              | tee reports/commercial-evidence/signoff-validation/production-env.json
+            exit 0
+          fi
           npm run validate:production-env -- .env.production --json \
             | tee reports/commercial-evidence/signoff-validation/production-env.json
 
@@ -63,6 +78,11 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          if [ "$RELEASE_BACKEND_MODE" = "native-worker" ] && [ ! -f .env.production ]; then
+            printf '{"ok":true,"skipped":true,"mode":"native-worker","reason":"native-worker signoff validates Worker/D1 deployment evidence separately"}\n' \
+              | tee reports/commercial-evidence/signoff-validation/cloudflare-backend.json
+            exit 0
+          fi
           npm run validate:cloudflare-backend -- --env .env.production --json \
             | tee reports/commercial-evidence/signoff-validation/cloudflare-backend.json
 
@@ -71,7 +91,11 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          npm run validate:secrets-signoff -- docs/production-secrets-signoff.json --env .env.production --json \
+          env_args=()
+          if [ -f .env.production ]; then
+            env_args=(--env .env.production)
+          fi
+          npm run validate:secrets-signoff -- docs/production-secrets-signoff.json "${env_args[@]}" --mode "$RELEASE_BACKEND_MODE" --json \
             | tee reports/commercial-evidence/signoff-validation/secrets-signoff.json
 
       - name: Validate HR data signoff
@@ -87,10 +111,12 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          set -a
-          # shellcheck disable=SC1091
-          source .env.production
-          set +a
+          if [ -f .env.production ]; then
+            set -a
+            # shellcheck disable=SC1091
+            source .env.production
+            set +a
+          fi
           args=(docs/file-storage-signoff.json --environment "$TARGET_ENVIRONMENT" --json)
           if [ "${FILE_STORAGE_DRIVER:-}" = "local" ]; then
             args+=(--file-storage-dir "${FILE_STORAGE_DIR:-}")

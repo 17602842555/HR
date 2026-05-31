@@ -88,3 +88,14 @@ export function approverResolutionSummary(nodes = []) {
     unresolvedApprovers: [...new Set(unresolved)]
   };
 }
+
+export function approvalRuleBindingError(nodes = [], { enabled = true } = {}) {
+  if (enabled === false) return null;
+  const resolution = approverResolutionSummary(nodes);
+  if (!resolution.unresolvedApprovers.length) return null;
+  return {
+    error: "approval_rule_approvers_unresolved",
+    message: `审批人未绑定真实账号：${resolution.unresolvedApprovers.join("、")}`,
+    details: resolution
+  };
+}

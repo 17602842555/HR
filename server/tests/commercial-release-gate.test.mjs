@@ -144,7 +144,7 @@ test("commercial release gate accepts native Worker D1 release evidence without 
         noDomainPublic: true
       }
     },
-    checks: passingEvidence().checks.filter((check) => !["production-env", "cloudflare-backend", "doctor"].includes(check.id)),
+    checks: passingEvidence().checks.filter((check) => !["production-env", "cloudflare-backend", "doctor", "drill-evidence"].includes(check.id)),
     summary: {
       ok: true,
       readiness: null
@@ -157,6 +157,7 @@ test("commercial release gate accepts native Worker D1 release evidence without 
   assert(result.summary.requiredChecks.includes("cloudflare-deployment"));
   assert(result.summary.requiredChecks.includes("no-domain-public"));
   assert.equal(result.summary.requiredChecks.includes("production-env"), false);
+  assert.equal(result.summary.requiredChecks.includes("drill-evidence"), false);
   assert.equal(result.summary.requiredChecks.includes("doctor"), false);
 });
 

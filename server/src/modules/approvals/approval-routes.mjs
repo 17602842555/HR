@@ -1,6 +1,7 @@
 import { appendAuditLog, recordExportEvent, requestAuditMeta, requireExportBusinessReason } from "../audit/audit-service.mjs";
 import { requirePermission } from "../iam/route-guards.mjs";
 import {
+  approvalRuleBindingError,
   approverResolutionSummary,
   approverUserIdForName,
   enrichRuleNodesFromPrisma
@@ -910,6 +911,13 @@ async function buildApprovalRuleCoverage(prisma, tenantId) {
   };
 }
 
+async function enrichApprovalRuleForResponse(prisma, tenantId, rule) {
+  return {
+    ...rule,
+    nodes: await enrichRuleNodesFromPrisma(prisma, tenantId, rule.nodes || [])
+  };
+}
+
 export async function registerApprovalRoutes(app) {
   app.get("/api/approvals/definitions", { preHandler: app.authenticate }, async (request) => {
     await requirePermission(app, request, { module: "workflow", action: "read" });
@@ -1426,7 +1434,10 @@ export async function registerApprovalRoutes(app) {
         { templateId: "asc" }
       ]
     });
-    return { approvalRules: rules };
+    const approvalRules = await Promise.all(
+      rules.map((rule) => enrichApprovalRuleForResponse(app.prisma, request.user.tenantId, rule))
+    );
+    return { approvalRules };
   });
 
   app.get("/api/approvals/rules/coverage", { preHandler: app.authenticate }, async (request) => {
@@ -1494,6 +1505,8 @@ export async function registerApprovalRoutes(app) {
       ...normalized.data,
       nodes: await enrichRuleNodesFromPrisma(app.prisma, request.user.tenantId, normalized.data.nodes)
     };
+    const bindingError = approvalRuleBindingError(rule.nodes, { enabled: rule.enabled });
+    if (bindingError) return reply.code(400).send(bindingError);
     const saved = await app.prisma.approvalRule.upsert({
       where: {
         tenantId_department_templateId: {
@@ -1542,6 +1555,8 @@ export async function registerApprovalRoutes(app) {
       ...normalized.data,
       nodes: await enrichRuleNodesFromPrisma(app.prisma, request.user.tenantId, normalized.data.nodes)
     };
+    const bindingError = approvalRuleBindingError(rule.nodes, { enabled: rule.enabled });
+    if (bindingError) return reply.code(400).send(bindingError);
     const saved = await app.prisma.approvalRule.update({
       where: { id: request.params.id },
       data: {

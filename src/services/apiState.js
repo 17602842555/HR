@@ -11,6 +11,38 @@ function isPlainObject(value) {
   return value && typeof value === "object" && !Array.isArray(value);
 }
 
+const SENSITIVE_API_KEYS = new Set([
+  "address",
+  "bankaccount",
+  "bankcard",
+  "contactphone",
+  "contentbase64",
+  "idcard",
+  "identitycard",
+  "mobile",
+  "objectkey",
+  "passwordhash",
+  "phone",
+  "salary",
+  "sessionsecret",
+  "sourcecontentbase64",
+  "storagekey",
+  "telephone",
+  "tokenhash"
+]);
+
+function normalizedKey(key) {
+  return String(key || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function stripSensitiveApiFields(value) {
+  if (Array.isArray(value)) return value.map(stripSensitiveApiFields);
+  if (!isPlainObject(value)) return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !SENSITIVE_API_KEYS.has(normalizedKey(key)))
+    .map(([key, item]) => [key, stripSensitiveApiFields(item)]));
+}
+
 function unwrapPayload(payload) {
   let current = payload;
   for (let index = 0; index < 3; index += 1) {
@@ -241,7 +273,7 @@ export function normalizeApiStatePayload(payloads, fallbackState) {
   if (importRuns) nextState.importRuns = importRuns;
   if (typeof revealSensitive === "boolean") nextState.revealSensitive = revealSensitive;
 
-  return nextState;
+  return stripSensitiveApiFields(nextState);
 }
 
 export function mergeApiState(fallbackState, apiState, localOverrideDomains = new Set()) {

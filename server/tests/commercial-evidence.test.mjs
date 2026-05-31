@@ -16,6 +16,7 @@ import {
   runCheck,
   runGapReportCheck,
   selectedEvidenceChecks,
+  strictReadinessFailedForReport,
   summarizeEvidence,
   writeEvidenceReport,
   writeCommercialEvidence
@@ -289,6 +290,96 @@ test("commercial evidence target profile accepts native Worker D1 as production 
   assert.equal(profile.database.d1Configured, true);
   assert.equal(profile.productionEvidenceReady, true);
   assert.equal(profile.evidenceClass, "production-release-evidence");
+});
+
+test("commercial evidence native Worker release is not blocked by Fastify env doctor or Docker drill", () => {
+  const checks = [
+    { id: "preflight", required: true, exitCode: 0 },
+    { id: "migrations", required: true, exitCode: 0 },
+    { id: "supply-chain", required: true, exitCode: 0 },
+    { id: "sbom", required: true, exitCode: 0 },
+    { id: "brand", required: true, exitCode: 0 },
+    { id: "contract", required: true, exitCode: 0 },
+    { id: "hr-review-prep", required: true, exitCode: 0 },
+    { id: "production-env", required: false, exitCode: 1 },
+    { id: "cloudflare-backend", required: false, exitCode: 1 },
+    {
+      id: "cloudflare-deployment",
+      required: false,
+      exitCode: 0,
+      parsedJson: {
+        deploymentMode: "native-worker",
+        summary: {
+          d1PersistenceReady: true,
+          nativeWorkerReady: true
+        }
+      }
+    },
+    {
+      id: "no-domain-public",
+      required: false,
+      exitCode: 0,
+      parsedJson: {
+        ok: true,
+        checks: [
+          { name: "worker-health", level: "pass" },
+          { name: "worker-d1", level: "pass" },
+          { name: "worker-cors", level: "pass" }
+        ]
+      }
+    },
+    { id: "secrets-signoff", required: false, exitCode: 0 },
+    { id: "hr-signoff", required: false, exitCode: 0 },
+    { id: "storage-signoff", required: false, exitCode: 0 },
+    { id: "drill-evidence", required: false, exitCode: 66 },
+    {
+      id: "doctor",
+      required: false,
+      exitCode: 1,
+      parsedJson: {
+        readiness: {
+          canRunDockerDrill: false,
+          canReachPostgres: false,
+          canVerifyDatabaseIntegrity: false,
+          canRunApiSmoke: false,
+          canRunFrontendApiSmoke: false,
+          hardBlockers: [{ name: "docker" }]
+        }
+      }
+    },
+    { id: "db-generate", required: true, exitCode: 0 },
+    { id: "test-server", required: true, exitCode: 0 },
+    { id: "build", required: true, exitCode: 0 },
+    { id: "e2e", required: true, exitCode: 0 }
+  ];
+  const report = buildEvidenceReport({
+    artifacts: { migrations: [], files: {} },
+    checks,
+    commandLine: "node scripts/commercial-evidence.mjs --full --e2e --strict-readiness",
+    env: {
+      APP_ENV: "production",
+      CLOUDFLARE_BACKEND_MODE: "native-worker",
+      NODE_ENV: "production",
+      VITE_DEMO_FALLBACK: "0",
+      VITE_REQUIRE_API: "1"
+    },
+    knownGaps: [
+      { id: "GAP-001", status: "Closed" },
+      { id: "GAP-002", status: "Mitigated" },
+      { id: "GAP-003", status: "Closed" },
+      { id: "GAP-004", status: "Closed" },
+      { id: "GAP-005", status: "Closed" }
+    ],
+    rootDir: "/tmp/project",
+    startedAt: "2026-05-30T00:00:00.000Z",
+    finishedAt: "2026-05-30T00:00:01.000Z"
+  });
+
+  assert.equal(report.targetProfile.backendMode, "native-worker");
+  assert.equal(report.summary.releaseCandidateReady, true);
+  assert.equal(strictReadinessFailedForReport(report), false);
+  assert.equal(report.summary.warningChecks.some((check) => check.id === "drill-evidence"), true);
+  assert.deepEqual(report.summary.releaseBlockers, []);
 });
 
 test("commercial evidence summary marks release candidate ready only for full production e2e evidence", () => {

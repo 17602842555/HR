@@ -79,3 +79,48 @@ test("frontend API-required baseline strips local HR and business demo records",
   assert.deepEqual(baseline.iam.users, []);
   assert.deepEqual(baseline.iam.permissions, [{ code: "employee.read" }]);
 });
+
+test("frontend API state defensively strips leaked sensitive backend fields", () => {
+  const safeFallback = apiRequiredBaselineState(fallbackState);
+  const normalized = normalizeApiStatePayload({
+    auditLogs: {
+      auditLogs: [{ id: "audit-1", metadata: { tokenHash: "secret-token", requestId: "req-1" } }]
+    },
+    files: {
+      files: [{ id: "file-1", fileName: "contract.pdf", contentBase64: "secret-content", storageKey: "private/key" }]
+    },
+    iamOverview: {
+      iam: {
+        roles: [],
+        users: [{ id: "user-1", name: "员工", passwordHash: "secret-hash", sessionSecret: "secret-session" }]
+      }
+    },
+    importRuns: {
+      importRuns: [{ id: "import-1", sourceContentBase64: "source-html", sourceName: "oa-dashboard.html" }]
+    },
+    people: {
+      people: {
+        employees: [{
+          id: "emp-1",
+          name: "员工",
+          phone: "13800138000",
+          salary: "999999",
+          idCard: "440000000000000000",
+          department: "行政部"
+        }]
+      }
+    }
+  }, safeFallback);
+
+  assert.equal(normalized.people.employees[0].department, "行政部");
+  assert.equal(Object.hasOwn(normalized.people.employees[0], "phone"), false);
+  assert.equal(Object.hasOwn(normalized.people.employees[0], "salary"), false);
+  assert.equal(Object.hasOwn(normalized.people.employees[0], "idCard"), false);
+  assert.equal(Object.hasOwn(normalized.iam.users[0], "passwordHash"), false);
+  assert.equal(Object.hasOwn(normalized.iam.users[0], "sessionSecret"), false);
+  assert.equal(Object.hasOwn(normalized.files[0], "contentBase64"), false);
+  assert.equal(Object.hasOwn(normalized.files[0], "storageKey"), false);
+  assert.equal(Object.hasOwn(normalized.importRuns[0], "sourceContentBase64"), false);
+  assert.equal(Object.hasOwn(normalized.auditLogs[0].metadata, "tokenHash"), false);
+  assert.equal(normalized.auditLogs[0].metadata.requestId, "req-1");
+});

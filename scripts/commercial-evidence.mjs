@@ -258,7 +258,7 @@ function isNativeWorkerEvidenceReady(checks = []) {
 
 function productionEvidenceCheckIds(backendMode) {
   if (backendMode === "native-worker") {
-    return ["cloudflare-deployment", "no-domain-public", "secrets-signoff", "storage-signoff", "hr-signoff", "drill-evidence"];
+    return ["cloudflare-deployment", "no-domain-public", "secrets-signoff", "storage-signoff", "hr-signoff"];
   }
   return ["production-env", "cloudflare-backend", "secrets-signoff", "storage-signoff", "hr-signoff", "drill-evidence"];
 }
@@ -294,7 +294,11 @@ export function buildTargetProfile({
 
   if (backendMode === "native-worker" && d1Configured !== true) warnings.push("Cloudflare native Worker/D1 persistence evidence is not green.");
   if (backendMode !== "native-worker" && database.isLocal) warnings.push("DATABASE_URL points at a local PostgreSQL host; this is not production database evidence.");
-  if (!productionEvidenceReady) warnings.push("Production Cloudflare/no-domain, signoff, storage, HR, or drill evidence is not fully green.");
+  if (!productionEvidenceReady) {
+    warnings.push(backendMode === "native-worker"
+      ? "Production Cloudflare/no-domain, signoff, storage, or HR evidence is not fully green."
+      : "Production env, Cloudflare backend, signoff, storage, HR, or drill evidence is not fully green.");
+  }
   if (targetEnv.VITE_DEMO_FALLBACK === "1") warnings.push("VITE_DEMO_FALLBACK is enabled; production frontend evidence requires it disabled.");
 
   return {
@@ -464,9 +468,21 @@ export function runCheck(check, { cwd = process.cwd(), env = process.env } = {})
 
 function releaseBlockingWarningCheck(check, targetProfile) {
   if (targetProfile?.backendMode === "native-worker") {
-    return !["production-env", "cloudflare-backend", "doctor"].includes(check.id);
+    return !["production-env", "cloudflare-backend", "doctor", "drill-evidence"].includes(check.id);
   }
   return !["cloudflare-deployment", "no-domain-public"].includes(check.id);
+}
+
+export function strictReadinessFailedForReport(report) {
+  if (report?.targetProfile?.backendMode === "native-worker") return false;
+  const readiness = report?.summary?.readiness || null;
+  return Boolean(readiness && (
+    !readiness.canRunDockerDrill
+    || !readiness.canReachPostgres
+    || !readiness.canVerifyDatabaseIntegrity
+    || !readiness.canRunApiSmoke
+    || !readiness.canRunFrontendApiSmoke
+  ));
 }
 
 export function summarizeEvidence(report) {
@@ -782,13 +798,7 @@ async function main(argv = process.argv.slice(2)) {
     finishedAt
   });
   writeEvidenceReport(report, outputDir);
-  const strictReadinessFailed = options.strictReadiness && report.summary.readiness && (
-    !report.summary.readiness.canRunDockerDrill
-    || !report.summary.readiness.canReachPostgres
-    || !report.summary.readiness.canVerifyDatabaseIntegrity
-    || !report.summary.readiness.canRunApiSmoke
-    || !report.summary.readiness.canRunFrontendApiSmoke
-  );
+  const strictReadinessFailed = options.strictReadiness && strictReadinessFailedForReport(report);
 
   console.log(JSON.stringify(buildEvidenceCliResult({
     outputPath,

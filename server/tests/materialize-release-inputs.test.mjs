@@ -53,6 +53,11 @@ function releaseInputEnv() {
   };
 }
 
+function nativeReleaseInputEnvWithoutProductionEnv() {
+  const { PRODUCTION_ENV_B64: _productionEnv, ...rest } = releaseInputEnv();
+  return rest;
+}
+
 test("release input materializer writes only approved private files", async () => {
   const dir = await mkdtemp(join(tmpdir(), "oa-release-inputs-"));
   try {
@@ -80,7 +85,7 @@ test("release input materializer writes only approved private files", async () =
 test("release input materializer rejects missing and malformed release secrets", async () => {
   const dir = await mkdtemp(join(tmpdir(), "oa-release-inputs-bad-"));
   try {
-    const missing = materializeReleaseInputs({ env: {}, rootDir: dir });
+    const missing = materializeReleaseInputs({ backendMode: "tunnel", env: {}, rootDir: dir });
     assert.equal(missing.ok, false);
     assert.equal(missing.errors.length, 4);
     assert(missing.errors.some((error) => error.includes("PRODUCTION_ENV_B64 is required")));
@@ -104,6 +109,28 @@ test("release input materializer rejects missing and malformed release secrets",
     });
     assert.equal(malformedBase64.ok, false);
     assert(malformedBase64.errors.some((error) => error.includes("PRODUCTION_SECRETS_SIGNOFF_B64 is not valid base64")));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("release input materializer allows native-worker signoffs without production env", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "oa-release-inputs-native-"));
+  try {
+    const result = materializeReleaseInputs({
+      env: nativeReleaseInputEnvWithoutProductionEnv(),
+      rootDir: dir
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.backendMode, "native-worker");
+    assert.deepEqual(result.written.map((item) => item.path).sort(), [
+      "docs/file-storage-signoff.json",
+      "docs/hr-data-signoff.json",
+      "docs/production-secrets-signoff.json"
+    ]);
+    await assert.rejects(stat(join(dir, ".env.production")), { code: "ENOENT" });
+    assert.equal((await stat(join(dir, "docs/production-secrets-signoff.json"))).mode & 0o777, 0o600);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -245,9 +272,10 @@ test("release input materializer CLI writes private output without shell redirec
 });
 
 test("release input materializer parser supports json flag", () => {
-  assert.deepEqual(parseMaterializeReleaseInputsArgs(["--json", "--output", "release-inputs.json"]), {
+  assert.deepEqual(parseMaterializeReleaseInputsArgs(["--json", "--mode", "native-worker", "--output", "release-inputs.json"]), {
+    backendMode: "native-worker",
     json: true,
     outputPath: "release-inputs.json"
   });
-  assert.deepEqual(parseMaterializeReleaseInputsArgs([]), { json: false, outputPath: "" });
+  assert.deepEqual(parseMaterializeReleaseInputsArgs([]), { backendMode: "", json: false, outputPath: "" });
 });

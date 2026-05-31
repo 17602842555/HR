@@ -15,6 +15,7 @@ import {
 const validEnv = Object.freeze({
   CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
   CLOUDFLARE_API_TOKEN: "cf-workers-deploy-token-for-tests-20260530",
+  CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN: "17602842555",
   CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD: "AdminBootstrapPass123",
   CLOUDFLARE_DEPLOYMENT_URL: "https://deep-oa-hr.2445776963.workers.dev"
 });
@@ -44,10 +45,11 @@ test("cloudflare secret plan validates native Worker values and redacts secret m
 
   assert.equal(plan.ok, true);
   assert.equal(plan.repo, "17602842555/HR");
-  assert.equal(plan.secrets.length, 4);
+  assert.equal(plan.secrets.length, 5);
   assert.equal(plan.secrets.every((secret) => secret.configured), true);
   assert.equal(plan.deployment.mode, "cloudflare-native-worker");
   assert.equal(plan.deployment.adminBootstrapConfigured, true);
+  assert.equal(plan.deployment.adminBootstrapLoginConfigured, true);
   assert.equal(plan.deployment.urlConfigured, true);
 
   const serialized = JSON.stringify(plan);
@@ -73,12 +75,25 @@ test("cloudflare secret plan accepts runtime overrides without leaking values", 
   assert.equal(JSON.stringify(plan).includes("cf-runtime-token"), false);
 });
 
+test("cloudflare secret plan keeps bootstrap phone login optional", () => {
+  const { CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN: _login, ...withoutLogin } = validEnv;
+  const plan = buildCloudflareSecretPlan({
+    fileEnv: withoutLogin,
+    repo: "17602842555/HR"
+  });
+
+  assert.equal(plan.ok, true);
+  assert.equal(plan.deployment.adminBootstrapLoginConfigured, false);
+  assert.equal(plan.secrets.find((secret) => secret.name === "CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN").optional, true);
+});
+
 test("cloudflare secret plan rejects unsafe production configuration", () => {
   const plan = buildCloudflareSecretPlan({
     fileEnv: {
       ...validEnv,
       CLOUDFLARE_ACCOUNT_ID: "bad-account",
       CLOUDFLARE_API_TOKEN: "todo",
+      CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN: "not-a-phone",
       CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD: "admin123456",
       CLOUDFLARE_DEPLOYMENT_URL: "http://example.com"
     },
@@ -90,6 +105,7 @@ test("cloudflare secret plan rejects unsafe production configuration", () => {
   assert.equal(plan.errors.some((error) => error.includes("CLOUDFLARE_DEPLOYMENT_URL")), true);
   assert.equal(plan.errors.some((error) => error.includes("CLOUDFLARE_ACCOUNT_ID")), true);
   assert.equal(plan.errors.some((error) => error.includes("CLOUDFLARE_API_TOKEN")), true);
+  assert.equal(plan.errors.some((error) => error.includes("CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN")), true);
   assert.equal(plan.errors.some((error) => error.includes("CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD")), true);
 });
 
@@ -120,7 +136,7 @@ test("cloudflare secret apply writes GitHub secrets through stdin", () => {
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.applied.length, 4);
+  assert.equal(result.applied.length, 5);
   assert.equal(calls.every((call) => call.command === "gh"), true);
   assert.equal(calls.every((call) => call.args[0] === "secret" && call.args[1] === "set"), true);
   assert.equal(calls.every((call) => call.args.includes("--repo") && call.args.includes("17602842555/HR")), true);
