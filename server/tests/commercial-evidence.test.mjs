@@ -266,7 +266,12 @@ test("commercial evidence target profile accepts native Worker D1 as production 
           { name: "worker-health", level: "pass" },
           { name: "worker-d1", level: "pass" },
           { name: "worker-cors", level: "pass" }
-        ]
+        ],
+        options: { expectedSha: "release-sha" },
+        summary: {
+          browserSessionReady: true,
+          frontendShaReady: true
+        }
       }
     },
     { id: "secrets-signoff", exitCode: 0 },
@@ -325,7 +330,12 @@ test("commercial evidence native Worker release is not blocked by Fastify env do
           { name: "worker-health", level: "pass" },
           { name: "worker-d1", level: "pass" },
           { name: "worker-cors", level: "pass" }
-        ]
+        ],
+        options: { expectedSha: "release-sha" },
+        summary: {
+          browserSessionReady: true,
+          frontendShaReady: true
+        }
       }
     },
     { id: "secrets-signoff", required: false, exitCode: 0 },

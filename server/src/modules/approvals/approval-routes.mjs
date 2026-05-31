@@ -4,7 +4,8 @@ import {
   approvalRuleBindingError,
   approverResolutionSummary,
   approverUserIdForName,
-  enrichRuleNodesFromPrisma
+  enrichRuleNodesFromPrisma,
+  loadApproverUserMap
 } from "../workflow/approver-resolution.mjs";
 
 const templateMeta = {
@@ -635,15 +636,10 @@ function normalizeApproverNames(value) {
   return [...new Set(source.map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
-function principalCanActAs(principal, approverName) {
-  const normalizedApproverName = String(approverName || "").trim();
-  if (!normalizedApproverName) return false;
+function principalCanActAs(principal, approver) {
+  if (!principal || !approver?.userId) return false;
   if (principalIsAdmin(principal)) return true;
-  return [
-    principal?.name,
-    principal?.employeeName,
-    principal?.email
-  ].filter(Boolean).some((candidate) => String(candidate).trim() === normalizedApproverName);
+  return approver.userId === principal.userId;
 }
 
 function principalIsAdmin(principal) {
@@ -667,7 +663,14 @@ function pickPendingApprover(pending, sourceApproverName, principal) {
   if (principalIsAdmin(principal)) {
     return pending[0];
   }
-  return pending.find((item) => principalCanActAs(principal, item.approverName));
+  return pending.find((item) => principalCanActAs(principal, item));
+}
+
+async function resolveActiveApproverUser(prisma, tenantId, approverName) {
+  const name = String(approverName || "").trim();
+  if (!name) return null;
+  const approverUserMap = await loadApproverUserMap(prisma, tenantId, [name]);
+  return approverUserMap.get(name) || null;
 }
 
 function isWorkflowIdempotencyUniqueError(error) {
@@ -1143,14 +1146,32 @@ export async function registerApprovalRoutes(app) {
         });
         return { approverNotAssigned: true };
       }
-      if (!principalCanActAs(principal, requestedApproverName)) {
+      if (!approver.userId) {
+        await appendWorkflowAudit(tx, request, {
+          action: "workflow.identity.unbound",
+          objectType: "workflow",
+          objectId: instance.id,
+          summary: "审批身份未绑定真实账号，不能处理",
+          metadata: {
+            approverName: approver.approverName,
+            approverRecordId: approver.id,
+            nodeName: currentNode.name,
+            principalUserId: principal?.userId,
+            result: "失败"
+          }
+        });
+        return { approverUnbound: true };
+      }
+      if (!principalCanActAs(principal, approver)) {
         await appendWorkflowAudit(tx, request, {
           action: "workflow.identity.denied",
           objectType: "workflow",
           objectId: instance.id,
           summary: "审批身份校验失败，不能代替该审批人处理",
           metadata: {
+            approverRecordId: approver.id,
             requestedApproverName,
+            approverUserId: approver.userId,
             nodeName: currentNode.name,
             principalUserId: principal?.userId,
             principalName: principal?.name,
@@ -1185,7 +1206,7 @@ export async function registerApprovalRoutes(app) {
           objectType: "workflow",
           objectId: instance.id,
           summary: "驳回审批",
-          metadata: { approverName: approver.approverName, nodeName: currentNode.name }
+          metadata: { approverName: approver.approverName, approverRecordId: approver.id, approverUserId: approver.userId, nodeName: currentNode.name, principalUserId: principal?.userId }
         });
         return rejected;
       }
@@ -1207,7 +1228,7 @@ export async function registerApprovalRoutes(app) {
           objectType: "workflow",
           objectId: instance.id,
           summary: "审批节点部分同意",
-          metadata: { approverName: approver.approverName, nodeName: currentNode.name, remaining: remaining.length }
+          metadata: { approverName: approver.approverName, approverRecordId: approver.id, approverUserId: approver.userId, nodeName: currentNode.name, principalUserId: principal?.userId, remaining: remaining.length }
         });
         return instance;
       }
@@ -1239,7 +1260,7 @@ export async function registerApprovalRoutes(app) {
         objectType: "workflow",
         objectId: instance.id,
         summary: "审批节点全部同意",
-        metadata: { approverName: approver.approverName, nodeName: currentNode.name, nextNodeName: nextNode?.name || "归档与通知" }
+        metadata: { approverName: approver.approverName, approverRecordId: approver.id, approverUserId: approver.userId, nodeName: currentNode.name, nextNodeName: nextNode?.name || "归档与通知", principalUserId: principal?.userId }
       });
       return updated;
     }).catch((error) => {
@@ -1251,6 +1272,9 @@ export async function registerApprovalRoutes(app) {
     if (!result) return reply.code(404).send({ error: "approval_not_found_or_not_pending" });
     if (result.approverNotAssigned) {
       return reply.code(403).send({ error: "approver_not_assigned", message: "该审批人不在当前节点待处理人内。" });
+    }
+    if (result.approverUnbound) {
+      return reply.code(403).send({ error: "approver_identity_unbound", message: "该审批任务未绑定真实账号，不能处理。" });
     }
     if (result.approverIdentityDenied) {
       return reply.code(403).send({ error: "approver_identity_denied", message: "当前登录用户不能代替该审批人处理。" });
@@ -1297,7 +1321,24 @@ export async function registerApprovalRoutes(app) {
         });
         return { sourceNotPending: true };
       }
-      if (!principalCanActAs(principal, approver.approverName)) {
+      if (!approver.userId) {
+        await appendWorkflowAudit(tx, request, {
+          action: "workflow.transfer.identity_unbound",
+          objectType: "workflow",
+          objectId: instance.id,
+          summary: "转交审批失败，原审批人未绑定真实账号",
+          metadata: {
+            requestedSourceApproverName: approver.approverName,
+            approverRecordId: approver.id,
+            targetApproverName,
+            nodeName: currentNode.name,
+            principalUserId: principal?.userId,
+            result: "失败"
+          }
+        });
+        return { sourceUnbound: true };
+      }
+      if (!principalCanActAs(principal, approver)) {
         await appendWorkflowAudit(tx, request, {
           action: "workflow.transfer.identity_denied",
           objectType: "workflow",
@@ -1305,6 +1346,8 @@ export async function registerApprovalRoutes(app) {
           summary: "转交审批失败，不能代替该审批人转交",
           metadata: {
             requestedSourceApproverName: approver.approverName,
+            approverRecordId: approver.id,
+            approverUserId: approver.userId,
             targetApproverName,
             nodeName: currentNode.name,
             principalUserId: principal?.userId,
@@ -1316,6 +1359,23 @@ export async function registerApprovalRoutes(app) {
       }
       if (pending.some((item) => item.approverName === targetApproverName)) {
         return { duplicateTarget: true };
+      }
+      const targetApproverUser = await resolveActiveApproverUser(tx, request.user.tenantId, targetApproverName);
+      if (!targetApproverUser) {
+        await appendWorkflowAudit(tx, request, {
+          action: "workflow.transfer.target_unbound",
+          objectType: "workflow",
+          objectId: instance.id,
+          summary: "转交审批失败，目标审批人未绑定真实账号",
+          metadata: {
+            sourceApproverName: approver.approverName,
+            targetApproverName,
+            nodeName: currentNode.name,
+            principalUserId: principal?.userId,
+            result: "失败"
+          }
+        });
+        return { targetUnbound: true };
       }
       await tx.workflowApprover.update({
         where: { id: approver.id },
@@ -1331,6 +1391,7 @@ export async function registerApprovalRoutes(app) {
           tenantId: request.user.tenantId,
           nodeId: currentNode.id,
           approverName: targetApproverName,
+          userId: targetApproverUser.id,
           status: "PENDING"
         }
       });
@@ -1341,7 +1402,9 @@ export async function registerApprovalRoutes(app) {
         summary: "转交审批任务",
         metadata: {
           sourceApproverName: approver.approverName,
+          sourceApproverUserId: approver.userId,
           targetApproverName,
+          targetApproverUserId: targetApproverUser.id,
           nodeName: currentNode.name
         }
       });
@@ -1349,7 +1412,9 @@ export async function registerApprovalRoutes(app) {
     });
     if (!result) return reply.code(404).send({ error: "approval_not_found_or_not_pending" });
     if (result.sourceNotPending) return reply.code(403).send({ error: "source_approver_not_pending" });
+    if (result.sourceUnbound) return reply.code(403).send({ error: "source_approver_identity_unbound" });
     if (result.sourceIdentityDenied) return reply.code(403).send({ error: "source_approver_identity_denied" });
+    if (result.targetUnbound) return reply.code(400).send({ error: "target_approver_unbound", message: "转交目标未绑定真实账号。" });
     if (result.duplicateTarget) return reply.code(409).send({ error: "target_approver_already_pending" });
     return { ok: true };
   });

@@ -40,7 +40,14 @@ function passingEvidence(overrides = {}) {
       id: "no-domain-public",
       required: false,
       exitCode: 0,
-      parsedJson: { ok: true }
+      parsedJson: {
+        ok: true,
+        options: { expectedSha: "release-sha" },
+        summary: {
+          browserSessionReady: true,
+          frontendShaReady: true
+        }
+      }
     },
     { id: "secrets-signoff", required: false, exitCode: 0 },
     { id: "hr-signoff", required: false, exitCode: 0 },
@@ -159,6 +166,45 @@ test("commercial release gate accepts native Worker D1 release evidence without 
   assert.equal(result.summary.requiredChecks.includes("production-env"), false);
   assert.equal(result.summary.requiredChecks.includes("drill-evidence"), false);
   assert.equal(result.summary.requiredChecks.includes("doctor"), false);
+});
+
+test("commercial release gate requires native Worker no-domain browser session evidence", () => {
+  const base = passingEvidence();
+  const evidence = passingEvidence({
+    targetProfile: {
+      ...base.targetProfile,
+      backendMode: "native-worker",
+      apiBaseUrl: "https://deep-oa-hr.2445776963.workers.dev/api",
+      database: {
+        configured: true,
+        d1Configured: true,
+        isLocal: false,
+        source: "cloudflare-worker-d1",
+        target: "cloudflare-d1"
+      }
+    },
+    checks: base.checks.map((check) => (
+      check.id === "no-domain-public"
+        ? {
+          ...check,
+          parsedJson: {
+            ok: true,
+            options: { expectedSha: "release-sha" },
+            summary: { browserSessionReady: false, frontendShaReady: false }
+          }
+        }
+        : check
+    )),
+    summary: {
+      ok: true,
+      readiness: null
+    }
+  });
+  const result = releaseGate(evidence);
+
+  assert.equal(result.ok, false);
+  assert(result.failures.some((failure) => failure.includes("real browser login session")));
+  assert(result.failures.some((failure) => failure.includes("expected frontend release SHA")));
 });
 
 test("commercial release gate blocks quick or missing evidence mode", () => {

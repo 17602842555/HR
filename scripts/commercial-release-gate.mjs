@@ -210,6 +210,12 @@ export function evaluateReleaseGate(report, options = {}) {
     if (noDomainPublic.ok !== true) {
       failures.push("No-domain public smoke evidence must pass.");
     }
+    if (noDomainPublic.summary?.browserSessionReady !== true) {
+      failures.push("No-domain public smoke evidence must prove a real browser login session against the Worker.");
+    }
+    if (noDomainPublic.options?.expectedSha && noDomainPublic.summary?.frontendShaReady !== true) {
+      failures.push("No-domain public smoke evidence must prove GitHub Pages is serving the expected frontend release SHA.");
+    }
   } else if (!readiness) {
     failures.push("Doctor readiness summary is required for release.");
   } else {

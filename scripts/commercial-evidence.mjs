@@ -252,6 +252,15 @@ function noDomainPublicD1Ready(checks = []) {
     && namedCheckPassed(payload, "worker-cors");
 }
 
+function noDomainPublicReady(checks = []) {
+  const check = checkEntry(checks, "no-domain-public");
+  const payload = check?.parsedJson || {};
+  if (!noDomainPublicD1Ready(checks)) return false;
+  if (payload.summary?.browserSessionReady !== true) return false;
+  if (payload.options?.expectedSha && payload.summary?.frontendShaReady !== true) return false;
+  return true;
+}
+
 function isNativeWorkerEvidenceReady(checks = []) {
   return cloudflareDeploymentD1Ready(checks) || noDomainPublicD1Ready(checks);
 }
@@ -287,8 +296,13 @@ export function buildTargetProfile({
   const appEnv = String(targetEnv.APP_ENV || "").trim() || "";
   const nodeEnv = String(targetEnv.NODE_ENV || "").trim() || "";
   const isProductionRuntime = appEnv === "production" || nodeEnv === "production";
-  const productionEvidenceReady = productionEvidenceCheckIds(backendMode)
-    .every((id) => checkPassed(checks, id));
+  const productionEvidenceReady = backendMode === "native-worker"
+    ? (
+      cloudflareDeploymentD1Ready(checks)
+      && noDomainPublicReady(checks)
+      && ["secrets-signoff", "storage-signoff", "hr-signoff"].every((id) => checkPassed(checks, id))
+    )
+    : productionEvidenceCheckIds(backendMode).every((id) => checkPassed(checks, id));
   const evidenceClass = isProductionRuntime && productionEvidenceReady ? "production-release-evidence" : "local-or-ci-validation";
   const warnings = [];
 
@@ -316,7 +330,7 @@ export function buildTargetProfile({
       cloudflareDeployment: checkPassed(checks, "cloudflare-deployment"),
       drillEvidence: checkPassed(checks, "drill-evidence"),
       hr: checkPassed(checks, "hr-signoff"),
-      noDomainPublic: checkPassed(checks, "no-domain-public"),
+      noDomainPublic: noDomainPublicReady(checks),
       productionEnv: checkPassed(checks, "production-env"),
       secrets: checkPassed(checks, "secrets-signoff"),
       storage: checkPassed(checks, "storage-signoff")
@@ -506,11 +520,18 @@ export function summarizeEvidence(report) {
   openGaps.forEach((gap) => releaseBlockers.push(`Known commercial gap remains open: ${gap.id}.`));
 
   if (nativeWorkerRelease) {
+    const noDomainPublic = checkEntry(report.checks, "no-domain-public")?.parsedJson || {};
     if (!checkPassed(report.checks, "cloudflare-deployment")) {
       releaseBlockers.push("Cloudflare deployment status evidence is missing or failed.");
     }
     if (!checkPassed(report.checks, "no-domain-public")) {
       releaseBlockers.push("No-domain GitHub Pages to Worker public smoke evidence is missing or failed.");
+    }
+    if (noDomainPublic.summary?.browserSessionReady !== true) {
+      releaseBlockers.push("No-domain public smoke evidence must prove a real browser login session against the Worker.");
+    }
+    if (noDomainPublic.options?.expectedSha && noDomainPublic.summary?.frontendShaReady !== true) {
+      releaseBlockers.push("No-domain public smoke evidence must prove GitHub Pages is serving the expected frontend release SHA.");
     }
     if (targetProfile.database?.target !== "cloudflare-d1" || targetProfile.database?.d1Configured !== true) {
       releaseBlockers.push("Cloudflare D1 persistence evidence is not green.");

@@ -235,6 +235,24 @@ async function makePrismaMock(options = {}) {
     )).filter(Boolean);
     userRoleIds.set(record.id, new Set(roleIds.length ? roleIds : ["role-auditor"]));
   }
+  for (const approverUser of [
+    { id: "user-zhang", name: "张三", email: "zhangsan@oa.local" },
+    { id: "user-li", name: "李四", email: "lisi@oa.local" },
+    { id: "user-wang", name: "王五", email: "wangwu@oa.local" },
+    { id: "user-finance", name: "财务负责人", email: "finance-lead@oa.local" }
+  ]) {
+    const exists = [...users.values()].some((item) => item.id === approverUser.id || item.name === approverUser.name || item.email === approverUser.email);
+    if (exists) continue;
+    users.set(approverUser.id, {
+      ...approverUser,
+      tenantId,
+      status: "ACTIVE",
+      sessionVersion: 1,
+      passwordHash: await bcrypt.hash("extra-password", 4),
+      employee: null
+    });
+    userRoleIds.set(approverUser.id, new Set(["role-auditor"]));
+  }
   const auditLogs = [
     {
       id: "audit-failed-upload",
@@ -636,6 +654,7 @@ async function makePrismaMock(options = {}) {
       tenantId,
       nodeId: "node-manager",
       approverName: "张三",
+      userId: options.unboundApproverNames?.includes("张三") ? null : (options.workflowApproverUserIds?.["张三"] ?? [...users.values()].find((item) => item.name === "张三")?.id ?? null),
       status: "PENDING"
     }],
     ["approver-li", {
@@ -643,6 +662,7 @@ async function makePrismaMock(options = {}) {
       tenantId,
       nodeId: "node-manager",
       approverName: "李四",
+      userId: options.unboundApproverNames?.includes("李四") ? null : (options.workflowApproverUserIds?.["李四"] ?? [...users.values()].find((item) => item.name === "李四")?.id ?? null),
       status: "PENDING"
     }],
     ["approver-finance", {
@@ -650,6 +670,7 @@ async function makePrismaMock(options = {}) {
       tenantId,
       nodeId: "node-finance",
       approverName: "财务负责人",
+      userId: options.unboundApproverNames?.includes("财务负责人") ? null : (options.workflowApproverUserIds?.["财务负责人"] ?? [...users.values()].find((item) => item.name === "财务负责人")?.id ?? null),
       status: "PENDING"
     }]
   ]);
@@ -2300,7 +2321,8 @@ test("approved HR transfer workflow updates employee department and audits lifec
     logger: false,
     prisma: await makePrismaMock({
       permissionCodes: ["system.admin", "workflow.read", "workflow.write", "workflow.approve", "employee.read", "audit.read"],
-      departments: [{ id: "dept-finance", tenantId: "tenant-default", code: "FIN", name: "财务中心" }]
+      departments: [{ id: "dept-finance", tenantId: "tenant-default", code: "FIN", name: "财务中心" }],
+      extraUsers: [{ id: "user-hrbp", name: "HRBP", email: "hrbp@oa.local" }]
     }),
     config: { jwtSecret: "test-secret" }
   });
@@ -4265,7 +4287,6 @@ test("approval rule coverage reports department workflow matrix and approver bin
   const transferAdmin = coverage.rows.find((row) => row.department === "行政部" && row.templateId === "transfer");
   assert.equal(transferAdmin.source, "department_rule");
   assert.equal(transferAdmin.hasUnresolvedApprovers, true);
-  assert(transferAdmin.unresolvedApprovers.includes("王五"));
   assert(transferAdmin.unresolvedApprovers.includes("HRBP"));
 
   await app.close();
@@ -4767,6 +4788,125 @@ test("approval action denies non-admin approver impersonation but allows self ap
   const audit = await app.inject({ method: "GET", url: "/api/audit", headers });
   assert.equal(audit.json().auditLogs.some((item) => item.content.includes("审批身份校验失败")), true);
   assert.equal(audit.json().auditLogs.some((item) => item.content.includes("不能代替该审批人转交")), true);
+
+  await app.close();
+});
+
+test("approval action requires the pending approver user id to match the login account", async () => {
+  const app = await buildApp({
+    logger: false,
+    prisma: await makePrismaMock({
+      permissionCodes: ["workflow.read", "workflow.approve", "audit.read"],
+      roleCode: "approver",
+      roleName: "普通审批人",
+      userName: "张三",
+      workflowApproverUserIds: { "张三": "user-zhang" }
+    }),
+    config: { jwtSecret: "test-secret" }
+  });
+  const headers = await loginHeaders(app);
+
+  const denied = await app.inject({
+    method: "POST",
+    url: "/api/approvals/wf-pending/decision",
+    headers,
+    payload: {
+      approverName: "张三",
+      decision: "pass",
+      idempotencyKey: "name-match-userid-mismatch"
+    }
+  });
+
+  assert.equal(denied.statusCode, 403);
+  assert.equal(denied.json().error, "approver_identity_denied");
+
+  const audit = await app.inject({ method: "GET", url: "/api/audit", headers });
+  assert.equal(audit.json().auditLogs.some((item) => item.content.includes("审批身份校验失败")), true);
+
+  await app.close();
+});
+
+test("approval action rejects unbound pending approvers and transfer targets", async () => {
+  const app = await buildApp({
+    logger: false,
+    prisma: await makePrismaMock({
+      permissionCodes: ["workflow.read", "workflow.approve", "audit.read"],
+      roleCode: "approver",
+      roleName: "普通审批人",
+      userName: "张三",
+      unboundApproverNames: ["张三"]
+    }),
+    config: { jwtSecret: "test-secret" }
+  });
+  const headers = await loginHeaders(app);
+
+  const unboundDecision = await app.inject({
+    method: "POST",
+    url: "/api/approvals/wf-pending/decision",
+    headers,
+    payload: {
+      approverName: "张三",
+      decision: "pass",
+      idempotencyKey: "unbound-zhang"
+    }
+  });
+  assert.equal(unboundDecision.statusCode, 403);
+  assert.equal(unboundDecision.json().error, "approver_identity_unbound");
+
+  const transferTarget = await app.inject({
+    method: "POST",
+    url: "/api/approvals/wf-pending/transfer",
+    headers,
+    payload: {
+      sourceApproverName: "张三",
+      target: "不存在的审批人"
+    }
+  });
+  assert.equal(transferTarget.statusCode, 403);
+  assert.equal(transferTarget.json().error, "source_approver_identity_unbound");
+
+  await app.close();
+});
+
+test("approval transfer requires target approver to be a real active user", async () => {
+  const app = await buildApp({
+    logger: false,
+    prisma: await makePrismaMock({
+      permissionCodes: ["workflow.read", "workflow.approve", "audit.read"],
+      roleCode: "approver",
+      roleName: "普通审批人",
+      userName: "张三"
+    }),
+    config: { jwtSecret: "test-secret" }
+  });
+  const headers = await loginHeaders(app);
+
+  const missingTarget = await app.inject({
+    method: "POST",
+    url: "/api/approvals/wf-pending/transfer",
+    headers,
+    payload: {
+      sourceApproverName: "张三",
+      target: "不存在的审批人"
+    }
+  });
+  assert.equal(missingTarget.statusCode, 400);
+  assert.equal(missingTarget.json().error, "target_approver_unbound");
+
+  const transferred = await app.inject({
+    method: "POST",
+    url: "/api/approvals/wf-pending/transfer",
+    headers,
+    payload: {
+      sourceApproverName: "张三",
+      target: "王五"
+    }
+  });
+  assert.equal(transferred.statusCode, 200);
+
+  const workflow = await app.prisma.workflowInstance.findFirst({ where: { id: "wf-pending" } });
+  const wang = workflow.nodes[0].approvers.find((item) => item.approverName === "王五");
+  assert.equal(wang.userId, "user-wang");
 
   await app.close();
 });

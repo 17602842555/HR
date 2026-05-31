@@ -25,6 +25,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    env:
+      ADMIN_BOOTSTRAP_READY: ${{ secrets.CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -70,3 +72,25 @@ jobs:
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Install Playwright Chromium for public session smoke
+        if: ${{ env.ADMIN_BOOTSTRAP_READY == 'true' }}
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke GitHub Pages to Worker browser session
+        if: ${{ env.ADMIN_BOOTSTRAP_READY == 'true' }}
+        run: >
+          npm run smoke:no-domain-public -- --json
+          --expected-sha "$GITHUB_SHA"
+          --pages-url "${{ steps.deployment.outputs.page_url }}"
+          --worker-url "${{ steps.cloudflare.outputs.deployment_url }}"
+          --require-browser-login
+        env:
+          PUBLIC_SMOKE_LOGIN: ${{ secrets.CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN || 'admin@oa.local' }}
+          PUBLIC_SMOKE_PASSWORD: ${{ secrets.CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD }}
+
+      - name: Public session smoke credentials not configured
+        if: ${{ env.ADMIN_BOOTSTRAP_READY != 'true' }}
+        run: |
+          echo "GitHub Pages deployed, but browser session smoke was skipped."
+          echo "Configure CLOUDFLARE_BOOTSTRAP_ADMIN_PASSWORD and optionally CLOUDFLARE_BOOTSTRAP_ADMIN_LOGIN to make this deploy produce release-grade no-domain evidence."

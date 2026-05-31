@@ -26,6 +26,9 @@ const STATE_SCHEMA_VERSION = 1;
 const AUDIT_INTEGRITY_ALGORITHM = "sha256-v1";
 const MAX_FILE_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_IMPORT_HTML_BYTES = 10 * 1024 * 1024;
+const DEFAULT_AUTH_FAILED_LOGIN_LIMIT = 5;
+const DEFAULT_AUTH_FAILED_LOGIN_WINDOW_MS = 10 * 60 * 1000;
+const DEFAULT_AUTH_FAILED_LOGIN_MAX_KEYS = 10000;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
@@ -1246,7 +1249,7 @@ function makeApprovalRuleCoverage(approvalRules, state = null) {
   };
 }
 
-function approvalNodesFor(template, department, approvalRules, currentNodeIndex = 1) {
+function approvalNodesFor(template, department, approvalRules, currentNodeIndex = 1, state = {}) {
   const rule = approvalRules.find((item) => item.department === department && item.templateId === template.id)
     || makeApprovalRule(template, department);
   const ruleNodes = rule.nodes || [];
@@ -1259,28 +1262,32 @@ function approvalNodesFor(template, department, approvalRules, currentNodeIndex 
         name: node
       };
     }
-    const approvers = ruleNodes[index - 1]?.approvers || ["张三"];
+    const ruleNode = ruleNodes[index - 1] || {};
+    const approvers = ruleNode.approvers || ["张三"];
     return {
       decisions: approvers.map((approver, approverIndex) => ({
         approver,
+        email: ruleNode.approverUsers?.find((item) => item.name === approver)?.email || resolveApproverUser(state, approver)?.email || "",
         status: index < currentNodeIndex || (index === currentNodeIndex && approverIndex === 0 && template.id === "payment") ? "已同意" : "待审批",
-        time: index < currentNodeIndex ? "2026-05-20 11:00" : ""
+        time: index < currentNodeIndex ? "2026-05-20 11:00" : "",
+        userId: ruleNode.approverUsers?.find((item) => item.name === approver)?.userId || resolveApproverUser(state, approver)?.id || "",
+        userName: ruleNode.approverUsers?.find((item) => item.name === approver)?.userName || resolveApproverUser(state, approver)?.name || ""
       })),
       id: `${template.id}-${index}`,
-      mode: ruleNodes[index - 1]?.mode || "AND",
+      mode: ruleNode.mode || "AND",
       name: node
     };
   });
 }
 
-function makeInitialApprovals(people, approvalRules) {
+function makeInitialApprovals(people, approvalRules, state = {}) {
   const departments = (people.departmentStats || []).map((item) => item.label).filter(Boolean);
   return Array.from({ length: 18 }, (_, index) => {
     const template = flowTemplates[index % flowTemplates.length];
     const department = departments[index % Math.max(departments.length, 1)] || template.department || "行政部";
     const formData = formDefaults(template);
     const currentNodeIndex = index === 3 ? 2 : 1;
-    const approvalNodes = approvalNodesFor(template, department, approvalRules, currentNodeIndex);
+    const approvalNodes = approvalNodesFor(template, department, approvalRules, currentNodeIndex, state);
     return {
       ...template,
       applicant: template.owner,
@@ -1608,6 +1615,7 @@ function makeInitialState(storageMode = "memory") {
       { id: "ATT-2", employee: "李四", department: "人事行政部", workDate: "2026-05-29", checkIn: "2026-05-29 09:18", checkOut: "2026-05-29 18:10", status: "迟到", minutesLate: 18, source: "门禁同步", reason: "地铁延误" },
       { id: "ATT-3", employee: "王五", department: "财务部", workDate: "2026-05-29", checkIn: "", checkOut: "2026-05-29 18:02", status: "缺卡", minutesLate: 0, source: "手动补录", reason: "早卡缺失" }
     ],
+    authFailures: {},
     auditIntegrity: { ok: true, total: 0 },
     auditLogs: [
       { id: "AUD-1", time: "2026-05-29 09:45:12", operator: "张三", type: "更新", object: "员工档案", content: "更新了联系方式，敏感字段已脱敏", result: "成功", ip: "10.10.2.15" },
@@ -1663,13 +1671,13 @@ function makeInitialState(storageMode = "memory") {
       templateId: template.id
     }))
   };
-  state.approvals = makeInitialApprovals(people, approvalRules);
-  state.analytics = makeAnalytics(state);
   state.iam = {
     ...initialIam,
     ...buildAccountLibrary(people, initialIam)
   };
   state.approvalRules = state.approvalRules.map((rule) => enrichApprovalRule(state, rule));
+  state.approvals = makeInitialApprovals(people, state.approvalRules, state);
+  state.analytics = makeAnalytics(state);
   state.approvalRuleCoverage = makeApprovalRuleCoverage(state.approvalRules, state);
   return state;
 }
@@ -1941,6 +1949,141 @@ function requestMeta(request) {
   };
 }
 
+function nonNegativeIntegerConfig(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? Math.floor(numeric) : fallback;
+}
+
+function positiveIntegerConfig(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? Math.floor(numeric) : fallback;
+}
+
+function authFailureConfig(env = {}) {
+  return {
+    limit: nonNegativeIntegerConfig(env.AUTH_FAILED_LOGIN_LIMIT, DEFAULT_AUTH_FAILED_LOGIN_LIMIT),
+    maxKeys: nonNegativeIntegerConfig(env.AUTH_FAILED_LOGIN_MAX_KEYS, DEFAULT_AUTH_FAILED_LOGIN_MAX_KEYS),
+    windowMs: positiveIntegerConfig(env.AUTH_FAILED_LOGIN_WINDOW_MS, DEFAULT_AUTH_FAILED_LOGIN_WINDOW_MS)
+  };
+}
+
+function loginFailureIp(request) {
+  return request?.headers?.get("cf-connecting-ip")
+    || request?.headers?.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || "cloudflare-edge";
+}
+
+function loginFailureKey(request, loginIdentifier) {
+  return `${loginFailureIp(request)}|${normalizeLoginEmail(loginIdentifier) || "missing-login"}`.toLowerCase();
+}
+
+function retryAfterSeconds(entry, now = Date.now()) {
+  return Math.max(1, Math.ceil((Number(entry?.expiresAt || 0) - now) / 1000));
+}
+
+function authFailureStore(state) {
+  if (!state.authFailures || typeof state.authFailures !== "object" || Array.isArray(state.authFailures)) {
+    state.authFailures = {};
+  }
+  return state.authFailures;
+}
+
+function pruneAuthFailures(state, config, now = Date.now()) {
+  const store = authFailureStore(state);
+  Object.entries(store).forEach(([key, entry]) => {
+    if (!entry || Number(entry.expiresAt || 0) <= now) delete store[key];
+  });
+  if (!Number.isInteger(config.maxKeys) || config.maxKeys <= 0) return;
+  const entries = Object.entries(store);
+  if (entries.length < config.maxKeys) return;
+  entries
+    .sort((left, right) => Number(left[1]?.lastAt || left[1]?.firstAt || 0) - Number(right[1]?.lastAt || right[1]?.firstAt || 0))
+    .slice(0, entries.length - config.maxKeys + 1)
+    .forEach(([key]) => delete store[key]);
+}
+
+function loginLimitState(state, env, request, loginIdentifier, now = Date.now()) {
+  const config = authFailureConfig(env);
+  if (config.limit <= 0) return { blocked: false, key: loginFailureKey(request, loginIdentifier), remaining: Infinity };
+  pruneAuthFailures(state, config, now);
+  const key = loginFailureKey(request, loginIdentifier);
+  const entry = authFailureStore(state)[key];
+  if (!entry || Number(entry.expiresAt || 0) <= now) {
+    if (entry) delete authFailureStore(state)[key];
+    return { blocked: false, key, remaining: config.limit };
+  }
+  if (Number(entry.count || 0) >= config.limit) {
+    return {
+      blocked: true,
+      count: Number(entry.count || 0),
+      key,
+      retryAfterSeconds: retryAfterSeconds(entry, now)
+    };
+  }
+  return {
+    blocked: false,
+    count: Number(entry.count || 0),
+    key,
+    remaining: config.limit - Number(entry.count || 0)
+  };
+}
+
+function recordLoginFailure(state, env, request, loginIdentifier, now = Date.now()) {
+  const config = authFailureConfig(env);
+  const key = loginFailureKey(request, loginIdentifier);
+  if (config.limit <= 0) return { count: 0, key, retryAfterSeconds: 0 };
+  pruneAuthFailures(state, config, now);
+  const store = authFailureStore(state);
+  const current = store[key];
+  const entry = current && Number(current.expiresAt || 0) > now
+    ? current
+    : { count: 0, expiresAt: now + config.windowMs, firstAt: now };
+  entry.count = Number(entry.count || 0) + 1;
+  entry.lastAt = now;
+  store[key] = entry;
+  return {
+    count: entry.count,
+    key,
+    retryAfterSeconds: retryAfterSeconds(entry, now)
+  };
+}
+
+function clearLoginFailure(state, request, loginIdentifier) {
+  delete authFailureStore(state)[loginFailureKey(request, loginIdentifier)];
+}
+
+function maskLoginIdentifier(input) {
+  const value = normalizeLoginEmail(input);
+  if (/^1[3-9]\d{9}$/.test(value)) return `${value.slice(0, 3)}****${value.slice(-4)}`;
+  const [local, domain] = value.split("@");
+  if (!domain) return value ? `${value.slice(0, 2)}***` : "unknown";
+  const safeLocal = local.length <= 2 ? `${local.slice(0, 1)}***` : `${local.slice(0, 2)}***${local.slice(-1)}`;
+  return `${safeLocal}@${domain}`;
+}
+
+async function auditLoginFailure(env, state, request, {
+  action = "登录失败",
+  failureCount = 0,
+  loginIdentifier = "",
+  reason = "invalid_credentials",
+  retryAfter = 0
+}) {
+  const blocked = action === "登录限流";
+  const content = blocked
+    ? `登录失败次数过多，已临时限制：账号 ${maskLoginIdentifier(loginIdentifier)}，次数 ${failureCount}，${retryAfter} 秒后重试`
+    : `用户登录失败：账号 ${maskLoginIdentifier(loginIdentifier)}，原因 ${reason}，次数 ${failureCount}`;
+  await appendAudit(env, state, {
+    action,
+    actor: "系统",
+    content,
+    object: "认证",
+    objectId: "-",
+    request,
+    result: "失败",
+    type: "认证安全"
+  });
+}
+
 function normalizeExportBusinessReason(input = {}) {
   return String(
     input.businessReason
@@ -2156,9 +2299,8 @@ function applyApprovalDecision(approval, payload = {}) {
   const decisionValue = payload.decision === "reject" ? "reject" : "pass";
   const currentIndex = Number.isFinite(approval.currentNodeIndex) ? approval.currentNodeIndex : 0;
   const currentNode = approval.approvalNodes?.[currentIndex];
-  const approverName = payload.approverName || currentNode?.decisions?.find((item) => item.status === "待审批")?.approver || "张三";
-  const targetDecision = currentNode?.decisions?.find((item) => item.approver === approverName)
-    || currentNode?.decisions?.find((item) => item.status === "待审批");
+  const approverName = String(payload.approverName || "").trim();
+  const targetDecision = currentNode?.decisions?.find((item) => item.approver === approverName);
 
   if (!currentNode || !targetDecision) return approval;
   targetDecision.status = decisionValue === "reject" ? "已驳回" : "已同意";
@@ -2192,16 +2334,26 @@ function applyApprovalDecision(approval, payload = {}) {
   return approval;
 }
 
-function principalCanActAs(state, actor, approverName) {
-  if (!actor || !approverName) return false;
+function bindDecisionUser(state, decision) {
+  if (!decision) return null;
+  if (decision.userId) {
+    const user = (state.iam?.users || []).find((item) => item.id === decision.userId && item.status === "ACTIVE");
+    if (user) return user;
+  }
+  const user = resolveApproverUser(state, decision.approver);
+  if (!user) return null;
+  decision.userId = user.id;
+  decision.userName = user.name;
+  decision.email = user.email;
+  return user;
+}
+
+function principalCanActAsDecision(state, actor, decision) {
+  if (!actor || !decision) return false;
+  const decisionUser = bindDecisionUser(state, decision);
+  if (!decisionUser) return false;
   if (hasPermission(state, actor, "system.admin")) return true;
-  const normalizedApprover = String(approverName || "").trim().toLowerCase();
-  return [
-    actor.name,
-    actor.email,
-    actor.employee?.name,
-    actor.employee?.email
-  ].some((value) => String(value || "").trim().toLowerCase() === normalizedApprover);
+  return decisionUser.id === actor.id;
 }
 
 async function handleNativeApi(request, env) {
@@ -2261,16 +2413,50 @@ async function handleNativeApi(request, env) {
   if (pathname === "/auth/login" && method === "POST") {
     const body = await readJson(request);
     const email = requestLoginIdentifier(body);
+    const password = String(body.password || "");
+    if (!email || !password) {
+      return json({ code: "LOGIN_AND_PASSWORD_REQUIRED", error: "login_and_password_required", message: "登录账号和密码必填。", ok: false }, { status: 400 });
+    }
+    const limit = loginLimitState(state, env, request, email);
+    if (limit.blocked) {
+      await auditLoginFailure(env, state, request, {
+        action: "登录限流",
+        failureCount: limit.count,
+        loginIdentifier: email,
+        reason: "too_many_failed_attempts",
+        retryAfter: limit.retryAfterSeconds
+      });
+      await saveState(env, state);
+      return json({
+        code: "TOO_MANY_LOGIN_ATTEMPTS",
+        error: "too_many_login_attempts",
+        message: "登录失败次数过多，请稍后再试。",
+        ok: false,
+        retryAfterSeconds: limit.retryAfterSeconds
+      }, {
+        headers: { "Retry-After": String(limit.retryAfterSeconds) },
+        status: 429
+      });
+    }
     const user = state.iam.users.find((item) => normalizeLoginEmail(item.email) === email);
     const validPassword = user?.passwordHash
-      ? await verifyNativePassword(String(body.password || ""), user.passwordHash)
+      ? await verifyNativePassword(password, user.passwordHash)
       : false;
     if (!user || user.status !== "ACTIVE" || !validPassword) {
-      return json({ code: "INVALID_CREDENTIALS", message: "账号或密码错误。", ok: false }, { status: 401 });
-	    }
-	    user.lastLoginAt = nowIso();
-	    ensureSessionSecret(state);
-	    await appendAudit(env, state, { action: "登录", actor: user.name, content: "Cloudflare 原生后端登录", object: "认证", objectId: user.id });
+      const failure = recordLoginFailure(state, env, request, email);
+      await auditLoginFailure(env, state, request, {
+        failureCount: failure.count,
+        loginIdentifier: email,
+        reason: !user ? "unknown_user" : user.status !== "ACTIVE" ? "inactive_user" : "bad_password",
+        retryAfter: failure.retryAfterSeconds
+      });
+      await saveState(env, state);
+      return json({ code: "INVALID_CREDENTIALS", error: "invalid_credentials", message: "账号或密码错误。", ok: false }, { status: 401 });
+    }
+    clearLoginFailure(state, request, email);
+    user.lastLoginAt = nowIso();
+    ensureSessionSecret(state);
+    await appendAudit(env, state, { action: "登录", actor: user.name, content: "Cloudflare 原生后端登录", object: "认证", objectId: user.id });
     await saveState(env, state);
     return json({ ok: true, ...currentUser(state, user) }, {
       headers: { "set-cookie": await sessionCookie(request, state, user, 60 * 60 * 8) }
@@ -2755,7 +2941,7 @@ async function handleNativeApi(request, env) {
     const template = flowTemplates.find((item) => item.id === body.definitionId || item.id === body.template?.id) || flowTemplates[0];
     const department = body.department || template.department || "行政部";
     const formData = { ...formDefaults(template), ...(body.formData || {}) };
-    const approvalNodes = approvalNodesFor(template, department, state.approvalRules, 1);
+    const approvalNodes = approvalNodesFor(template, department, state.approvalRules, 1, state);
     const approval = {
       ...template,
       ...body,
@@ -2818,14 +3004,30 @@ async function handleNativeApi(request, env) {
     const approval = state.approvals.find((item) => item.id === decodeURIComponent(segments[1]));
     if (!approval) return notFound(pathname);
     const currentNode = approval.approvalNodes?.[approval.currentNodeIndex];
-    const requestedApprover = String(body.approverName || actorName || "").trim();
+    const requestedApprover = String(body.approverName || "").trim();
+    if (!requestedApprover) return badRequest("必须指定当前节点待审批人。");
     const targetDecision = currentNode?.decisions?.find((item) => item.approver === requestedApprover);
     if (!targetDecision || targetDecision.status !== "待审批") return badRequest("当前审批人不在待处理节点中。");
-    if (!principalCanActAs(state, actor, requestedApprover)) {
+    const targetUser = bindDecisionUser(state, targetDecision);
+    if (!targetUser) {
+      await appendAudit(env, state, {
+        action: "审批身份未绑定",
+        actor: actorName,
+        content: `${approval.title} 的审批人 ${requestedApprover} 未绑定真实账号`,
+        object: "OA审批",
+        objectId: approval.id,
+        request,
+        result: "失败",
+        type: "权限拒绝"
+      });
+      await saveState(env, state);
+      return json({ error: "approver_identity_unbound", message: "该审批任务未绑定真实账号，不能处理。" }, { status: 403 });
+    }
+    if (!principalCanActAsDecision(state, actor, targetDecision)) {
       await appendAudit(env, state, {
         action: "审批身份拒绝",
         actor: actorName,
-        content: `${approval.title} 请求代表 ${requestedApprover} 审批被拒绝`,
+        content: `${approval.title} 请求代表 ${requestedApprover} 审批被拒绝（审批账号 ${targetUser.id}）`,
         object: "OA审批",
         objectId: approval.id,
         request,
@@ -2836,7 +3038,7 @@ async function handleNativeApi(request, env) {
       return forbidden("workflow.approve");
     }
     applyApprovalDecision(approval, { ...body, approverName: requestedApprover });
-    await appendAudit(env, state, { action: body.decision === "reject" ? "驳回审批" : "同意审批", actor: actorName, content: `${approval.title}：${approval.status}（审批人 ${requestedApprover}）`, object: "OA审批", objectId: approval.id, request });
+    await appendAudit(env, state, { action: body.decision === "reject" ? "驳回审批" : "同意审批", actor: actorName, content: `${approval.title}：${approval.status}（审批人 ${requestedApprover}，账号 ${targetUser.id}）`, object: "OA审批", objectId: approval.id, request });
     await saveState(env, state);
     return ok({ approval });
   }
@@ -2845,14 +3047,30 @@ async function handleNativeApi(request, env) {
     const approval = state.approvals.find((item) => item.id === decodeURIComponent(segments[1]));
     if (!approval) return notFound(pathname);
     const currentNode = approval.approvalNodes?.[approval.currentNodeIndex];
-    const sourceApprover = String(body.sourceApproverName || actorName || "").trim();
+    const sourceApprover = String(body.sourceApproverName || "").trim();
+    if (!sourceApprover) return badRequest("必须指定当前节点待转交人。");
     const decision = currentNode?.decisions?.find((item) => item.approver === sourceApprover);
     if (!decision || decision.status !== "待审批") return badRequest("当前转交人不在待处理节点中。");
-    if (!principalCanActAs(state, actor, sourceApprover)) {
+    const sourceUser = bindDecisionUser(state, decision);
+    if (!sourceUser) {
+      await appendAudit(env, state, {
+        action: "转交身份未绑定",
+        actor: actorName,
+        content: `${approval.title} 的转交人 ${sourceApprover} 未绑定真实账号`,
+        object: "OA审批",
+        objectId: approval.id,
+        request,
+        result: "失败",
+        type: "权限拒绝"
+      });
+      await saveState(env, state);
+      return json({ error: "source_approver_identity_unbound", message: "原审批任务未绑定真实账号。" }, { status: 403 });
+    }
+    if (!principalCanActAsDecision(state, actor, decision)) {
       await appendAudit(env, state, {
         action: "转交身份拒绝",
         actor: actorName,
-        content: `${approval.title} 请求代表 ${sourceApprover} 转交被拒绝`,
+        content: `${approval.title} 请求代表 ${sourceApprover} 转交被拒绝（审批账号 ${sourceUser.id}）`,
         object: "OA审批",
         objectId: approval.id,
         request,
@@ -2862,9 +3080,31 @@ async function handleNativeApi(request, env) {
       await saveState(env, state);
       return forbidden("workflow.approve");
     }
-    if (decision) decision.approver = body.target || "财务负责人";
+    const targetApprover = String(body.targetApproverName || body.target || "").trim();
+    if (!targetApprover) return badRequest("必须指定转交后的审批人。");
+    const targetUser = resolveApproverUser(state, targetApprover);
+    if (!targetUser) {
+      await appendAudit(env, state, {
+        action: "转交目标未绑定",
+        actor: actorName,
+        content: `${approval.title} 转交目标 ${targetApprover} 未绑定真实账号`,
+        object: "OA审批",
+        objectId: approval.id,
+        request,
+        result: "失败",
+        type: "权限拒绝"
+      });
+      await saveState(env, state);
+      return json({ error: "target_approver_unbound", message: "转交目标未绑定真实账号。" }, { status: 400 });
+    }
+    if (decision) {
+      decision.approver = targetApprover;
+      decision.userId = targetUser.id;
+      decision.userName = targetUser.name;
+      decision.email = targetUser.email;
+    }
     approval.timeline = [...(approval.timeline || []), { id: nextId("TL"), time: localTime(), actor: actorName, action: `代表 ${sourceApprover} 转交审批`, node: currentNode?.name || approval.node }];
-    await appendAudit(env, state, { action: "转交审批", actor: actorName, content: `${approval.title} 转交给 ${body.target}`, object: "OA审批", objectId: approval.id, request });
+    await appendAudit(env, state, { action: "转交审批", actor: actorName, content: `${approval.title} 从 ${sourceApprover}(${sourceUser.id}) 转交给 ${targetApprover}(${targetUser.id})`, object: "OA审批", objectId: approval.id, request });
     await saveState(env, state);
     return ok({ approval });
   }

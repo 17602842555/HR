@@ -1028,6 +1028,199 @@ test("cloudflare worker approval decisions reject non-admin approver impersonati
   assert.equal(decisionPayload.error, "permission_denied");
 });
 
+test("cloudflare worker approval decisions and transfers require bound user identities", async () => {
+  const adminLogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const adminCookie = adminLogin.headers.get("set-cookie");
+  const suffix = Date.now();
+
+  const department = `审批安全部-${suffix}`;
+  const ruleResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/approvals/rules", {
+      body: JSON.stringify({
+        department,
+        enabled: true,
+        nodes: [{ id: `security-${suffix}`, name: "实名会签", mode: "AND", approvers: ["张三", "李四"] }],
+        templateId: "expense",
+        templateName: "费用报销"
+      }),
+      headers: { "content-type": "application/json", cookie: adminCookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  assert.equal(ruleResponse.status, 200);
+
+  const approvalResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/approvals", {
+      body: JSON.stringify({
+        definitionId: "expense",
+        department,
+        formData: { amount: 88, reason: "实名审批测试" },
+        title: `实名审批测试-${suffix}`
+      }),
+      headers: { "content-type": "application/json", cookie: adminCookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const approval = (await responseJson(approvalResponse)).approval;
+  const zhangDecision = approval.approvalNodes[1].decisions.find((item) => item.approver === "张三");
+  assert.ok(zhangDecision.userId);
+
+  const duplicateUserResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/iam/users", {
+      body: JSON.stringify({
+        email: `duplicate-zhang-${suffix}@oa.local`,
+        mustChangePassword: false,
+        name: "张三",
+        newPassword: "DuplicatePass123",
+        roleCodes: ["department-manager"]
+      }),
+      headers: { "content-type": "application/json", cookie: adminCookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const duplicateUser = (await responseJson(duplicateUserResponse)).user;
+  assert.equal(duplicateUserResponse.status, 200);
+  assert.notEqual(zhangDecision.userId, duplicateUser.id);
+
+  const duplicateLogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: duplicateUser.email, password: "DuplicatePass123" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const duplicateCookie = duplicateLogin.headers.get("set-cookie");
+
+  const mismatchDecision = await worker.fetch(
+    new Request(`https://deep-oa-hr.example.workers.dev/api/approvals/${approval.id}/decision`, {
+      body: JSON.stringify({ approverName: "张三", decision: "pass" }),
+      headers: { "content-type": "application/json", cookie: duplicateCookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const mismatchPayload = await responseJson(mismatchDecision);
+  assert.equal(mismatchDecision.status, 403);
+  assert.equal(mismatchPayload.error, "permission_denied");
+
+  const missingTarget = await worker.fetch(
+    new Request(`https://deep-oa-hr.example.workers.dev/api/approvals/${approval.id}/transfer`, {
+      body: JSON.stringify({ sourceApproverName: "张三", target: "不存在的审批人" }),
+      headers: { "content-type": "application/json", cookie: adminCookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const missingTargetPayload = await responseJson(missingTarget);
+  assert.equal(missingTarget.status, 400);
+  assert.equal(missingTargetPayload.error, "target_approver_unbound");
+
+  const transferred = await worker.fetch(
+    new Request(`https://deep-oa-hr.example.workers.dev/api/approvals/${approval.id}/transfer`, {
+      body: JSON.stringify({ sourceApproverName: "张三", target: "李四" }),
+      headers: { "content-type": "application/json", cookie: adminCookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const transferredPayload = await responseJson(transferred);
+  assert.equal(transferred.status, 200);
+  const liDecision = transferredPayload.approval.approvalNodes[1].decisions.find((item) => item.approver === "李四");
+  assert.equal(liDecision.userId, "mock-hr");
+});
+
+test("cloudflare worker failed logins are audited, rate limited, and reset after success", async () => {
+  const env = {
+    ...TEST_ENV,
+    AUTH_FAILED_LOGIN_LIMIT: "2",
+    AUTH_FAILED_LOGIN_WINDOW_MS: "600000"
+  };
+  const headers = {
+    "cf-connecting-ip": "203.0.113.51",
+    "content-type": "application/json",
+    "user-agent": "cloudflare-worker-test"
+  };
+
+  const firstFailed = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: "WrongPasswordOne123" }),
+      headers,
+      method: "POST"
+    }),
+    env
+  );
+  const firstPayload = await responseJson(firstFailed);
+  assert.equal(firstFailed.status, 401);
+  assert.equal(firstPayload.error, "invalid_credentials");
+
+  const successful = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
+      headers,
+      method: "POST"
+    }),
+    env
+  );
+  const adminCookie = successful.headers.get("set-cookie");
+  assert.equal(successful.status, 200);
+
+  const secondFailed = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: "WrongPasswordTwo123" }),
+      headers,
+      method: "POST"
+    }),
+    env
+  );
+  assert.equal(secondFailed.status, 401);
+
+  const thirdFailed = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: "WrongPasswordThree123" }),
+      headers,
+      method: "POST"
+    }),
+    env
+  );
+  assert.equal(thirdFailed.status, 401);
+
+  const blocked = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
+      headers,
+      method: "POST"
+    }),
+    env
+  );
+  const blockedPayload = await responseJson(blocked);
+  assert.equal(blocked.status, 429);
+  assert.equal(blockedPayload.error, "too_many_login_attempts");
+  assert.ok(Number(blocked.headers.get("Retry-After")) > 0);
+
+  const auditResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/audit", {
+      headers: { cookie: adminCookie }
+    }),
+    env
+  );
+  const auditText = await auditResponse.text();
+  assert.equal(auditResponse.status, 200);
+  assert.equal(auditText.includes("用户登录失败"), true);
+  assert.equal(auditText.includes("登录失败次数过多"), true);
+  assert.equal(auditText.includes("WrongPassword"), false);
+});
+
 test("cloudflare worker bootstrap admin can use phone-number login", async () => {
   const phoneLogin = "17602842555";
   const response = await worker.fetch(
