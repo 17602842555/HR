@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 const STATE_KEY = "oa_state_v1";
 
@@ -19,10 +16,6 @@ function nowIso() {
 
 function localTime() {
   return nowIso().replace("T", " ").slice(0, 19);
-}
-
-function sqlString(value) {
-  return `'${String(value ?? "").replaceAll("'", "''")}'`;
 }
 
 function nativePasswordHash(password, salt = randomUUID()) {
@@ -64,19 +57,50 @@ function readRemoteState(databaseName) {
   return JSON.parse(value);
 }
 
-function writeRemoteState(databaseName, state, auditEvent) {
-  const dir = mkdtempSync(join(tmpdir(), "oa-d1-admin-"));
-  const file = join(dir, "update-state.sql");
-  const sql = [
-    `INSERT OR REPLACE INTO kv_store (key, value, updated_at) VALUES (${sqlString(STATE_KEY)}, ${sqlString(JSON.stringify(state))}, ${sqlString(nowIso())});`,
-    `INSERT INTO audit_events (id, action, actor, object_type, object_id, metadata, created_at) VALUES (${sqlString(auditEvent.id)}, ${sqlString(auditEvent.action)}, ${sqlString(auditEvent.actor)}, ${sqlString(auditEvent.object)}, ${sqlString(auditEvent.objectId)}, ${sqlString(JSON.stringify(auditEvent))}, ${sqlString(nowIso())});`
-  ].join("\n");
-  writeFileSync(file, sql);
-  try {
-    runWrangler(["d1", "execute", databaseName, "--remote", "--file", file], { stdio: "inherit" });
-  } finally {
-    rmSync(dir, { force: true, recursive: true });
+function wranglerD1List() {
+  const stdout = runWrangler(["d1", "list", "--json"]);
+  return JSON.parse(String(stdout || "[]").trim());
+}
+
+function resolveDatabaseId(databaseName) {
+  const direct = process.env.CLOUDFLARE_D1_DATABASE_ID || argValue("--database-id", "");
+  if (direct) return direct;
+  const databases = wranglerD1List();
+  const database = databases.find((item) => item.name === databaseName || item.uuid === databaseName || item.id === databaseName);
+  if (!database) throw new Error(`Could not resolve D1 database id for ${databaseName}.`);
+  return database.uuid || database.id;
+}
+
+async function d1Query(databaseId, sql, params = []) {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  if (!accountId || !token) throw new Error("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required.");
+  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`, {
+    body: JSON.stringify({ params, sql }),
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json"
+    },
+    method: "POST"
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.success || payload?.result?.some((item) => item.success === false)) {
+    throw new Error(JSON.stringify(payload || { status: response.status }));
   }
+  return payload.result;
+}
+
+async function writeRemoteState(databaseId, state, auditEvent) {
+  await d1Query(
+    databaseId,
+    "INSERT OR REPLACE INTO kv_store (key, value, updated_at) VALUES (?, ?, ?)",
+    [STATE_KEY, JSON.stringify(state), nowIso()]
+  );
+  await d1Query(
+    databaseId,
+    "INSERT INTO audit_events (id, action, actor, object_type, object_id, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [auditEvent.id, auditEvent.action, auditEvent.actor, auditEvent.object, auditEvent.objectId, JSON.stringify(auditEvent), nowIso()]
+  );
 }
 
 function ensureAdminAccount(state, {
@@ -111,6 +135,7 @@ function ensureAdminAccount(state, {
 }
 
 const databaseName = argValue("--database", process.env.D1_DATABASE_NAME || "deep-oa-hr");
+const databaseId = resolveDatabaseId(databaseName);
 const login = argValue("--login", process.env.ADMIN_LOGIN || "");
 const mustChangePassword = argValue("--must-change-password", process.env.ADMIN_MUST_CHANGE_PASSWORD || "true") !== "false";
 const name = argValue("--name", process.env.ADMIN_NAME || "管理员");
@@ -138,7 +163,7 @@ const auditEvent = {
   userAgent: "github-actions"
 };
 state.auditLogs = [auditEvent, ...(state.auditLogs || [])].slice(0, 500);
-writeRemoteState(databaseName, state, auditEvent);
+await writeRemoteState(databaseId, state, auditEvent);
 
 console.log(JSON.stringify({
   account: account.email,
