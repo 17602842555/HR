@@ -788,12 +788,45 @@ async function main() {
     "Runtime approval rule did not bind every approver to an account",
     runtimeApprovalRule
   );
+  const hrRuntimeDepartment = `商业冒烟人事流程部门-${Date.now()}`;
+  const hrRuntimeTemplates = [
+    ["transfer", "调岗申请"],
+    ["onboarding", "入职办理"],
+    ["regularization", "转正申请"],
+    ["salary", "调薪申请"],
+    ["exception", "状态异常"],
+    ["offboarding", "离职交接"]
+  ];
+  const hrRuntimeRules = [];
+  for (const [templateId, templateName] of hrRuntimeTemplates) {
+    const rule = await request("/api/approvals/rules", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: {
+        department: hrRuntimeDepartment,
+        templateId,
+        templateName,
+        nodes: [
+          { id: "hr-manager", name: "人事负责人会签", approvers: ["商业主管A", "商业主管B"] },
+          { id: "hr-admin", name: "人事行政复核", approvers: ["财务负责人", "出纳"] }
+        ]
+      }
+    });
+    assert(
+      rule.nodes?.every((node) => node.approverUsers?.every((user) => user.userId)),
+      "HR runtime approval rule did not bind every approver to an account",
+      { templateId, rule }
+    );
+    hrRuntimeRules.push(rule);
+  }
+  const hrRuleByTemplate = Object.fromEntries(hrRuntimeRules.map((rule) => [rule.templateId, rule]));
   evidence.approvalRules = {
     total: rules.approvalRules.length,
     boundApproverAccounts: smokeApproverUsers.length,
     coverageCells: ruleCoverage.approvalRuleCoverage?.summary?.totalCells || 0,
     crud: "create-preview-disable-delete-ok",
-    runtimeRuleId: runtimeApprovalRule.id
+    runtimeRuleId: runtimeApprovalRule.id,
+    hrRuntimeRuleIds: hrRuntimeRules.map((rule) => rule.id)
   };
 
   const definitions = await request("/api/approvals/definitions", { headers: authHeaders(token) });
@@ -801,7 +834,6 @@ async function main() {
   for (const code of requiredLifecycleCodes) {
     assert(definitions.workflowDefinitions?.some((item) => item.code === code), `HR lifecycle definition missing: ${code}`, definitions);
   }
-  const transferRule = rules.approvalRules.find((item) => item.templateId === "transfer") || rules.approvalRules[0];
   const transferWorkflow = await request("/api/approvals", {
     method: "POST",
     headers: authHeaders(token),
@@ -809,7 +841,7 @@ async function main() {
       definitionId: "transfer",
       title: `商业冒烟调岗申请 ${Date.now()}`,
       applicant: "张三",
-      department: transferRule.department,
+      department: hrRuleByTemplate.transfer.department,
       formData: {
         employee: "周八",
         fromDepartment: "直播事业部",
@@ -827,7 +859,7 @@ async function main() {
     body: {
       definitionId: "onboarding",
       title: `${onboardingEmployeeName} 入职办理`,
-      department: "人力资源部",
+      department: hrRuleByTemplate.onboarding.department,
       formData: {
         employee: onboardingEmployeeName,
         position: "商业冒烟专员",
@@ -852,7 +884,7 @@ async function main() {
     body: {
       definitionId: "regularization",
       title: `${onboardingEmployeeName} 转正申请`,
-      department: "人力资源部",
+      department: hrRuleByTemplate.regularization.department,
       formData: {
         employee: onboardingEmployeeName,
         probationResult: "按期转正",
@@ -871,7 +903,7 @@ async function main() {
     body: {
       definitionId: "salary",
       title: `${onboardingEmployeeName} 调薪申请`,
-      department: "人力资源部",
+      department: hrRuleByTemplate.salary.department,
       formData: {
         employee: onboardingEmployeeName,
         adjustAmount: "8800",
@@ -894,7 +926,7 @@ async function main() {
     body: {
       definitionId: "exception",
       title: `${onboardingEmployeeName} 状态异常报备`,
-      department: "人力资源部",
+      department: hrRuleByTemplate.exception.department,
       formData: {
         employee: onboardingEmployeeName,
         exceptionType: "权限异常",
@@ -917,7 +949,7 @@ async function main() {
     body: {
       definitionId: "offboarding",
       title: `${onboardingEmployeeName} 离职交接`,
-      department: "人力资源部",
+      department: hrRuleByTemplate.offboarding.department,
       formData: {
         employee: onboardingEmployeeName,
         leaveDate: "2026-08-20",
