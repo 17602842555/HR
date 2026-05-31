@@ -106,7 +106,6 @@ export function Resources({ actions, currentUser, state }) {
   const submit = () => {
     if (!canBook) {
       setNotice(isFull ? "冲突：该资源当天容量已满，系统已阻止提交。" : "冲突：该资源同时段已有预约，系统已阻止提交。");
-      actions.reserveResource(form.resourceName, Number(form.dayIndex), form);
       return;
     }
     actions.reserveResource(form.resourceName, Number(form.dayIndex), form);

@@ -185,8 +185,27 @@ function generatedTemporaryPassword() {
   return `Tmp9-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+function generatedActivationCode() {
+  const raw = crypto.randomUUID().replaceAll("-", "").toUpperCase().slice(0, 12);
+  return `OA-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+}
+
 function normalizeLoginEmail(input) {
   return String(input || "").trim().toLowerCase();
+}
+
+function normalizeActivationCode(input) {
+  return String(input || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+async function activationCodeHash(input) {
+  const digest = await crypto.subtle.digest("SHA-256", textEncoder.encode(normalizeActivationCode(input)));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function validLoginIdentifier(input) {
+  const value = normalizeLoginEmail(input);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || /^1[3-9]\d{9}$/.test(value);
 }
 
 function validLoginEmail(input) {
@@ -530,6 +549,7 @@ const workerOpenApiPaths = [
   "/audit/export-records",
   "/audit/integrity",
   "/audit/sensitive-access",
+  "/auth/activate-account",
   "/auth/change-password",
   "/auth/complete-first-login",
   "/auth/login",
@@ -543,6 +563,7 @@ const workerOpenApiPaths = [
   "/finance/requests/export",
   "/health",
   "/iam",
+  "/iam/account-activations",
   "/iam/accounts/sync-employees",
   "/iam/roles/{id}/permissions",
   "/iam/users",
@@ -948,6 +969,34 @@ function buildAccountLibrary(people, iam) {
   };
 }
 
+function activationExpiry(days = 7) {
+  const boundedDays = Math.min(Math.max(Number(days) || 7, 1), 30);
+  const expiresAt = new Date();
+  expiresAt.setUTCDate(expiresAt.getUTCDate() + boundedDays);
+  return expiresAt.toISOString();
+}
+
+function serializeActivationForAdmin(state, activation, activationCode = "") {
+  const employee = (state.people?.employees || []).find((item) => item.id === activation.employeeId);
+  return {
+    activationCode,
+    createdAt: activation.createdAt,
+    employee: employee ? {
+      department: employee.department || "",
+      employeeId: employee.id,
+      employeeNo: employee.employeeNo || employee.seq || "-",
+      employeeName: employee.name,
+      roleTitle: employee.roleTitle || employee.role || ""
+    } : null,
+    employeeId: activation.employeeId,
+    expiresAt: activation.expiresAt,
+    id: activation.id,
+    roleCodes: activation.roleCodes || [],
+    status: activation.status,
+    usedAt: activation.usedAt || null
+  };
+}
+
 function makeAnalytics(state) {
   const pendingApprovals = state.approvals.filter((item) => item.status.includes("待") || item.status.includes("超时")).length;
   const activeAssets = state.assets.filter((item) => item.status.includes("用") || item.status.includes("借")).length;
@@ -1165,6 +1214,7 @@ function makeInitialState(storageMode = "memory") {
     approvalRuleCoverage: makeApprovalRuleCoverage(approvalRules),
     approvalRules,
     approvals: [],
+    accountActivations: [],
     assetEvents: clone(assetEventSeed),
     assets: clone(assetsSeed),
     attendanceRecords: [
@@ -1255,6 +1305,20 @@ async function ensureD1(env) {
       metadata TEXT NOT NULL,
       created_at TEXT NOT NULL
     )
+  `).run();
+  await env.OA_DB.prepare(`
+    CREATE TRIGGER IF NOT EXISTS audit_events_prevent_update
+    BEFORE UPDATE ON audit_events
+    BEGIN
+      SELECT RAISE(ABORT, 'audit_events are append-only');
+    END
+  `).run();
+  await env.OA_DB.prepare(`
+    CREATE TRIGGER IF NOT EXISTS audit_events_prevent_delete
+    BEFORE DELETE ON audit_events
+    BEGIN
+      SELECT RAISE(ABORT, 'audit_events are append-only');
+    END
   `).run();
   return true;
 }
@@ -1817,6 +1881,67 @@ async function handleNativeApi(request, env) {
     });
   }
 
+  if (pathname === "/auth/activate-account" && method === "POST") {
+    const body = await readJson(request);
+    const codeHash = await activationCodeHash(body.activationCode);
+    const email = normalizeLoginEmail(body.email);
+    const password = String(body.password || "");
+    const employeeNo = String(body.employeeNo || "").trim();
+    const name = String(body.name || "").trim();
+    if (!codeHash || !validLoginIdentifier(email) || !validNewPassword(password) || !employeeNo || !name) {
+      return badRequest("激活码、工号、姓名、新登录账号和新密码必填，登录账号需为邮箱或手机号，密码至少 12 位并包含字母和数字。");
+    }
+    const activation = (state.accountActivations || []).find((item) => item.tokenHash === codeHash && item.status === "PENDING");
+    if (!activation) {
+      return json({ code: "ACTIVATION_NOT_FOUND", error: "activation_not_found", message: "激活码不存在或已失效。", ok: false }, { status: 404 });
+    }
+    if (new Date(activation.expiresAt).getTime() < Date.now()) {
+      activation.status = "EXPIRED";
+      await appendAudit(env, state, { action: "激活码过期", actor: "系统", content: "员工账号激活码已过期", object: "账号激活", objectId: activation.id });
+      await saveState(env, state);
+      return json({ code: "ACTIVATION_EXPIRED", error: "activation_expired", message: "激活码已过期，请联系管理员重新生成。", ok: false }, { status: 410 });
+    }
+    const employee = (state.people.employees || []).find((item) => item.id === activation.employeeId);
+    if (!employee || !["ACTIVE", "在职"].includes(String(employee.status || "在职")) || String(employee.employeeNo || employee.seq || "-") !== employeeNo || employee.name !== name) {
+      return json({ code: "EMPLOYEE_IDENTITY_MISMATCH", error: "employee_identity_mismatch", message: "工号或姓名与激活码不匹配。", ok: false }, { status: 403 });
+    }
+    if (state.iam.users.some((item) => item.employee?.id === activation.employeeId || item.employeeId === activation.employeeId)) {
+      return json({ code: "EMPLOYEE_ACCOUNT_EXISTS", error: "employee_account_exists", message: "该员工已经有关联账号。", ok: false }, { status: 409 });
+    }
+    if (state.iam.users.some((item) => normalizeLoginEmail(item.email) === email)) {
+      return json({ code: "USER_EMAIL_EXISTS", error: "user_email_exists", message: "该登录账号已存在。", ok: false }, { status: 409 });
+    }
+    const user = {
+      email,
+      employee: {
+        department: employee.department || "",
+        employeeNo: employee.employeeNo || employee.seq || "-",
+        id: activation.employeeId,
+        name: employee.name,
+        roleTitle: employee.role || ""
+      },
+      employeeId: activation.employeeId,
+      id: nextId("USER"),
+      mustChangePassword: false,
+      name: employee.name,
+      passwordHash: await nativePasswordHash(password),
+      roleCodes: activation.roleCodes?.length ? activation.roleCodes : ["employee-self-service"],
+      sessionVersion: 0,
+      status: "ACTIVE"
+    };
+    activation.status = "USED";
+    activation.usedAt = nowIso();
+    activation.usedByUserId = user.id;
+    state.iam.users = [user, ...state.iam.users];
+    ensureSessionSecret(state);
+    await appendAudit(env, state, { action: "员工激活账号", actor: user.name, content: `员工 ${employee.name} 使用激活码开户注册`, object: "账号激活", objectId: activation.id, request });
+    await saveState(env, state);
+    return json({ ok: true, ...currentUser(state, user) }, {
+      status: 201,
+      headers: { "set-cookie": await sessionCookie(request, state, user, 60 * 60 * 8) }
+    });
+  }
+
   const actor = await authenticatedUser(state, request);
   if (!actor) {
     if (pathname === "/auth/me") return unauthorized();
@@ -1879,8 +2004,8 @@ async function handleNativeApi(request, env) {
     const body = await readJson(request);
     const email = normalizeLoginEmail(body.email);
     const name = String(body.name || "").trim();
-    if (!validLoginEmail(email) || !name || !body.currentPassword || !body.newPassword) {
-      return badRequest("登录账号、姓名、当前密码和新密码必填，登录账号需为邮箱格式。");
+    if (!validLoginIdentifier(email) || !name || !body.currentPassword || !body.newPassword) {
+      return badRequest("登录账号、姓名、当前密码和新密码必填，登录账号需为邮箱或手机号。");
     }
     if (!validNewPassword(body.newPassword)) {
       return badRequest("密码至少 12 位，并且必须同时包含字母和数字。");
@@ -1973,6 +2098,46 @@ async function handleNativeApi(request, env) {
   }
 
   if (pathname === "/iam" && method === "GET") return ok({ iam: state.iam });
+	  if (pathname === "/iam/account-activations" && method === "POST") {
+	    const body = await readJson(request);
+	    const employeeId = String(body.employeeId || "").trim();
+	    const employee = (state.people.employees || []).find((item) => item.id === employeeId);
+	    if (!employeeId || !employee) return notFound(pathname);
+	    if (!["ACTIVE", "在职"].includes(String(employee.status || "在职"))) return badRequest("只能给在职员工生成账号激活码。");
+	    if (state.iam.users.some((user) => user.employee?.id === employeeId || user.employeeId === employeeId)) {
+	      return json({ code: "EMPLOYEE_ACCOUNT_EXISTS", message: "该员工已经有关联账号。", ok: false }, { status: 409 });
+	    }
+	    const normalizedRoles = normalizeRequestedRoleCodes(state, body.roleCodes, ["employee-self-service"]);
+	    if (!normalizedRoles.roleCodes.length) return badRequest("激活账号至少需要一个角色。");
+	    if (normalizedRoles.invalid.length) return badRequest(`未知角色：${normalizedRoles.invalid.join(", ")}`);
+	    state.accountActivations = (state.accountActivations || []).map((activation) => (
+	      activation.employeeId === employeeId && activation.status === "PENDING"
+	        ? { ...activation, status: "REVOKED", revokedAt: nowIso() }
+	        : activation
+	    ));
+	    const activationCode = generatedActivationCode();
+	    const activation = {
+	      createdAt: nowIso(),
+	      createdByUserId: actor.id,
+	      employeeId,
+	      expiresAt: activationExpiry(body.expiresInDays),
+	      id: nextId("ACT"),
+	      roleCodes: normalizedRoles.roleCodes,
+	      status: "PENDING",
+	      tokenHash: await activationCodeHash(activationCode)
+	    };
+	    state.accountActivations = [activation, ...state.accountActivations];
+	    await appendAudit(env, state, {
+	      action: "生成账号激活码",
+	      actor: actorName,
+	      content: `生成员工 ${employee.name} 账号激活码`,
+	      object: "账号激活",
+	      objectId: activation.id,
+	      request
+	    });
+	    await saveState(env, state);
+	    return json({ ok: true, activation: serializeActivationForAdmin(state, activation, activationCode) }, { status: 201 });
+	  }
 	  if (pathname === "/iam/users" && method === "POST") {
 	    const body = await readJson(request);
 	    const temporaryPassword = body.newPassword || generatedTemporaryPassword();
@@ -1989,7 +2154,7 @@ async function handleNativeApi(request, env) {
 	      sessionVersion: 0,
 	      status: "ACTIVE"
 	    };
-    if (!validLoginEmail(user.email) || !user.name) return badRequest("账号邮箱和姓名必填。");
+    if (!validLoginIdentifier(user.email) || !user.name) return badRequest("登录账号和姓名必填，登录账号需为邮箱或手机号。");
     if (state.iam.users.some((item) => normalizeLoginEmail(item.email) === user.email)) {
       return json({ code: "USER_EMAIL_EXISTS", message: "该登录账号已存在。", ok: false }, { status: 409 });
     }

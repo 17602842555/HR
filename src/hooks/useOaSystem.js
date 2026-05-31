@@ -1054,7 +1054,7 @@ export function useOaSystem() {
       const status = ["ACTIVE", "DISABLED"].includes(String(payload.status || "ACTIVE").toUpperCase())
         ? String(payload.status || "ACTIVE").toUpperCase()
         : "ACTIVE";
-      if (!email || !name || !roleCodes.length) return { ok: false, error: new Error("账号姓名、邮箱和角色必填。") };
+      if (!email || !name || !roleCodes.length) return { ok: false, error: new Error("账号姓名、登录账号和角色必填。") };
       const newUser = {
         email,
         employee: null,

@@ -51,6 +51,7 @@ export function serializeUser(user) {
       departmentId: user.employee.departmentId,
       roleTitle: user.employee.roleTitle
     } : null,
+    roleCodes: roles.map((role) => role.code),
     roles: roles.map((role) => ({ code: role.code, name: role.name })),
     permissions: [...new Set(permissions)]
   };

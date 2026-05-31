@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { createHash } from "node:crypto";
 import { appendAuditLog, requestAuditMeta } from "../audit/audit-service.mjs";
 import { serializeUser, userWithAccessInclude } from "../iam/permissions.mjs";
 import { validateNewPassword } from "./password-policy.mjs";
@@ -96,8 +97,33 @@ function authenticatedUserWhere(request) {
   return { id: request.user.sub, tenantId: request.user.tenantId };
 }
 
-function normalizeEmail(input) {
+function normalizeLoginIdentifier(input) {
   return String(input || "").trim().toLowerCase();
+}
+
+function validLoginIdentifier(input) {
+  const value = normalizeLoginIdentifier(input);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || /^1[3-9]\d{9}$/.test(value);
+}
+
+function normalizeActivationCode(input) {
+  return String(input || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function activationCodeHash(input) {
+  return createHash("sha256").update(normalizeActivationCode(input)).digest("hex");
+}
+
+function activationRoleCodes(value) {
+  return Array.isArray(value)
+    ? [...new Set(value.map((item) => String(item || "").trim()).filter(Boolean))]
+    : ["employee-self-service"];
+}
+
+function employeeIdentityMatches(employee, body = {}) {
+  const employeeNo = String(body.employeeNo || "").trim();
+  const name = String(body.name || "").trim();
+  return employeeNo && name && employee.employeeNo === employeeNo && employee.name === name;
 }
 
 async function auditLoginFailure(app, request, {
@@ -134,12 +160,12 @@ export async function registerAuthRoutes(app) {
 
   app.post("/api/auth/login", async (request, reply) => {
     const body = request.body || {};
-    const email = String(body.email || "").trim().toLowerCase();
+    const email = normalizeLoginIdentifier(body.email);
     const password = String(body.password || "");
     const tenantCode = String(body.tenantCode || app.config.defaultTenantCode);
 
     if (!email || !password) {
-      return reply.code(400).send({ error: "email_and_password_required" });
+      return reply.code(400).send({ error: "login_and_password_required", message: "登录账号和密码必填。" });
     }
 
     const failureKey = loginFailureKey(request, tenantCode, email);
@@ -221,6 +247,134 @@ export async function registerAuthRoutes(app) {
     reply.setCookie(app.config.cookieName, token, authCookieOptions(app.config));
 
     return reply.send({ token, user: serializeUser(user) });
+  });
+
+  app.post("/api/auth/activate-account", async (request, reply) => {
+    const body = request.body || {};
+    const tenantCode = String(body.tenantCode || app.config.defaultTenantCode);
+    const activationCode = String(body.activationCode || "");
+    const email = normalizeLoginIdentifier(body.email);
+    const password = String(body.password || "");
+
+    if (!activationCode || !email || !password || !body.employeeNo || !body.name) {
+      return reply.code(400).send({
+        error: "activation_fields_required",
+        message: "激活码、工号、姓名、新登录账号和密码必填。"
+      });
+    }
+    if (!validLoginIdentifier(email)) {
+      return reply.code(400).send({ error: "invalid_login_identifier", message: "登录账号需要使用邮箱或手机号。" });
+    }
+    const validation = validateNewPassword(password);
+    if (!validation.ok) {
+      return reply.code(400).send({
+        error: "password_policy_failed",
+        message: validation.message,
+        details: { reasons: validation.reasons }
+      });
+    }
+
+    const tenant = await app.prisma.tenant.findUnique({ where: { code: tenantCode } });
+    if (!tenant) return reply.code(404).send({ error: "tenant_not_found", message: "租户不存在。" });
+
+    const activation = await app.prisma.accountActivation.findFirst({
+      where: {
+        tenantId: tenant.id,
+        tokenHash: activationCodeHash(activationCode)
+      },
+      include: {
+        employee: { include: { department: true, user: true } }
+      }
+    });
+    if (!activation || activation.status !== "PENDING") {
+      return reply.code(404).send({ error: "activation_not_found", message: "激活码不存在或已失效。" });
+    }
+    if (activation.expiresAt && new Date(activation.expiresAt).getTime() < Date.now()) {
+      return reply.code(410).send({ error: "activation_expired", message: "激活码已过期，请联系管理员重新生成。" });
+    }
+    if (!activation.employee || activation.employee.status !== "ACTIVE") {
+      return reply.code(400).send({ error: "employee_not_active", message: "该员工状态不能开户注册。" });
+    }
+    if (activation.employee.user) {
+      return reply.code(409).send({ error: "employee_account_exists", message: "该员工已经有关联账号。" });
+    }
+    if (!employeeIdentityMatches(activation.employee, body)) {
+      return reply.code(403).send({ error: "employee_identity_mismatch", message: "工号或姓名与激活码不匹配。" });
+    }
+
+    const existing = await app.prisma.user.findUnique({
+      where: { tenantId_email: { tenantId: tenant.id, email } }
+    });
+    if (existing) {
+      return reply.code(409).send({ error: "user_email_exists", message: "该登录账号已存在。" });
+    }
+
+    const roleCodes = activationRoleCodes(activation.roleCodes);
+    const roles = await app.prisma.role.findMany({
+      where: {
+        tenantId: tenant.id,
+        code: { in: roleCodes }
+      }
+    });
+    if (!roles.length) {
+      return reply.code(409).send({ error: "activation_roles_missing", message: "激活码关联角色不存在，请联系管理员重新生成。" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, passwordHashRounds);
+    let createdUser;
+    await app.prisma.$transaction(async (tx) => {
+      createdUser = await tx.user.create({
+        data: {
+          email,
+          employeeId: activation.employeeId,
+          mustChangePassword: false,
+          name: activation.employee.name,
+          passwordHash,
+          status: "ACTIVE",
+          tenantId: tenant.id
+        }
+      });
+      await tx.userRole.createMany({
+        data: roles.map((role) => ({
+          tenantId: tenant.id,
+          userId: createdUser.id,
+          roleId: role.id
+        })),
+        skipDuplicates: true
+      });
+      await tx.accountActivation.update({
+        where: { id: activation.id },
+        data: {
+          status: "USED",
+          usedAt: new Date(),
+          usedByUserId: createdUser.id
+        }
+      });
+      await appendAuditLog(tx, {
+        tenantId: tenant.id,
+        actorUserId: createdUser.id,
+        action: "auth.account_activation.complete",
+        objectType: "user",
+        objectId: createdUser.id,
+        summary: `员工 ${activation.employee.name} 使用激活码开户注册`,
+        metadata: {
+          activationId: activation.id,
+          employeeId: activation.employeeId,
+          employeeNo: activation.employee.employeeNo,
+          roleCodes: roleCodes.sort()
+        },
+        ...requestAuditMeta(request)
+      });
+    });
+
+    const user = await app.prisma.user.findFirst({
+      where: { id: createdUser.id, tenantId: tenant.id },
+      include: userWithAccessInclude
+    });
+    const token = app.jwt.sign(tokenPayload(user));
+    reply.setCookie(app.config.cookieName, token, authCookieOptions(app.config));
+
+    return reply.code(201).send({ token, user: serializeUser(user) });
   });
 
   app.get("/api/auth/me", { preHandler: app.authenticate }, async (request) => {
@@ -323,7 +477,7 @@ export async function registerAuthRoutes(app) {
   app.post("/api/auth/complete-first-login", { preHandler: app.authenticate }, async (request, reply) => {
     const currentPassword = String(request.body?.currentPassword || "");
     const newPassword = String(request.body?.newPassword || "");
-    const email = normalizeEmail(request.body?.email);
+    const email = normalizeLoginIdentifier(request.body?.email);
     const name = String(request.body?.name || "").trim();
 
     if (!currentPassword || !newPassword || !email || !name) {
@@ -332,8 +486,8 @@ export async function registerAuthRoutes(app) {
         message: "当前密码、新密码、登录账号和姓名必填。"
       });
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return reply.code(400).send({ error: "invalid_user_email", message: "登录账号需要使用有效邮箱格式。" });
+    if (!validLoginIdentifier(email)) {
+      return reply.code(400).send({ error: "invalid_login_identifier", message: "登录账号需要使用邮箱或手机号。" });
     }
 
     const validation = validateNewPassword(newPassword);

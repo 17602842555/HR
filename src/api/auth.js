@@ -25,6 +25,13 @@ export function completeFirstLogin(payload) {
   });
 }
 
+export function activateAccount(payload) {
+  return apiRequest("/auth/activate-account", {
+    body: payload,
+    method: "POST"
+  });
+}
+
 export function logout() {
   return apiRequest("/auth/logout", {
     method: "POST"

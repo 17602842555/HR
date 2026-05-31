@@ -16,3 +16,15 @@ CREATE TABLE IF NOT EXISTS audit_events (
 
 CREATE INDEX IF NOT EXISTS idx_audit_events_created_at ON audit_events (created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_events_object ON audit_events (object_type, object_id);
+
+CREATE TRIGGER IF NOT EXISTS audit_events_prevent_update
+BEFORE UPDATE ON audit_events
+BEGIN
+  SELECT RAISE(ABORT, 'audit_events are append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS audit_events_prevent_delete
+BEFORE DELETE ON audit_events
+BEGIN
+  SELECT RAISE(ABORT, 'audit_events are append-only');
+END;

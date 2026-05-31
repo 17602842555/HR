@@ -18,6 +18,13 @@ export function syncEmployeeAccounts(payload) {
   });
 }
 
+export function createAccountActivation(payload) {
+  return apiRequest("/iam/account-activations", {
+    body: payload,
+    method: "POST"
+  });
+}
+
 export function updateRolePermissions(roleId, permissionCodes) {
   return apiRequest(`/iam/roles/${encodeURIComponent(roleId)}/permissions`, {
     body: { permissionCodes },

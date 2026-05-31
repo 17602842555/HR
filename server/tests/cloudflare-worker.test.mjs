@@ -586,6 +586,99 @@ test("cloudflare worker forces generated employee accounts through first login s
   assert.equal(bookingPayload.booking.applicant, "员工自定义姓名");
 });
 
+test("cloudflare worker supports employee activation with phone-number login", async () => {
+  const adminLogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const adminCookie = adminLogin.headers.get("set-cookie");
+  const iamResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/iam", {
+      headers: { cookie: adminCookie }
+    }),
+    TEST_ENV
+  );
+  const iam = (await responseJson(iamResponse)).iam;
+  const missingAccount = iam.accounts.find((account) => !account.accountId);
+  assert.ok(missingAccount);
+
+  const issueResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/iam/account-activations", {
+      body: JSON.stringify({
+        employeeId: missingAccount.employeeId,
+        roleCodes: ["employee-self-service"]
+      }),
+      headers: { "content-type": "application/json", cookie: adminCookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const issuePayload = await responseJson(issueResponse);
+  assert.equal(issueResponse.status, 201);
+  assert.match(issuePayload.activation.activationCode, /^OA-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+
+  const phone = `176${String(Date.now()).slice(-8)}`;
+  const activateResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/activate-account", {
+      body: JSON.stringify({
+        activationCode: issuePayload.activation.activationCode,
+        email: phone,
+        employeeNo: missingAccount.employeeNo,
+        name: missingAccount.employeeName,
+        password: "PhoneLoginPass123"
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const activatePayload = await responseJson(activateResponse);
+  assert.equal(activateResponse.status, 201);
+  assert.equal(activatePayload.user.email, phone);
+  assert.equal(activatePayload.user.mustChangePassword, false);
+  assert.equal(activatePayload.user.permissions.includes("resource.book"), true);
+
+  const relogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: phone, password: "PhoneLoginPass123" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  assert.equal(relogin.status, 200);
+
+  const reuse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/activate-account", {
+      body: JSON.stringify({
+        activationCode: issuePayload.activation.activationCode,
+        email: `177${String(Date.now()).slice(-8)}`,
+        employeeNo: missingAccount.employeeNo,
+        name: missingAccount.employeeName,
+        password: "PhoneLoginPass123"
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  assert.equal(reuse.status, 404);
+
+  const auditResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/audit", {
+      headers: { cookie: adminCookie }
+    }),
+    TEST_ENV
+  );
+  const auditText = await auditResponse.text();
+  assert.equal(auditText.includes(issuePayload.activation.activationCode), false);
+  assert.equal(auditText.includes("PhoneLoginPass123"), false);
+});
+
 test("cloudflare worker native approval decisions require every current approver before next node", async () => {
   const loginResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {

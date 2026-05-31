@@ -258,6 +258,7 @@ export function Audit({ actions, state }) {
   });
   const [accountMessage, setAccountMessage] = useState("");
   const [syncCredentials, setSyncCredentials] = useState([]);
+  const [activationResults, setActivationResults] = useState([]);
   const [syncMessage, setSyncMessage] = useState("");
   const [syncRoleCodes, setSyncRoleCodes] = useState(["employee-self-service"]);
   const [passwordDraft, setPasswordDraft] = useState("");
@@ -368,6 +369,26 @@ export function Audit({ actions, state }) {
     setSyncMessage(`已生成 ${result?.createdCount || 0} 个账号，跳过 ${result?.skippedCount || 0} 个已有账号。`);
   };
 
+  const generateActivationCode = async (row) => {
+    setSyncMessage("");
+    if (!actions.createAccountActivation) {
+      setSyncMessage("当前运行模式不支持员工自助激活码。");
+      return;
+    }
+    const result = await actions.createAccountActivation({
+      employeeId: row.employeeId,
+      roleCodes: syncRoleCodes.length ? syncRoleCodes : ["employee-self-service"]
+    });
+    if (result?.ok === false) {
+      setSyncMessage(result.error?.message || "激活码生成失败。");
+      return;
+    }
+    if (result?.activation) {
+      setActivationResults((current) => [result.activation, ...current].slice(0, 20));
+      setSyncMessage(`已为 ${row.employeeName} 生成一次性激活码。`);
+    }
+  };
+
   const columns = [
     { key: "time", label: "操作时间" },
     { key: "operator", label: "操作人" },
@@ -426,7 +447,7 @@ export function Audit({ actions, state }) {
       label: "权限",
       render: (row) => row.accountId ? (
         <button type="button" onClick={() => setSelectedUserId(row.accountId)}>管理权限</button>
-      ) : <span className="soft-text">等待开户</span>
+      ) : <button type="button" onClick={() => generateActivationCode(row)}>生成激活码</button>
     }
   ];
   const credentialColumns = [
@@ -435,6 +456,13 @@ export function Audit({ actions, state }) {
     { key: "email", label: "登录账号" },
     { key: "temporaryPassword", label: "一次性临时密码" },
     { key: "roleCodes", label: "角色", render: (row) => (row.roleCodes || []).join("、") }
+  ];
+  const activationColumns = [
+    { key: "employeeNo", label: "工号", render: (row) => row.employee?.employeeNo || "-" },
+    { key: "employeeName", label: "员工", render: (row) => row.employee?.employeeName || "-" },
+    { key: "activationCode", label: "一次性激活码" },
+    { key: "expiresAt", label: "过期时间", render: (row) => readinessTime(row.expiresAt) },
+    { key: "roleCodes", label: "默认角色", render: (row) => (row.roleCodes || []).join("、") }
   ];
   const dependencyColumns = [
     { key: "name", label: "检查项" },
@@ -853,6 +881,15 @@ export function Audit({ actions, state }) {
             <DataTable columns={credentialColumns} rows={syncCredentials} rowKey={(row) => row.employeeId} />
           </div>
         ) : null}
+        {activationResults.length ? (
+          <div className="credential-result">
+            <div>
+              <strong>本次激活码</strong>
+              <span>员工在登录页选择“员工激活”，输入激活码、工号和姓名后自行设置账号密码；刷新后不会再次展示。</span>
+            </div>
+            <DataTable columns={activationColumns} rows={activationResults} rowKey={(row) => row.id} />
+          </div>
+        ) : null}
         <DataTable columns={accountColumns} empty="暂无员工账号数据" rows={accountRows} rowKey={(row) => row.employeeId} />
       </Panel>
       <Panel title="账号角色分配" actions={<span className="soft-text">账号角色变更会刷新后端权限判定</span>}>
@@ -865,10 +902,9 @@ export function Audit({ actions, state }) {
             />
           </label>
           <label>
-            <span>临时登录账号（邮箱）</span>
+            <span>临时登录账号（邮箱/手机号）</span>
             <input
               autoComplete="off"
-              type="email"
               value={accountDraft.email}
               onChange={(event) => setAccountDraft({ ...accountDraft, email: event.target.value })}
             />

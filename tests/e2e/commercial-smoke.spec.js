@@ -23,7 +23,7 @@ async function loginIfBackendRequired(page) {
   await expect(loginTitle).toBeVisible({ timeout: 10000 });
 
   await page.getByLabel("租户").fill(tenantCode);
-  await page.getByLabel("邮箱").fill(adminEmail);
+  await page.getByLabel(/登录账号/).fill(adminEmail);
   await page.getByLabel("密码").fill(adminPassword);
   await page.getByRole("button", { name: /登录系统/ }).click();
   await expect(page.getByRole("navigation", { name: "主导航" })).toBeVisible();
@@ -54,7 +54,7 @@ test("backend 401 shows commercial login form", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("商业版后台登录")).toBeVisible();
   await expect(page.getByLabel("租户")).toHaveValue("default");
-  await expect(page.getByLabel("邮箱")).toHaveValue(apiRequired ? "" : "admin@oa.local");
+  await expect(page.getByLabel(/登录账号/)).toHaveValue(apiRequired ? "" : "admin@oa.local");
   await expect(page.getByLabel("密码")).toHaveValue(apiRequired ? "" : "admin123456");
   await expect(page.getByRole("button", { name: /登录系统/ })).toBeVisible();
 });
@@ -406,7 +406,7 @@ test("audit screen records sensitive-field reveal and export actions", async ({ 
   await expect(page.getByRole("heading", { name: "账号角色分配" })).toBeVisible();
   const accountForm = page.locator(".account-create-form");
   await accountForm.getByLabel("姓名").fill("E2E新账号");
-  await accountForm.getByLabel("邮箱").fill("e2e.account@oa.local");
+  await accountForm.getByLabel(/临时登录账号/).fill("e2e.account@oa.local");
   await accountForm.getByLabel("临时密码").fill("E2EAccountPass123");
   await accountForm.getByRole("button", { name: "创建账号" }).click();
   await expect(page.getByText("创建账号 E2E新账号")).toBeVisible();

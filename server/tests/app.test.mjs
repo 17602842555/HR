@@ -271,6 +271,7 @@ async function makePrismaMock(options = {}) {
     }
   ];
   const exportRecords = [];
+  const accountActivations = new Map();
   const roleWithPermissions = (role) => ({
     ...role,
     permissions: [...(rolePermissions.get(role.id) || [])]
@@ -812,6 +813,61 @@ async function makePrismaMock(options = {}) {
           userRoleIds.set(entry.userId, current);
         }
         return { count: data?.length || 0 };
+      }
+    },
+    accountActivation: {
+      create: async ({ data, include } = {}) => {
+        const record = {
+          id: data.id || `activation-${accountActivations.size + 1}`,
+          createdAt: new Date("2026-05-29T10:00:00.000Z"),
+          updatedAt: new Date("2026-05-29T10:00:00.000Z"),
+          status: "PENDING",
+          usedAt: null,
+          usedByUserId: null,
+          ...data
+        };
+        accountActivations.set(record.id, record);
+        return include?.employee ? { ...record, employee: employeeWithIncludes(employees.get(record.employeeId)) } : record;
+      },
+      findFirst: async ({ where, include } = {}) => {
+        const found = [...accountActivations.values()].find((activation) => (
+          (!where?.id || activation.id === where.id)
+          && (!where?.tenantId || activation.tenantId === where.tenantId)
+          && (!where?.employeeId || activation.employeeId === where.employeeId)
+          && (!where?.status || activation.status === where.status)
+          && (!where?.tokenHash || activation.tokenHash === where.tokenHash)
+        ));
+        if (!found) return null;
+        return include?.employee ? { ...found, employee: employeeWithIncludes(employees.get(found.employeeId)) } : { ...found };
+      },
+      update: async ({ where, data } = {}) => {
+        const existing = accountActivations.get(where.id);
+        if (!existing) {
+          const error = new Error("activation not found");
+          error.code = "P2025";
+          throw error;
+        }
+        const updated = {
+          ...existing,
+          ...data,
+          updatedAt: new Date("2026-05-29T10:00:00.000Z")
+        };
+        accountActivations.set(updated.id, updated);
+        return { ...updated };
+      },
+      updateMany: async ({ where, data } = {}) => {
+        let count = 0;
+        for (const [id, activation] of accountActivations.entries()) {
+          if (
+            (!where?.tenantId || activation.tenantId === where.tenantId)
+            && (!where?.employeeId || activation.employeeId === where.employeeId)
+            && (!where?.status || activation.status === where.status)
+          ) {
+            accountActivations.set(id, { ...activation, ...data });
+            count += 1;
+          }
+        }
+        return { count };
       }
     },
     auditLog: {
@@ -1552,6 +1608,7 @@ test("openapi contract is public and covers commercial modules", async () => {
   [
     "/auth/login",
     "/auth/change-password",
+    "/auth/activate-account",
     "/people",
     "/people/employees/{id}",
     "/approvals",
@@ -1568,6 +1625,7 @@ test("openapi contract is public and covers commercial modules", async () => {
     "/imports/dashboard-html",
     "/iam",
     "/iam/users",
+    "/iam/account-activations",
     "/iam/users/{id}/password",
     "/iam/users/{id}/status",
     "/audit/export",
@@ -4807,6 +4865,109 @@ test("iam employee account library sync creates one account per active employee 
   assert.ok(syncLog);
   assert.equal(JSON.stringify(syncLog).includes(credential.temporaryPassword), false);
   assert.equal(audit.json().auditLogs.some((item) => item.content.includes("员工完成首次登录设置")), true);
+
+  await app.close();
+});
+
+test("employee account activation code lets only the matched employee create an account", async () => {
+  const prisma = await makePrismaMock({
+    employees: [
+      {
+        id: "emp-activation",
+        employeeNo: "EMP-88",
+        name: "激活员工",
+        email: "",
+        departmentId: "dept-admin",
+        roleTitle: "行政专员",
+        status: "ACTIVE"
+      }
+    ],
+    permissionCodes: ["system.admin", "iam.read", "iam.write", "audit.read"]
+  });
+  const app = await buildApp({
+    logger: false,
+    prisma,
+    config: { jwtSecret: "test-secret" }
+  });
+  const headers = await loginHeaders(app);
+
+  const issued = await app.inject({
+    method: "POST",
+    url: "/api/iam/account-activations",
+    headers,
+    payload: {
+      employeeId: "emp-activation",
+      roleCodes: ["employee-self-service"]
+    }
+  });
+  assert.equal(issued.statusCode, 201);
+  assert.match(issued.json().activation.activationCode, /^OA-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+  assert.equal(issued.json().activation.employee.employeeNo, "EMP-88");
+
+  const mismatch = await app.inject({
+    method: "POST",
+    url: "/api/auth/activate-account",
+    payload: {
+      activationCode: issued.json().activation.activationCode,
+      email: "wrong.person@oa.local",
+      employeeNo: "EMP-88",
+      name: "冒用人员",
+      password: "ActivationPass123",
+      tenantCode: "default"
+    }
+  });
+  assert.equal(mismatch.statusCode, 403);
+  assert.equal(mismatch.json().error, "employee_identity_mismatch");
+
+  const activated = await app.inject({
+    method: "POST",
+    url: "/api/auth/activate-account",
+    payload: {
+      activationCode: issued.json().activation.activationCode,
+      email: "17602842555",
+      employeeNo: "EMP-88",
+      name: "激活员工",
+      password: "ActivationPass123",
+      tenantCode: "default"
+    }
+  });
+  assert.equal(activated.statusCode, 201);
+  assert.equal(activated.json().user.email, "17602842555");
+  assert.equal(activated.json().user.mustChangePassword, false);
+  assert.deepEqual(activated.json().user.roleCodes, ["employee-self-service"]);
+  assert.match(activated.headers["set-cookie"], /oa_session=/);
+
+  const reuse = await app.inject({
+    method: "POST",
+    url: "/api/auth/activate-account",
+    payload: {
+      activationCode: issued.json().activation.activationCode,
+      email: "reuse@oa.local",
+      employeeNo: "EMP-88",
+      name: "激活员工",
+      password: "ActivationPass123",
+      tenantCode: "default"
+    }
+  });
+  assert.equal(reuse.statusCode, 404);
+  assert.equal(reuse.json().error, "activation_not_found");
+
+  const login = await app.inject({
+    method: "POST",
+    url: "/api/auth/login",
+    payload: {
+      email: "17602842555",
+      password: "ActivationPass123",
+      tenantCode: "default"
+    }
+  });
+  assert.equal(login.statusCode, 200);
+
+  const audit = await app.inject({ method: "GET", url: "/api/audit", headers });
+  assert.equal(audit.json().auditLogs.some((item) => item.content.includes("生成员工 激活员工 账号激活码")), true);
+  assert.equal(audit.json().auditLogs.some((item) => item.content.includes("使用激活码开户注册")), true);
+  assert.equal(JSON.stringify(audit.json()).includes(issued.json().activation.activationCode), false);
+  assert.equal(JSON.stringify(audit.json()).includes("ActivationPass123"), false);
 
   await app.close();
 });

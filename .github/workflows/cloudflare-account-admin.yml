@@ -1,0 +1,72 @@
+name: Cloudflare Account Admin
+
+on:
+  workflow_dispatch:
+    inputs:
+      login:
+        description: "Admin login identifier, email or phone"
+        required: true
+        type: string
+      name:
+        description: "Display name"
+        required: true
+        default: "管理员"
+        type: string
+      roles:
+        description: "Comma-separated role codes"
+        required: true
+        default: "admin"
+        type: string
+      database_name:
+        description: "D1 database name"
+        required: true
+        default: "deep-oa-hr"
+        type: string
+      must_change_password:
+        description: "Force first-login password change"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  ADMIN_PASSWORD: ${{ secrets.OA_ACCOUNT_ADMIN_PASSWORD }}
+
+jobs:
+  account-admin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Require password secret
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_PASSWORD"
+
+      - name: Create or update Cloudflare admin account
+        run: |
+          set -euo pipefail
+          node scripts/create-cloudflare-admin-account.mjs \
+            --database "${{ inputs.database_name }}" \
+            --login "${{ inputs.login }}" \
+            --name "${{ inputs.name }}" \
+            --roles "${{ inputs.roles }}" \
+            --must-change-password "${{ inputs.must_change_password }}"

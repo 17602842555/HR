@@ -148,6 +148,15 @@ export const openApiDocument = {
         responses: { "200": response("First login setup completed", { $ref: "#/components/schemas/AuthSession" }) }
       })
     },
+    "/auth/activate-account": {
+      post: operation({
+        operationId: "activateEmployeeAccount",
+        summary: "Employee self-service account activation using an administrator issued one-time code",
+        tags: ["Auth"],
+        body: { $ref: "#/components/schemas/AccountActivationCompleteRequest" },
+        responses: { "201": response("Activated account session", { $ref: "#/components/schemas/AuthSession" }) }
+      })
+    },
     "/people": {
       get: operation({
         operationId: "getPeopleOverview",
@@ -305,6 +314,15 @@ export const openApiDocument = {
         tags: ["IAM"],
         body: { $ref: "#/components/schemas/EmployeeAccountSyncRequest" },
         responses: { "201": response("Created employee accounts", { $ref: "#/components/schemas/EmployeeAccountSyncResponse" }) }
+      })
+    },
+    "/iam/account-activations": {
+      post: operation({
+        operationId: "createEmployeeAccountActivation",
+        summary: "Issue a one-time account activation code for an active employee without an account",
+        tags: ["IAM"],
+        body: { $ref: "#/components/schemas/AccountActivationCreateRequest" },
+        responses: { "201": response("Created activation code", { $ref: "#/components/schemas/AccountActivationCreateResponse" }) }
       })
     },
     "/iam/roles/{id}/permissions": {
@@ -674,7 +692,7 @@ export const openApiDocument = {
         required: ["email", "password"],
         properties: {
           tenantCode: { type: "string", default: "default" },
-          email: { type: "string", format: "email" },
+          email: { type: "string", description: "Login identifier: email address or mobile phone number." },
           password: { type: "string", minLength: 1 }
         }
       },
@@ -695,9 +713,21 @@ export const openApiDocument = {
         required: ["currentPassword", "email", "name", "newPassword"],
         properties: {
           currentPassword: { type: "string", minLength: 1 },
-          email: { type: "string", format: "email" },
+          email: { type: "string", description: "Login identifier: email address or mobile phone number." },
           name: { type: "string", minLength: 1 },
           newPassword: { type: "string", minLength: 12 }
+        }
+      },
+      AccountActivationCompleteRequest: {
+        type: "object",
+        required: ["activationCode", "employeeNo", "name", "email", "password"],
+        properties: {
+          activationCode: { type: "string", minLength: 12 },
+          employeeNo: { type: "string", minLength: 1 },
+          name: { type: "string", minLength: 1 },
+          email: { type: "string", description: "Login identifier: email address or mobile phone number." },
+          password: { type: "string", minLength: 12 },
+          tenantCode: { type: "string", default: "default" }
         }
       },
       PasswordResetRequest: {
@@ -711,7 +741,7 @@ export const openApiDocument = {
         type: "object",
         required: ["email", "name", "newPassword", "roleCodes"],
         properties: {
-          email: { type: "string", format: "email" },
+          email: { type: "string", description: "Login identifier: email address or mobile phone number." },
           name: { type: "string", minLength: 1 },
           newPassword: { type: "string", minLength: 12 },
           roleCodes: { type: "array", items: { type: "string" } },
@@ -747,10 +777,38 @@ export const openApiDocument = {
                 employeeId: { type: "string" },
                 employeeNo: { type: "string" },
                 name: { type: "string" },
-                email: { type: "string", format: "email" },
+                email: { type: "string", description: "Login identifier: email address or mobile phone number." },
                 temporaryPassword: { type: "string" },
                 roleCodes: { type: "array", items: { type: "string" } }
               }
+            }
+          }
+        }
+      },
+      AccountActivationCreateRequest: {
+        type: "object",
+        required: ["employeeId"],
+        properties: {
+          employeeId: { type: "string" },
+          roleCodes: {
+            type: "array",
+            items: { type: "string" },
+            default: ["employee-self-service"]
+          },
+          expiresInDays: { type: "integer", minimum: 1, maximum: 30, default: 7 }
+        }
+      },
+      AccountActivationCreateResponse: {
+        type: "object",
+        properties: {
+          activation: {
+            type: "object",
+            properties: {
+              activationCode: { type: "string", description: "One-time code shown once to the administrator and never written to audit logs." },
+              employeeId: { type: "string" },
+              expiresAt: { type: "string", format: "date-time" },
+              roleCodes: { type: "array", items: { type: "string" } },
+              status: { type: "string" }
             }
           }
         }

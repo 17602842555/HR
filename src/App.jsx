@@ -139,10 +139,20 @@ function AssetForm({ actions, onClose }) {
 
 function LoginScreen({ apiStatus, auth }) {
   const showDemoCredentials = import.meta.env.DEV && import.meta.env.VITE_REQUIRE_API !== "1";
+  const [mode, setMode] = useState("login");
   const [form, setForm] = useState({
     tenantCode: "default",
     email: showDemoCredentials ? "admin@oa.local" : "",
     password: showDemoCredentials ? "admin123456" : ""
+  });
+  const [activationForm, setActivationForm] = useState({
+    activationCode: "",
+    confirmPassword: "",
+    email: "",
+    employeeNo: "",
+    name: "",
+    password: "",
+    tenantCode: "default"
   });
   const [error, setError] = useState(apiStatus.error || "");
 
@@ -151,6 +161,24 @@ function LoginScreen({ apiStatus, auth }) {
     setError("");
     const result = await auth.login(form);
     if (!result.ok) setError(result.error?.message || "登录失败");
+  };
+
+  const activate = async (event) => {
+    event.preventDefault();
+    setError("");
+    if (activationForm.password !== activationForm.confirmPassword) {
+      setError("两次输入的新密码不一致。");
+      return;
+    }
+    const result = await auth.activateAccount({
+      activationCode: activationForm.activationCode,
+      email: activationForm.email,
+      employeeNo: activationForm.employeeNo,
+      name: activationForm.name,
+      password: activationForm.password,
+      tenantCode: activationForm.tenantCode
+    });
+    if (!result.ok) setError(result.error?.message || "账号激活失败。");
   };
 
   return (
@@ -163,21 +191,55 @@ function LoginScreen({ apiStatus, auth }) {
             <strong>商业版后台登录</strong>
           </div>
         </div>
-        <form className="login-form" onSubmit={submit}>
-          <label>租户
-            <input value={form.tenantCode} onChange={(event) => setForm({ ...form, tenantCode: event.target.value })} />
-          </label>
-          <label>登录账号（邮箱）
+        <div className="auth-tabs">
+          <button className={mode === "login" ? "active" : ""} type="button" onClick={() => { setMode("login"); setError(""); }}>账号登录</button>
+          <button className={mode === "activate" ? "active" : ""} type="button" onClick={() => { setMode("activate"); setError(""); }}>员工激活</button>
+        </div>
+        {mode === "login" ? (
+          <form className="login-form" onSubmit={submit}>
+            <label>租户
+              <input value={form.tenantCode} onChange={(event) => setForm({ ...form, tenantCode: event.target.value })} />
+            </label>
+          <label>登录账号（邮箱/手机号）
             <input value={form.email} autoComplete="username" onChange={(event) => setForm({ ...form, email: event.target.value })} />
           </label>
-          <label>密码
-            <input type="password" value={form.password} autoComplete="current-password" onChange={(event) => setForm({ ...form, password: event.target.value })} />
-          </label>
-          {error ? <p className="login-error">{error}</p> : <p className="login-hint">{showDemoCredentials ? "本地演示账号来自 seed，生产环境不会预填账号密码。" : "请输入管理员分配的账号；生产环境不会预填默认密码。"}</p>}
-          <button className="primary" type="submit" disabled={auth.busy}>
-            <LockKeyhole size={16} /> {auth.busy ? "登录中" : "登录系统"}
-          </button>
-        </form>
+            <label>密码
+              <input type="password" value={form.password} autoComplete="current-password" onChange={(event) => setForm({ ...form, password: event.target.value })} />
+            </label>
+            {error ? <p className="login-error">{error}</p> : <p className="login-hint">{showDemoCredentials ? "本地演示账号来自 seed，生产环境不会预填账号密码。" : "请输入管理员分配的账号；生产环境不会预填默认密码。"}</p>}
+            <button className="primary" type="submit" disabled={auth.busy}>
+              <LockKeyhole size={16} /> {auth.busy ? "登录中" : "登录系统"}
+            </button>
+          </form>
+        ) : (
+          <form className="login-form" onSubmit={activate}>
+            <label>租户
+              <input value={activationForm.tenantCode} onChange={(event) => setActivationForm({ ...activationForm, tenantCode: event.target.value })} />
+            </label>
+            <label>一次性激活码
+              <input autoComplete="one-time-code" value={activationForm.activationCode} onChange={(event) => setActivationForm({ ...activationForm, activationCode: event.target.value })} />
+            </label>
+            <label>工号
+              <input value={activationForm.employeeNo} onChange={(event) => setActivationForm({ ...activationForm, employeeNo: event.target.value })} />
+            </label>
+            <label>姓名
+              <input autoComplete="name" value={activationForm.name} onChange={(event) => setActivationForm({ ...activationForm, name: event.target.value })} />
+            </label>
+            <label>新登录账号（邮箱/手机号）
+              <input autoComplete="username" value={activationForm.email} onChange={(event) => setActivationForm({ ...activationForm, email: event.target.value })} />
+            </label>
+            <label>新密码
+              <input autoComplete="new-password" placeholder="至少 12 位，含字母和数字" type="password" value={activationForm.password} onChange={(event) => setActivationForm({ ...activationForm, password: event.target.value })} />
+            </label>
+            <label>确认新密码
+              <input autoComplete="new-password" type="password" value={activationForm.confirmPassword} onChange={(event) => setActivationForm({ ...activationForm, confirmPassword: event.target.value })} />
+            </label>
+            {error ? <p className="login-error">{error}</p> : <p className="login-hint">激活码由管理员在员工账号库发放，只能匹配本人姓名和工号，完成后直接进入系统。</p>}
+            <button className="primary" type="submit" disabled={auth.busy}>
+              <LockKeyhole size={16} /> {auth.busy ? "激活中" : "激活并进入系统"}
+            </button>
+          </form>
+        )}
       </section>
     </main>
   );
@@ -241,8 +303,8 @@ function FirstLoginSetupScreen({ apiStatus, auth, currentUser }) {
           </div>
         </div>
         <form className="login-form" onSubmit={submit}>
-          <label>新登录账号（邮箱）
-            <input autoComplete="username" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+          <label>新登录账号（邮箱/手机号）
+            <input autoComplete="username" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
           </label>
           <label>姓名
             <input autoComplete="name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />

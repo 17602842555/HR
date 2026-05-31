@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { appendAuditLog, requestAuditMeta } from "../audit/audit-service.mjs";
 import { validateNewPassword } from "../auth/password-policy.mjs";
 import { rolePermissionCreateData } from "./policy-defaults.mjs";
@@ -167,6 +167,11 @@ function normalizeEmail(input) {
   return String(input || "").trim().toLowerCase();
 }
 
+function validLoginIdentifier(input) {
+  const value = normalizeEmail(input);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || /^1[3-9]\d{9}$/.test(value);
+}
+
 function normalizeUserStatus(input) {
   const status = String(input || "").trim().toUpperCase();
   return ["ACTIVE", "DISABLED"].includes(status) ? status : "";
@@ -196,6 +201,38 @@ function generatedEmployeeEmail(employee, domain) {
 
 function generatedTemporaryPassword() {
   return `Tmp9-${randomBytes(9).toString("base64url")}`;
+}
+
+function generatedActivationCode() {
+  const raw = randomBytes(6).toString("hex").toUpperCase();
+  return `OA-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+}
+
+function normalizeActivationCode(input) {
+  return String(input || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+export function activationCodeHash(input) {
+  return createHash("sha256").update(normalizeActivationCode(input)).digest("hex");
+}
+
+function activationExpiry(days = 7) {
+  const boundedDays = Math.min(Math.max(Number(days) || 7, 1), 30);
+  return new Date(Date.now() + boundedDays * 24 * 60 * 60 * 1000);
+}
+
+function serializeAccountActivation(activation, activationCode = "") {
+  return {
+    activationCode,
+    createdAt: activation.createdAt,
+    employee: activation.employee ? serializeEmployeeAccount(activation.employee) : null,
+    employeeId: activation.employeeId,
+    expiresAt: activation.expiresAt,
+    id: activation.id,
+    roleCodes: Array.isArray(activation.roleCodes) ? activation.roleCodes : [],
+    status: activation.status,
+    usedAt: activation.usedAt || null
+  };
 }
 
 export async function registerIamRoutes(app) {
@@ -310,6 +347,86 @@ export async function registerIamRoutes(app) {
     });
   });
 
+  app.post("/api/iam/account-activations", { preHandler: app.authenticate }, async (request, reply) => {
+    await requirePermission(app, request, { module: "iam", action: "write" });
+    const employeeId = String(request.body?.employeeId || "").trim();
+    const roleCodes = normalizeRoleCodes(request.body?.roleCodes || ["employee-self-service"]);
+    const expiresInDays = request.body?.expiresInDays ?? 7;
+
+    if (!employeeId) {
+      return reply.code(400).send({ error: "employee_id_required", message: "请选择需要开户注册的员工。" });
+    }
+    if (!roleCodes.length) {
+      return reply.code(400).send({ error: "user_roles_required", message: "激活账号至少需要保留一个角色。" });
+    }
+
+    const employee = await app.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId: request.user.tenantId },
+      include: { department: true, user: true }
+    });
+    if (!employee) return reply.code(404).send({ error: "employee_not_found", message: "员工不存在。" });
+    if (employee.status !== "ACTIVE") {
+      return reply.code(400).send({ error: "employee_not_active", message: "只能给在职员工生成账号激活码。" });
+    }
+    if (employee.user) {
+      return reply.code(409).send({ error: "employee_account_exists", message: "该员工已经有关联账号。" });
+    }
+
+    const roles = await app.prisma.role.findMany({
+      where: {
+        tenantId: request.user.tenantId,
+        code: { in: roleCodes }
+      }
+    });
+    const foundCodes = new Set(roles.map((role) => role.code));
+    const missingCodes = roleCodes.filter((code) => !foundCodes.has(code));
+    if (missingCodes.length) return reply.code(400).send({ error: "unknown_role_codes", missingCodes });
+
+    let activation;
+    let activationCode = "";
+    await app.prisma.$transaction(async (tx) => {
+      await tx.accountActivation.updateMany({
+        where: {
+          employeeId,
+          status: "PENDING",
+          tenantId: request.user.tenantId
+        },
+        data: { status: "REVOKED" }
+      });
+
+      activationCode = generatedActivationCode();
+      activation = await tx.accountActivation.create({
+        data: {
+          createdByUserId: request.user.sub,
+          employeeId,
+          expiresAt: activationExpiry(expiresInDays),
+          roleCodes: [...roleCodes].sort(),
+          tenantId: request.user.tenantId,
+          tokenHash: activationCodeHash(activationCode)
+        },
+        include: { employee: { include: { department: true } } }
+      });
+
+      await appendAuditLog(tx, {
+        tenantId: request.user.tenantId,
+        actorUserId: request.user.sub,
+        action: "iam.account_activation.create",
+        objectType: "account_activation",
+        objectId: activation.id,
+        summary: `生成员工 ${employee.name} 账号激活码`,
+        metadata: {
+          employeeId,
+          employeeNo: employee.employeeNo,
+          expiresAt: activation.expiresAt,
+          roleCodes: [...roleCodes].sort()
+        },
+        ...requestAuditMeta(request)
+      });
+    });
+
+    return reply.code(201).send({ activation: serializeAccountActivation(activation, activationCode) });
+  });
+
   app.post("/api/iam/users", { preHandler: app.authenticate }, async (request, reply) => {
     await requirePermission(app, request, { module: "iam", action: "write" });
     const email = normalizeEmail(request.body?.email);
@@ -318,8 +435,8 @@ export async function registerIamRoutes(app) {
     const roleCodes = normalizeRoleCodes(request.body?.roleCodes);
     const requestedStatus = request.body?.status === undefined ? "ACTIVE" : normalizeUserStatus(request.body?.status);
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return reply.code(400).send({ error: "invalid_user_email", message: "账号邮箱格式不正确。" });
+    if (!validLoginIdentifier(email)) {
+      return reply.code(400).send({ error: "invalid_login_identifier", message: "登录账号需要使用邮箱或手机号。" });
     }
     if (!name) {
       return reply.code(400).send({ error: "user_name_required", message: "账号姓名必填。" });
@@ -344,7 +461,7 @@ export async function registerIamRoutes(app) {
       where: { tenantId_email: { tenantId: request.user.tenantId, email } }
     });
     if (existing) {
-      return reply.code(409).send({ error: "user_email_exists", message: "该邮箱账号已存在。" });
+      return reply.code(409).send({ error: "user_email_exists", message: "该登录账号已存在。" });
     }
 
     const roles = await app.prisma.role.findMany({
@@ -397,7 +514,7 @@ export async function registerIamRoutes(app) {
       });
     } catch (error) {
       if (error?.code === "P2002") {
-        return reply.code(409).send({ error: "user_email_exists", message: "该邮箱账号已存在。" });
+        return reply.code(409).send({ error: "user_email_exists", message: "该登录账号已存在。" });
       }
       throw error;
     }

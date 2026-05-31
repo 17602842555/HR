@@ -606,6 +606,85 @@
         }
       }
     },
+    "/auth/activate-account": {
+      "post": {
+        "operationId": "activateEmployeeAccount",
+        "summary": "Employee self-service account activation using an administrator issued one-time code",
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountActivationCompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Activated account session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/people": {
       "get": {
         "operationId": "getPeopleOverview",
@@ -4273,6 +4352,85 @@
         }
       }
     },
+    "/iam/account-activations": {
+      "post": {
+        "operationId": "createEmployeeAccountActivation",
+        "summary": "Issue a one-time account activation code for an active employee without an account",
+        "tags": [
+          "IAM"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountActivationCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created activation code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountActivationCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/iam/roles/{id}/permissions": {
       "put": {
         "operationId": "updateRolePermissions",
@@ -5821,7 +5979,7 @@
           },
           "email": {
             "type": "string",
-            "format": "email"
+            "description": "Login identifier: email address or mobile phone number."
           },
           "password": {
             "type": "string",
@@ -5872,7 +6030,7 @@
           },
           "email": {
             "type": "string",
-            "format": "email"
+            "description": "Login identifier: email address or mobile phone number."
           },
           "name": {
             "type": "string",
@@ -5881,6 +6039,42 @@
           "newPassword": {
             "type": "string",
             "minLength": 12
+          }
+        }
+      },
+      "AccountActivationCompleteRequest": {
+        "type": "object",
+        "required": [
+          "activationCode",
+          "employeeNo",
+          "name",
+          "email",
+          "password"
+        ],
+        "properties": {
+          "activationCode": {
+            "type": "string",
+            "minLength": 12
+          },
+          "employeeNo": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "email": {
+            "type": "string",
+            "description": "Login identifier: email address or mobile phone number."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12
+          },
+          "tenantCode": {
+            "type": "string",
+            "default": "default"
           }
         }
       },
@@ -5907,7 +6101,7 @@
         "properties": {
           "email": {
             "type": "string",
-            "format": "email"
+            "description": "Login identifier: email address or mobile phone number."
           },
           "name": {
             "type": "string",
@@ -5995,7 +6189,7 @@
                 },
                 "email": {
                   "type": "string",
-                  "format": "email"
+                  "description": "Login identifier: email address or mobile phone number."
                 },
                 "temporaryPassword": {
                   "type": "string"
@@ -6006,6 +6200,62 @@
                     "type": "string"
                   }
                 }
+              }
+            }
+          }
+        }
+      },
+      "AccountActivationCreateRequest": {
+        "type": "object",
+        "required": [
+          "employeeId"
+        ],
+        "properties": {
+          "employeeId": {
+            "type": "string"
+          },
+          "roleCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [
+              "employee-self-service"
+            ]
+          },
+          "expiresInDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 7
+          }
+        }
+      },
+      "AccountActivationCreateResponse": {
+        "type": "object",
+        "properties": {
+          "activation": {
+            "type": "object",
+            "properties": {
+              "activationCode": {
+                "type": "string",
+                "description": "One-time code shown once to the administrator and never written to audit logs."
+              },
+              "employeeId": {
+                "type": "string"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "roleCodes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "status": {
+                "type": "string"
               }
             }
           }
