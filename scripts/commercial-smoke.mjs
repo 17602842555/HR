@@ -655,6 +655,45 @@ async function main() {
 
   const rules = await request("/api/approvals/rules", { headers: authHeaders(token) });
   assert(rules.approvalRules?.length > 0, "No approval rules returned");
+  try {
+    await request("/api/approvals/rules", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: {
+        department: `商业冒烟未绑定部门-${Date.now()}`,
+        templateId: "expense",
+        templateName: "费用报销",
+        nodes: [{ id: "manager", name: "未绑定审批人校验", approvers: ["未绑定审批人"] }]
+      }
+    });
+    throw new Error("Unbound approval rule unexpectedly succeeded");
+  } catch (error) {
+    assert(error.status === 400 && error.payload?.error === "approval_rule_approvers_unresolved", "Unbound approval rule did not fail closed", {
+      status: error.status,
+      payload: error.payload
+    });
+  }
+
+  const smokeApproverNames = ["商业主管A", "商业主管B", "财务负责人", "出纳"];
+  const smokeApproverSuffix = Date.now();
+  const smokeApproverUsers = [];
+  for (const [index, name] of smokeApproverNames.entries()) {
+    const userPayload = await request("/api/iam/users", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: {
+        email: `smoke-approver-${smokeApproverSuffix}-${index}@oa.local`,
+        mustChangePassword: false,
+        name,
+        newPassword: "SmokePass12345",
+        roleCodes: index < 2 ? ["department-manager"] : ["finance-approver"],
+        status: "ACTIVE"
+      }
+    });
+    assert(userPayload.user?.id, "Smoke approver account was not created", userPayload);
+    smokeApproverUsers.push(userPayload.user);
+  }
+
   const smokeRule = await request("/api/approvals/rules", {
     method: "POST",
     headers: authHeaders(token),
@@ -670,6 +709,7 @@ async function main() {
   });
   assert(smokeRule.id, "Approval rule create did not return an id", smokeRule);
   assert(smokeRule.nodes?.[0]?.mode === "AND", "Approval rule did not normalize node mode to AND", smokeRule);
+  assert(smokeRule.nodes?.every((node) => node.approverUsers?.every((user) => user.userId)), "Approval rule did not bind every approver to an account", smokeRule);
   const activeRulePreview = await request(`/api/approvals/rules/preview?department=${encodeURIComponent(smokeRule.department)}&templateId=expense`, {
     headers: authHeaders(token)
   });
@@ -680,8 +720,8 @@ async function main() {
     row.department === smokeRule.department && row.templateId === "expense"
   ));
   assert(smokeCoverageRow?.source === "department_rule", "Approval rule coverage did not include the saved department rule", ruleCoverage);
-  assert(smokeCoverageRow?.status === "needs_binding", "Approval rule coverage did not flag unresolved smoke approvers", smokeCoverageRow);
-  assert(smokeCoverageRow?.unresolvedApprovers?.includes("商业主管A"), "Approval rule coverage missing unresolved approver details", smokeCoverageRow);
+  assert(smokeCoverageRow?.status === "configured", "Approval rule coverage did not mark the saved department rule as fully bound", smokeCoverageRow);
+  assert(smokeCoverageRow?.hasUnresolvedApprovers === false, "Approval rule coverage still reported unresolved approvers", smokeCoverageRow);
 
   await request(`/api/approvals/rules/${encodeURIComponent(smokeRule.id)}`, {
     method: "PUT",
@@ -719,6 +759,7 @@ async function main() {
   );
   evidence.approvalRules = {
     total: rules.approvalRules.length,
+    boundApproverAccounts: smokeApproverUsers.length,
     coverageCells: ruleCoverage.approvalRuleCoverage?.summary?.totalCells || 0,
     crud: "create-preview-disable-delete-ok"
   };
