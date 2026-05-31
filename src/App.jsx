@@ -142,7 +142,8 @@ function LoginScreen({ apiStatus, auth }) {
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({
     login: showDemoCredentials ? "admin@oa.local" : "",
-    password: showDemoCredentials ? "admin123456" : ""
+    password: showDemoCredentials ? "admin123456" : "",
+    tenantCode: "default"
   });
   const [activationForm, setActivationForm] = useState({
     activationCode: "",
@@ -196,7 +197,10 @@ function LoginScreen({ apiStatus, auth }) {
         </div>
         {mode === "login" ? (
           <form className="login-form" onSubmit={submit}>
-            <label>手机号登录
+            <label>租户
+              <input value={form.tenantCode} onChange={(event) => setForm({ ...form, tenantCode: event.target.value })} />
+            </label>
+            <label>手机号登录账号
               <input inputMode="tel" placeholder="17602842555，也兼容邮箱账号" value={form.login} autoComplete="username" onChange={(event) => setForm({ ...form, login: event.target.value })} />
             </label>
             <label>密码
