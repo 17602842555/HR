@@ -163,6 +163,32 @@ function normalizeRoleCodes(input) {
   return [...new Set(values.map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
+function principalPermissionCodes(principal = {}) {
+  return new Set((principal.roles || []).flatMap((role) => role.permissionCodes || []).concat(
+    (principal.permissions || []).map((permission) => permission.code).filter(Boolean)
+  ));
+}
+
+function principalHasSystemAdmin(principal = {}) {
+  return principalPermissionCodes(principal).has("system.admin");
+}
+
+function roleCodesRequireSystemAdmin(roleCodes = []) {
+  return roleCodes.includes("admin");
+}
+
+function permissionCodesRequireSystemAdmin(permissionCodes = []) {
+  return permissionCodes.some((code) => ["system.admin", "iam.write"].includes(code));
+}
+
+function requireSystemAdminForPrivilegedIam(reply, principal, message = "只有系统管理员可以分配超级权限。") {
+  if (principalHasSystemAdmin(principal)) return null;
+  return reply.code(403).send({
+    error: "system_admin_required",
+    message
+  });
+}
+
 function normalizeEmail(input) {
   return String(input || "").trim().toLowerCase();
 }
@@ -259,7 +285,7 @@ export async function registerIamRoutes(app) {
   });
 
   app.post("/api/iam/accounts/sync-employees", { preHandler: app.authenticate }, async (request, reply) => {
-    await requirePermission(app, request, { module: "iam", action: "write" });
+    const { principal } = await requirePermission(app, request, { module: "iam", action: "write" });
     const roleCodes = normalizeRoleCodes(request.body?.roleCodes || ["employee-self-service"]);
     const includeLeavers = request.body?.includeLeavers === true;
     const emailDomain = normalizeEmailDomain(request.body?.emailDomain);
@@ -270,6 +296,10 @@ export async function registerIamRoutes(app) {
     }
     if (!requestedStatus) {
       return reply.code(400).send({ error: "invalid_user_status", message: "账号状态必须是 ACTIVE 或 DISABLED。" });
+    }
+    if (roleCodesRequireSystemAdmin(roleCodes)) {
+      const denied = requireSystemAdminForPrivilegedIam(reply, principal, "只有系统管理员可以批量生成 admin 员工账号。");
+      if (denied) return denied;
     }
 
     const roles = await app.prisma.role.findMany({
@@ -364,7 +394,7 @@ export async function registerIamRoutes(app) {
   });
 
   app.post("/api/iam/account-activations", { preHandler: app.authenticate }, async (request, reply) => {
-    await requirePermission(app, request, { module: "iam", action: "write" });
+    const { principal } = await requirePermission(app, request, { module: "iam", action: "write" });
     const employeeId = String(request.body?.employeeId || "").trim();
     const roleCodes = normalizeRoleCodes(request.body?.roleCodes || ["employee-self-service"]);
     const expiresInDays = request.body?.expiresInDays ?? 7;
@@ -374,6 +404,10 @@ export async function registerIamRoutes(app) {
     }
     if (!roleCodes.length) {
       return reply.code(400).send({ error: "user_roles_required", message: "激活账号至少需要保留一个角色。" });
+    }
+    if (roleCodesRequireSystemAdmin(roleCodes)) {
+      const denied = requireSystemAdminForPrivilegedIam(reply, principal, "只有系统管理员可以发放 admin 激活码。");
+      if (denied) return denied;
     }
 
     const employee = await app.prisma.employee.findFirst({
@@ -444,7 +478,7 @@ export async function registerIamRoutes(app) {
   });
 
   app.post("/api/iam/users", { preHandler: app.authenticate }, async (request, reply) => {
-    await requirePermission(app, request, { module: "iam", action: "write" });
+    const { principal } = await requirePermission(app, request, { module: "iam", action: "write" });
     const email = requestLoginIdentifier(request.body);
     const name = String(request.body?.name || "").trim();
     const newPassword = String(request.body?.newPassword || "");
@@ -462,6 +496,10 @@ export async function registerIamRoutes(app) {
     }
     if (!requestedStatus) {
       return reply.code(400).send({ error: "invalid_user_status", message: "账号状态必须是 ACTIVE 或 DISABLED。" });
+    }
+    if (roleCodesRequireSystemAdmin(roleCodes)) {
+      const denied = requireSystemAdminForPrivilegedIam(reply, principal, "只有系统管理员可以创建 admin 账号。");
+      if (denied) return denied;
     }
 
     const validation = validateNewPassword(newPassword);
@@ -546,7 +584,7 @@ export async function registerIamRoutes(app) {
   });
 
   app.put("/api/iam/roles/:id/permissions", { preHandler: app.authenticate }, async (request, reply) => {
-    await requirePermission(app, request, { module: "iam", action: "write" });
+    const { principal } = await requirePermission(app, request, { module: "iam", action: "write" });
     const permissionCodes = normalizePermissionCodes(request.body?.permissionCodes);
     const role = await app.prisma.role.findFirst({
       where: { id: request.params.id, tenantId: request.user.tenantId },
@@ -572,6 +610,10 @@ export async function registerIamRoutes(app) {
 
     const beforeCodes = permissionRows(role).map((permission) => permission.code).sort();
     const afterCodes = [...permissionCodes].sort();
+    if (permissionCodesRequireSystemAdmin([...beforeCodes, ...afterCodes])) {
+      const denied = requireSystemAdminForPrivilegedIam(reply, principal, "只有系统管理员可以修改 system.admin 或 iam.write 权限。");
+      if (denied) return denied;
+    }
     await app.prisma.$transaction(async (tx) => {
       await tx.rolePermission.deleteMany({
         where: { tenantId: request.user.tenantId, roleId: role.id }
@@ -613,7 +655,7 @@ export async function registerIamRoutes(app) {
   });
 
   app.put("/api/iam/users/:id/roles", { preHandler: app.authenticate }, async (request, reply) => {
-    await requirePermission(app, request, { module: "iam", action: "write" });
+    const { principal } = await requirePermission(app, request, { module: "iam", action: "write" });
     const roleCodes = normalizeRoleCodes(request.body?.roleCodes);
     if (!roleCodes.length) {
       return reply.code(400).send({ error: "user_roles_required", message: "用户至少需要保留一个角色。" });
@@ -637,6 +679,10 @@ export async function registerIamRoutes(app) {
 
     const beforeCodes = (user.roles || []).map((item) => item.role?.code).filter(Boolean).sort();
     const afterCodes = [...roleCodes].sort();
+    if (roleCodesRequireSystemAdmin([...beforeCodes, ...afterCodes])) {
+      const denied = requireSystemAdminForPrivilegedIam(reply, principal, "只有系统管理员可以分配或移除 admin 角色。");
+      if (denied) return denied;
+    }
     if (user.id === request.user.sub && beforeCodes.includes("admin") && !afterCodes.includes("admin")) {
       return reply.code(400).send({ error: "admin_self_role_guard_required", message: "不能移除当前管理员自己的 admin 角色。" });
     }

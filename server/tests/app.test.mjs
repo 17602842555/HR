@@ -5101,6 +5101,49 @@ test("iam role permission update rejects unknown permissions and admin lockout",
   await app.close();
 });
 
+test("iam write without system admin cannot grant privileged roles or permissions", async () => {
+  const app = await buildApp({
+    logger: false,
+    prisma: await makePrismaMock({ permissionCodes: ["iam.read", "iam.write"] }),
+    config: { jwtSecret: "test-secret" }
+  });
+  const headers = await loginHeaders(app);
+
+  const adminCreate = await app.inject({
+    method: "POST",
+    url: "/api/iam/users",
+    headers,
+    payload: {
+      email: "new-admin@oa.local",
+      name: "越权管理员",
+      newPassword: "AdminAccountPass123",
+      roleCodes: ["admin"]
+    }
+  });
+  assert.equal(adminCreate.statusCode, 403);
+  assert.equal(adminCreate.json().error, "system_admin_required");
+
+  const adminAssign = await app.inject({
+    method: "PUT",
+    url: "/api/iam/users/user-admin/roles",
+    headers,
+    payload: { roleCodes: ["admin", "auditor"] }
+  });
+  assert.equal(adminAssign.statusCode, 403);
+  assert.equal(adminAssign.json().error, "system_admin_required");
+
+  const privilegedPermissions = await app.inject({
+    method: "PUT",
+    url: "/api/iam/roles/role-auditor/permissions",
+    headers,
+    payload: { permissionCodes: ["audit.read", "system.admin"] }
+  });
+  assert.equal(privilegedPermissions.statusCode, 403);
+  assert.equal(privilegedPermissions.json().error, "system_admin_required");
+
+  await app.close();
+});
+
 test("iam user role assignment updates role memberships and prevents self admin lockout", async () => {
   const app = await buildApp({
     logger: false,

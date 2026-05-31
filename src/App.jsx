@@ -41,6 +41,7 @@ function FlowForm({ actions, departments, initialTemplate, onClose, workflowTemp
   const [templateId, setTemplateId] = useState(initialTemplate?.id || "expense");
   const template = templateOptions.find((item) => item.id === templateId) || templateOptions[0] || flowTemplates[0];
   const departmentOptions = departments.includes(template.department) ? departments : [template.department, ...departments];
+  const [idempotencyKey] = useState(() => `ui-submit-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const [form, setForm] = useState({
     title: initialTemplate?.name || template.name,
     applicant: initialTemplate?.owner || "申请人",
@@ -50,7 +51,7 @@ function FlowForm({ actions, departments, initialTemplate, onClose, workflowTemp
   });
 
   const submit = () => {
-    actions.createApproval(template, form);
+    actions.createApproval(template, { ...form, idempotencyKey });
     onClose();
   };
 

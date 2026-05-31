@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const defaults = {
+  expectedSha: process.env.GITHUB_SHA || "",
   pagesUrl: "https://17602842555.github.io/HR/",
   workerUrl: "https://deep-oa-hr.2445776963.workers.dev"
 };
@@ -11,6 +12,8 @@ function parseArgs(argv = process.argv.slice(2)) {
     const arg = argv[index];
     if (arg === "--json") {
       options.json = true;
+    } else if (arg === "--expected-sha") {
+      options.expectedSha = argv[++index] || "";
     } else if (arg === "--pages-url") {
       options.pagesUrl = argv[++index] || "";
     } else if (arg === "--worker-url") {
@@ -87,6 +90,11 @@ async function run(options) {
         checks.push(bundleText.includes(expectedApi)
           ? pass("frontend-api-base", "Frontend bundle points to the Cloudflare Worker API.", { expectedApi })
           : fail("frontend-api-base", "Frontend bundle does not contain the expected Worker API base URL.", { expectedApi }));
+        if (options.expectedSha) {
+          checks.push(bundleText.includes(options.expectedSha)
+            ? pass("frontend-release-sha", "Frontend bundle contains the expected release SHA.", { expectedSha: options.expectedSha })
+            : fail("frontend-release-sha", "Frontend bundle does not contain the expected release SHA.", { expectedSha: options.expectedSha }));
+        }
       } catch (error) {
         checks.push(fail("frontend-bundle", "Frontend bundle request failed.", { error: error.message, url: scriptUrl }));
       }

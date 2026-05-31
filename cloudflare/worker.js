@@ -741,6 +741,69 @@ const roles = [
   userCount: role.code === "admin" ? 1 : 0
 }));
 
+function departmentNamesFromPeople(people = {}) {
+  return [...new Set([
+    ...(people.departmentStats || []).map((item) => item.label),
+    ...(people.employees || []).map((item) => item.department),
+    "行政部",
+    "人事行政部",
+    "财务部",
+    "直播部",
+    "直播运营部",
+    "客服部"
+  ].filter(Boolean))];
+}
+
+function uniqueNames(names = []) {
+  return [...new Set(names.map((name) => String(name || "").trim()).filter(Boolean))];
+}
+
+function seededApprovalUsers(people = {}) {
+  const departmentOwners = departmentNamesFromPeople(people).map((department) => `${department}负责人`);
+  const approverNames = uniqueNames([
+    "财务负责人",
+    "财务专员",
+    "出纳",
+    "人事负责人",
+    "HRBP",
+    "行政资产管理员",
+    "人事专员",
+    "直属负责人",
+    "采购负责人",
+    "薪资专员",
+    ...departmentOwners
+  ]).filter((name) => !["张三", "李四"].includes(name));
+
+  return approverNames.map((name, index) => ({
+    email: `approver-${String(index + 1).padStart(3, "0")}@oa.local`,
+    id: `seed-approver-${index + 1}`,
+    name,
+    roleCodes: name.includes("财务") || name === "出纳" || name === "薪资专员"
+      ? ["finance-approver"]
+      : name.includes("人事") || name === "HRBP"
+      ? ["hr-specialist"]
+      : name.includes("资产") || name.includes("行政")
+      ? ["asset-admin"]
+      : ["department-manager"],
+    status: "ACTIVE"
+  }));
+}
+
+function ensureSeededApprovalUsers(state = {}) {
+  state.iam = state.iam || {};
+  state.iam.permissions = state.iam.permissions?.length ? state.iam.permissions : permissions;
+  state.iam.roles = state.iam.roles?.length ? state.iam.roles : roles;
+  state.iam.users = Array.isArray(state.iam.users) ? state.iam.users : [];
+
+  const existingNames = new Set(state.iam.users.map((user) => normalizedApproverAlias(user.name)));
+  const existingEmails = new Set(state.iam.users.map((user) => normalizedApproverAlias(user.email)));
+  const additions = seededApprovalUsers(state.people || {})
+    .filter((user) => !existingNames.has(normalizedApproverAlias(user.name)) && !existingEmails.has(normalizedApproverAlias(user.email)));
+  if (!additions.length) return false;
+  state.iam.users = [...state.iam.users, ...additions];
+  return true;
+}
+
 const workerOpenApiPaths = [
   "/analytics/export",
   "/analytics/overview",
@@ -1048,35 +1111,137 @@ function makeApprovalRule(template, department) {
 }
 
 function makeApprovalRules(people) {
-  const departments = [...new Set([
-    ...(people.departmentStats || []).map((item) => item.label),
-    "行政部",
-    "人事行政部",
-    "财务部",
-    "直播部",
-    "直播运营部",
-    "客服部"
-  ].filter(Boolean))];
+  const departments = departmentNamesFromPeople(people);
   return departments.flatMap((department) => flowTemplates.map((template) => makeApprovalRule(template, department)));
 }
 
-function makeApprovalRuleCoverage(approvalRules) {
-  const rows = approvalRules.map((rule) => ({
-    department: rule.department,
-    missingNodes: rule.nodes.filter((node) => !node.approvers.length).map((node) => node.name),
-    nodeCount: rule.nodes.length,
-    status: rule.enabled && rule.nodes.every((node) => node.approvers.length > 0) ? "已配置" : "待完善",
-    templateId: rule.templateId,
-    templateName: rule.templateName
+function normalizedApproverAlias(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function aliasesForApproverUser(user = {}) {
+  return [
+    user.name,
+    user.email,
+    user.employee?.name,
+    user.employee?.email
+  ].map(normalizedApproverAlias).filter(Boolean);
+}
+
+function resolveApproverUser(state = {}, approverName) {
+  const wanted = normalizedApproverAlias(approverName);
+  if (!wanted) return null;
+  const users = Array.isArray(state.iam?.users) ? state.iam.users : [];
+  return users.find((user) => (
+    user.status === "ACTIVE"
+    && aliasesForApproverUser(user).includes(wanted)
+  )) || null;
+}
+
+function enrichApprovalRuleNodes(state = {}, nodes = []) {
+  return nodes.map((node) => ({
+    ...node,
+    mode: "AND",
+    approvers: uniqueNames(node.approvers || []),
+    approverUsers: uniqueNames(node.approvers || []).map((name) => {
+      const user = resolveApproverUser(state, name);
+      return {
+        email: user?.email || "",
+        name,
+        userId: user?.id || "",
+        userName: user?.name || ""
+      };
+    })
   }));
-  const configured = rows.filter((row) => row.status === "已配置").length;
+}
+
+function enrichApprovalRule(state = {}, rule = {}) {
+  return {
+    ...rule,
+    nodes: enrichApprovalRuleNodes(state, rule.nodes || [])
+  };
+}
+
+function unresolvedApprovalRuleApprovers(state = {}, rule = {}) {
+  if (rule.enabled === false) return [];
+  const enriched = enrichApprovalRule(state, rule);
+  return uniqueNames((enriched.nodes || []).flatMap((node) => (
+    (node.approverUsers || [])
+      .filter((item) => !item.userId)
+      .map((item) => item.name)
+  )));
+}
+
+function approvalRulePreview(state = {}, rule = {}) {
+  const enriched = enrichApprovalRule(state, rule);
+  const approverUsers = (enriched.nodes || []).flatMap((node) => node.approverUsers || []);
+  const unresolvedApprovers = uniqueNames(approverUsers.filter((item) => !item.userId).map((item) => item.name));
+  return {
+    approverChain: (enriched.nodes || []).map((node) => `${node.name}: ${(node.approvers || []).join("、")}`).join(" -> "),
+    department: enriched.department,
+    enabled: enriched.enabled !== false,
+    nodeCount: (enriched.nodes || []).length,
+    nodes: enriched.nodes || [],
+    resolvedApproverCount: approverUsers.filter((item) => item.userId).length,
+    source: enriched.id ? "department_rule" : "workflow_definition",
+    templateId: enriched.templateId,
+    templateName: enriched.templateName,
+    totalApproverCount: approverUsers.length,
+    unresolvedApprovers
+  };
+}
+
+function approvalRuleBindingError(unresolvedApprovers = []) {
+  const names = uniqueNames(unresolvedApprovers);
+  return {
+    details: { unresolvedApprovers: names },
+    error: "approval_rule_approvers_unresolved",
+    message: `审批人未绑定真实账号：${names.join("、")}`,
+    ok: false
+  };
+}
+
+function makeApprovalRuleCoverage(approvalRules, state = null) {
+  const rows = approvalRules.map((rawRule) => {
+    const rule = state ? enrichApprovalRule(state, rawRule) : rawRule;
+    const missingNodes = (rule.nodes || []).filter((node) => !node.approvers?.length).map((node) => node.name);
+    const unresolvedApprovers = state ? unresolvedApprovalRuleApprovers(state, rule) : [];
+    const disabled = rule.enabled === false;
+    const status = disabled
+      ? "disabled"
+      : unresolvedApprovers.length
+      ? "needs_binding"
+      : missingNodes.length
+      ? "incomplete"
+      : "configured";
+    return {
+      department: rule.department,
+      disabledRuleId: disabled ? rule.id : "",
+      missingNodes,
+      nodeCount: (rule.nodes || []).length,
+      source: disabled ? "disabled_rule" : "department_rule",
+      status,
+      templateId: rule.templateId,
+      templateName: rule.templateName,
+      unresolvedApprovers
+    };
+  });
+  const configured = rows.filter((row) => row.status === "configured").length;
+  const departments = new Set(rows.map((row) => row.department).filter(Boolean));
+  const templates = new Set(rows.map((row) => row.templateId).filter(Boolean));
   return {
     rows,
     summary: {
+      configuredCount: configured,
       configured,
       coverageRate: rows.length ? Math.round((configured / rows.length) * 100) : 100,
+      departmentCount: departments.size,
+      fallbackCount: 0,
       missing: rows.length - configured,
-      total: rows.length
+      needsBindingCount: rows.filter((row) => row.status === "needs_binding").length,
+      templateCount: templates.size,
+      total: rows.length,
+      totalCells: rows.length
     }
   };
 }
@@ -1427,7 +1592,8 @@ function makeInitialState(storageMode = "memory") {
     roles,
     users: [
       { id: "mock-user", name: "张三", email: "admin@oa.local", status: "ACTIVE", roleCodes: ["admin"] },
-      { id: "mock-hr", name: "李四", email: "lisi@oa.local", status: "ACTIVE", roleCodes: ["hr-specialist"] }
+      { id: "mock-hr", name: "李四", email: "lisi@oa.local", status: "ACTIVE", roleCodes: ["hr-specialist"] },
+      ...seededApprovalUsers(people)
     ]
   };
   const state = {
@@ -1503,6 +1669,8 @@ function makeInitialState(storageMode = "memory") {
     ...initialIam,
     ...buildAccountLibrary(people, initialIam)
   };
+  state.approvalRules = state.approvalRules.map((rule) => enrichApprovalRule(state, rule));
+  state.approvalRuleCoverage = makeApprovalRuleCoverage(state.approvalRules, state);
   return state;
 }
 
@@ -1556,9 +1724,13 @@ async function loadState(env) {
   const row = await env.OA_DB.prepare("SELECT value FROM kv_store WHERE key = ?").bind(STATE_KEY).first();
   if (row?.value) {
     const state = JSON.parse(row.value);
+    const seededApproversAdded = ensureSeededApprovalUsers(state);
     state.systemReadiness = makeReadiness("d1");
     await ensureAuditLogIntegrity(state.auditLogs || []);
     state.auditIntegrity = await makeAuditIntegrity(state.auditLogs || []);
+    state.approvalRules = (state.approvalRules || []).map((rule) => enrichApprovalRule(state, rule));
+    state.approvalRuleCoverage = makeApprovalRuleCoverage(state.approvalRules || [], state);
+    if (seededApproversAdded) await saveState(env, state);
     return state;
   }
 
@@ -1569,13 +1741,15 @@ async function loadState(env) {
 
 async function saveState(env, state) {
   state.analytics = makeAnalytics(state);
+  ensureSeededApprovalUsers(state);
   await ensureAuditLogIntegrity(state.auditLogs || []);
   state.auditIntegrity = await makeAuditIntegrity(state.auditLogs);
-  state.approvalRuleCoverage = makeApprovalRuleCoverage(state.approvalRules || []);
   state.iam = {
     ...(state.iam || {}),
     ...buildAccountLibrary(state.people || { employees: [] }, state.iam || { roles: [], users: [] })
   };
+  state.approvalRules = (state.approvalRules || []).map((rule) => enrichApprovalRule(state, rule));
+  state.approvalRuleCoverage = makeApprovalRuleCoverage(state.approvalRules || [], state);
   if (!env.OA_DB) {
     state.systemReadiness = makeReadiness(fallbackStorageMode());
     memoryState = clone(state);
@@ -1867,6 +2041,29 @@ function normalizeRequestedRoleCodes(state, roleCodes = [], fallback = ["employe
   const next = [...new Set((Array.isArray(roleCodes) && roleCodes.length ? roleCodes : fallback).map(String))];
   const invalid = invalidRoleCodes(state, next);
   return { invalid, roleCodes: next };
+}
+
+function roleCodesRequireSystemAdmin(roleCodes = []) {
+  return roleCodes.includes("admin");
+}
+
+function permissionCodesRequireSystemAdmin(permissionCodes = []) {
+  return permissionCodes.some((code) => ["system.admin", "iam.write"].includes(code));
+}
+
+function systemAdminRequiredResponse(message = "只有系统管理员可以分配超级权限。") {
+  return json({
+    code: "SYSTEM_ADMIN_REQUIRED",
+    error: "system_admin_required",
+    message,
+    ok: false
+  }, { status: 403 });
+}
+
+function requireSystemAdminForPrivilegedIam(state, actor, roleCodes = [], message) {
+  if (!roleCodesRequireSystemAdmin(roleCodes)) return null;
+  if (hasPermission(state, actor, "system.admin")) return null;
+  return systemAdminRequiredResponse(message);
 }
 
 function requiredPermissionForRequest(pathname, segments, method) {
@@ -2315,6 +2512,8 @@ async function handleNativeApi(request, env) {
 	    const normalizedRoles = normalizeRequestedRoleCodes(state, body.roleCodes, ["employee-self-service"]);
 	    if (!normalizedRoles.roleCodes.length) return badRequest("激活账号至少需要一个角色。");
 	    if (normalizedRoles.invalid.length) return badRequest(`未知角色：${normalizedRoles.invalid.join(", ")}`);
+	    const activationRoleDenied = requireSystemAdminForPrivilegedIam(state, actor, normalizedRoles.roleCodes, "只有系统管理员可以发放 admin 激活码。");
+	    if (activationRoleDenied) return activationRoleDenied;
 	    state.accountActivations = (state.accountActivations || []).map((activation) => (
 	      activation.employeeId === employeeId && activation.status === "PENDING"
 	        ? { ...activation, status: "REVOKED", revokedAt: nowIso() }
@@ -2349,6 +2548,8 @@ async function handleNativeApi(request, env) {
 	    if (!validNewPassword(temporaryPassword)) return badRequest("初始密码至少 12 位，并且必须同时包含字母和数字。");
 	    const normalizedRoles = normalizeRequestedRoleCodes(state, body.roleCodes);
 	    if (normalizedRoles.invalid.length) return badRequest(`未知角色：${normalizedRoles.invalid.join(", ")}`);
+	    const createRoleDenied = requireSystemAdminForPrivilegedIam(state, actor, normalizedRoles.roleCodes, "只有系统管理员可以创建 admin 账号。");
+	    if (createRoleDenied) return createRoleDenied;
 	    const user = {
 	      email: requestLoginIdentifier(body),
 	      id: nextId("USER"),
@@ -2377,6 +2578,8 @@ async function handleNativeApi(request, env) {
 	    const normalizedRoles = normalizeRequestedRoleCodes(state, body.roleCodes);
 	    if (normalizedRoles.invalid.length) return badRequest(`未知角色：${normalizedRoles.invalid.join(", ")}`);
 	    const roleCodes = normalizedRoles.roleCodes;
+	    const syncRoleDenied = requireSystemAdminForPrivilegedIam(state, actor, roleCodes, "只有系统管理员可以批量生成 admin 员工账号。");
+	    if (syncRoleDenied) return syncRoleDenied;
 	    const createdUsers = [];
 	    const credentials = [];
 	    const activeEmployees = state.people.employees.filter((item) => ["ACTIVE", "在职"].includes(String(item.status || "在职")));
@@ -2431,6 +2634,9 @@ async function handleNativeApi(request, env) {
 	    if (role.code === "admin" && (!nextPermissionCodes.includes("system.admin") || !nextPermissionCodes.includes("iam.write"))) {
 	      return badRequest("系统管理员角色必须保留 system.admin 和 iam.write 权限。");
 	    }
+	    if (permissionCodesRequireSystemAdmin([...(role.permissionCodes || []), ...nextPermissionCodes]) && !hasPermission(state, actor, "system.admin")) {
+	      return systemAdminRequiredResponse("只有系统管理员可以修改 system.admin 或 iam.write 权限。");
+	    }
 	    role.permissionCodes = nextPermissionCodes;
 	    role.permissions = permissionsByCode(role.permissionCodes);
     await appendAudit(env, state, { action: "更新角色权限", actor: actorName, content: `更新 ${role.name} 权限`, object: "角色权限", objectId: role.id, request });
@@ -2446,6 +2652,8 @@ async function handleNativeApi(request, env) {
 	      const normalizedRoles = normalizeRequestedRoleCodes(state, body.roleCodes, []);
 	      if (!normalizedRoles.roleCodes.length) return badRequest("账号至少需要一个角色。");
 	      if (normalizedRoles.invalid.length) return badRequest(`未知角色：${normalizedRoles.invalid.join(", ")}`);
+	      const userRoleDenied = requireSystemAdminForPrivilegedIam(state, actor, [...(user.roleCodes || []), ...normalizedRoles.roleCodes], "只有系统管理员可以分配或移除 admin 角色。");
+	      if (userRoleDenied) return userRoleDenied;
 	      user.roleCodes = normalizedRoles.roleCodes;
 	      user.sessionVersion = Number(user.sessionVersion || 0) + 1;
 	    }
@@ -2469,19 +2677,40 @@ async function handleNativeApi(request, env) {
   }
 
   if ((pathname === "/approvals/definitions" || pathname === "/workflows/definitions") && method === "GET") return ok({ workflowDefinitions: state.workflowDefinitions });
-  if (pathname === "/approvals/rules/coverage" && method === "GET") return ok({ approvalRuleCoverage: state.approvalRuleCoverage });
+  if (pathname === "/approvals/rules/coverage" && method === "GET") {
+    state.approvalRuleCoverage = makeApprovalRuleCoverage(state.approvalRules || [], state);
+    return ok({ approvalRuleCoverage: state.approvalRuleCoverage });
+  }
   if (pathname === "/approvals/rules/preview" && method === "GET") {
     const department = url.searchParams.get("department") || "行政部";
     const templateId = url.searchParams.get("templateId") || "expense";
     const rule = state.approvalRules.find((item) => item.department === department && item.templateId === templateId);
+    const template = flowTemplates.find((item) => item.id === templateId) || flowTemplates[0];
+    const sourceRule = rule || makeApprovalRule(template, department);
+    const preview = approvalRulePreview(state, sourceRule);
     await appendAudit(env, state, { action: "预览审批规则", actor: actorName, content: `${department} / ${templateId}`, object: "审批规则", request });
     await saveState(env, state);
-    return ok({ rule, route: rule?.nodes || [] });
+    return ok({ preview, rule: sourceRule, route: preview.nodes || [] });
   }
   if (pathname === "/approvals/rules" && method === "GET") return ok({ approvalRules: state.approvalRules });
   if (pathname === "/approvals/rules" && method === "POST") {
     const body = await readJson(request);
-    const rule = { ...body, id: body.id || nextId("RULE"), updatedAt: localTime() };
+    const rule = enrichApprovalRule(state, { ...body, id: body.id || nextId("RULE"), updatedAt: localTime() });
+    const unresolvedApprovers = unresolvedApprovalRuleApprovers(state, rule);
+    if (unresolvedApprovers.length) {
+      await appendAudit(env, state, {
+        action: "新增审批规则失败",
+        actor: actorName,
+        content: `${rule.department} / ${rule.templateName} 未绑定审批人：${unresolvedApprovers.join("、")}`,
+        object: "审批规则",
+        objectId: rule.id,
+        request,
+        result: "失败",
+        type: "权限拒绝"
+      });
+      await saveState(env, state);
+      return json(approvalRuleBindingError(unresolvedApprovers), { status: 400 });
+    }
     state.approvalRules = [rule, ...state.approvalRules.filter((item) => item.id !== rule.id)];
     await appendAudit(env, state, { action: "新增审批规则", actor: actorName, content: `${rule.department} / ${rule.templateName}`, object: "审批规则", objectId: rule.id, request });
     await saveState(env, state);
@@ -2490,7 +2719,25 @@ async function handleNativeApi(request, env) {
   if (segments[0] === "approvals" && segments[1] === "rules" && segments[2] && method === "PUT") {
     const body = await readJson(request);
     const id = decodeURIComponent(segments[2]);
-    state.approvalRules = state.approvalRules.map((rule) => rule.id === id ? { ...rule, ...body, id, updatedAt: localTime() } : rule);
+    const existing = state.approvalRules.find((rule) => rule.id === id);
+    if (!existing) return notFound(pathname);
+    const nextRule = enrichApprovalRule(state, { ...existing, ...body, id, updatedAt: localTime() });
+    const unresolvedApprovers = unresolvedApprovalRuleApprovers(state, nextRule);
+    if (unresolvedApprovers.length) {
+      await appendAudit(env, state, {
+        action: "更新审批规则失败",
+        actor: actorName,
+        content: `更新规则 ${id} 未绑定审批人：${unresolvedApprovers.join("、")}`,
+        object: "审批规则",
+        objectId: id,
+        request,
+        result: "失败",
+        type: "权限拒绝"
+      });
+      await saveState(env, state);
+      return json(approvalRuleBindingError(unresolvedApprovers), { status: 400 });
+    }
+    state.approvalRules = state.approvalRules.map((rule) => rule.id === id ? nextRule : rule);
     await appendAudit(env, state, { action: "更新审批规则", actor: actorName, content: `更新规则 ${id}`, object: "审批规则", objectId: id, request });
     await saveState(env, state);
     return ok({ rule: state.approvalRules.find((rule) => rule.id === id) });

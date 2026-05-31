@@ -79,8 +79,9 @@ export function transferApproval(id, payload) {
   });
 }
 
-export function withdrawApproval(id) {
+export function withdrawApproval(id, payload = {}) {
   return apiRequest(`/approvals/${encodeURIComponent(id)}/withdraw`, {
+    body: payload,
     method: "POST"
   });
 }

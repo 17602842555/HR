@@ -56,7 +56,11 @@ jobs:
           VITE_API_BASE_URL: ${{ steps.cloudflare.outputs.deployment_url }}/api
           VITE_BASE_PATH: /HR/
           VITE_DEMO_FALLBACK: "0"
+          VITE_RELEASE_SHA: ${{ github.sha }}
           VITE_REQUIRE_API: "1"
+
+      - name: Validate commercial frontend bundle
+        run: npm run validate:frontend-bundle
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4

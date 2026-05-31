@@ -631,6 +631,83 @@ test("cloudflare worker forces generated employee accounts through first login s
   assert.equal(bookingPayload.booking.applicant, "员工自定义姓名");
 });
 
+test("cloudflare worker iam.write without system admin cannot grant privileged access", async () => {
+  const adminLogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const adminCookie = adminLogin.headers.get("set-cookie");
+
+  const delegateRole = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/iam/roles/ROLE-auditor/permissions", {
+      body: JSON.stringify({ permissionCodes: ["audit.read", "iam.read", "iam.write"] }),
+      headers: { "content-type": "application/json", cookie: adminCookie },
+      method: "PUT"
+    }),
+    TEST_ENV
+  );
+  assert.equal(delegateRole.status, 200);
+
+  const delegatePassword = "DelegatePass123";
+  const delegateUser = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/iam/users", {
+      body: JSON.stringify({
+        email: `iam-delegate-${Date.now()}@oa.local`,
+        mustChangePassword: false,
+        name: "权限专员",
+        newPassword: delegatePassword,
+        roleCodes: ["audit-viewer"]
+      }),
+      headers: { "content-type": "application/json", cookie: adminCookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const delegatePayload = await responseJson(delegateUser);
+  const delegateLogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: delegatePayload.user.email, password: delegatePassword }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const delegateCookie = delegateLogin.headers.get("set-cookie");
+
+  const createAdmin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/iam/users", {
+      body: JSON.stringify({
+        email: `blocked-admin-${Date.now()}@oa.local`,
+        name: "越权管理员",
+        newPassword: "BlockedAdminPass123",
+        roleCodes: ["admin"]
+      }),
+      headers: { "content-type": "application/json", cookie: delegateCookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const createAdminPayload = await responseJson(createAdmin);
+  assert.equal(createAdmin.status, 403);
+  assert.equal(createAdminPayload.error, "system_admin_required");
+
+  const grantSystemAdmin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/iam/roles/ROLE-auditor/permissions", {
+      body: JSON.stringify({ permissionCodes: ["audit.read", "iam.read", "iam.write", "system.admin"] }),
+      headers: { "content-type": "application/json", cookie: delegateCookie },
+      method: "PUT"
+    }),
+    TEST_ENV
+  );
+  const grantPayload = await responseJson(grantSystemAdmin);
+  assert.equal(grantSystemAdmin.status, 403);
+  assert.equal(grantPayload.error, "system_admin_required");
+});
+
 test("cloudflare worker supports employee activation with phone-number login", async () => {
   const adminLogin = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
@@ -830,6 +907,67 @@ test("cloudflare worker native approval decisions require every current approver
   );
   const secondDecisionPayload = await responseJson(secondDecisionResponse);
   assert.equal(secondDecisionPayload.approval.currentNodeIndex, approval.currentNodeIndex + 1);
+});
+
+test("cloudflare worker approval rules require approvers bound to real active accounts", async () => {
+  const loginResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const cookie = loginResponse.headers.get("set-cookie");
+  const unboundRule = {
+    department: "行政部",
+    enabled: true,
+    nodes: [{ id: "expense-unbound-1", name: "直属负责人审批", mode: "AND", approvers: ["未开户审批人"] }],
+    templateId: "expense",
+    templateName: "费用报销"
+  };
+
+  const rejected = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/approvals/rules", {
+      body: JSON.stringify(unboundRule),
+      headers: { "content-type": "application/json", cookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const rejectedPayload = await responseJson(rejected);
+  assert.equal(rejected.status, 400);
+  assert.equal(rejectedPayload.error, "approval_rule_approvers_unresolved");
+  assert.deepEqual(rejectedPayload.details.unresolvedApprovers, ["未开户审批人"]);
+
+  const createdUser = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/iam/users", {
+      body: JSON.stringify({
+        email: `approver-${Date.now()}@oa.local`,
+        mustChangePassword: false,
+        name: "未开户审批人",
+        newPassword: "ApproverPass123",
+        roleCodes: ["department-manager"]
+      }),
+      headers: { "content-type": "application/json", cookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const user = (await responseJson(createdUser)).user;
+  const saved = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/approvals/rules", {
+      body: JSON.stringify(unboundRule),
+      headers: { "content-type": "application/json", cookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const savedPayload = await responseJson(saved);
+
+  assert.equal(saved.status, 200);
+  assert.equal(savedPayload.rule.nodes[0].approverUsers[0].userId, user.id);
+  assert.equal(savedPayload.rule.nodes[0].mode, "AND");
 });
 
 test("cloudflare worker approval decisions reject non-admin approver impersonation", async () => {

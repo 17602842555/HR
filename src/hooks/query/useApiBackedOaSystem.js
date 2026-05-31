@@ -542,7 +542,7 @@ export function useApiBackedOaSystem() {
       ),
       decideApproval: apiBacked(
         ["approvals", "audit"],
-        (id, decision, approverName) => approvalApi.decideApproval(id, { approverName, decision }),
+        (id, decision, approverName, idempotencyKey) => approvalApi.decideApproval(id, { approverName, decision, idempotencyKey }),
         fallback.actions.decideApproval
       ),
       exportApprovals: apiBacked(
@@ -725,7 +725,7 @@ export function useApiBackedOaSystem() {
       toggleSensitive,
       transferApproval: apiBacked(
         ["approvals", "audit"],
-        (id, target, sourceApproverName) => approvalApi.transferApproval(id, { target, sourceApproverName }),
+        (id, target, sourceApproverName, idempotencyKey) => approvalApi.transferApproval(id, { target, sourceApproverName, idempotencyKey }),
         fallback.actions.transferApproval
       ),
       updateAsset: apiBacked(
@@ -740,7 +740,7 @@ export function useApiBackedOaSystem() {
       ),
       withdrawApproval: apiBacked(
         ["approvals", "audit"],
-        (id) => approvalApi.withdrawApproval(id),
+        (id, idempotencyKey) => approvalApi.withdrawApproval(id, { idempotencyKey }),
         fallback.actions.withdrawApproval
       )
     };

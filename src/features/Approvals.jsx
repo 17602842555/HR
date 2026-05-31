@@ -39,6 +39,18 @@ function pendingDecisionsForUser(approval, currentUser) {
   ));
 }
 
+function approvalActionKey(approval, action, approverName = "", extra = "") {
+  const nodeIndex = Number.isFinite(approval?.currentNodeIndex) ? approval.currentNodeIndex : 0;
+  return [
+    "ui",
+    action,
+    approval?.id || "approval",
+    nodeIndex,
+    String(approverName || "").trim() || "actor",
+    String(extra || "").trim()
+  ].filter(Boolean).join("-");
+}
+
 function visibleRows(rows, tab, currentUser = {}) {
   const currentUserName = currentUser?.name || "当前用户";
   if (tab === "todo") return rows.filter((item) => pendingDecisionsForUser(item, currentUser).length > 0);
@@ -139,6 +151,14 @@ function knownUnresolvedApprovers(rule) {
   return [...new Set(unresolved)];
 }
 
+function uniqueStrings(values) {
+  return [...new Set(values.map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function normalizeApproverName(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function saveRuleErrorMessage(result) {
   const payload = result?.error?.details || {};
   const unresolved = payload.details?.unresolvedApprovers || payload.unresolvedApprovers || [];
@@ -165,6 +185,42 @@ function ApprovalRuleEditor({ actions, state, templates }) {
   const coverageRows = state.approvalRuleCoverage?.rows || [];
   const coverageSummary = state.approvalRuleCoverage?.summary || null;
   const template = templateOptions.find((item) => item.id === templateId) || templateOptions[0] || flowTemplates[0];
+  const approverOptions = useMemo(() => {
+    const byName = new Map();
+    const addOption = ({ department = "", email = "", name = "", roleTitle = "", status = "ACTIVE" }) => {
+      const trimmedName = String(name || "").trim();
+      if (!trimmedName || status === "DISABLED") return;
+      const key = normalizeApproverName(trimmedName);
+      if (byName.has(key)) return;
+      byName.set(key, {
+        department,
+        email,
+        name: trimmedName,
+        roleTitle
+      });
+    };
+
+    (state.iam?.users || []).forEach((user) => addOption({
+      department: user.employee?.department || "",
+      email: user.email || "",
+      name: user.name || user.employee?.name,
+      roleTitle: user.employee?.roleTitle || "",
+      status: user.status
+    }));
+    (state.iam?.accounts || []).forEach((account) => addOption({
+      department: account.department,
+      email: account.accountEmail,
+      name: account.account?.name || account.employeeName,
+      roleTitle: account.roleTitle,
+      status: account.accountStatus === "UNASSIGNED" ? "DISABLED" : account.accountStatus
+    }));
+
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+  }, [state.iam]);
+  const availableApproverNames = useMemo(
+    () => new Set(approverOptions.map((item) => normalizeApproverName(item.name))),
+    [approverOptions]
+  );
   const activeRule = useMemo(() => (
     state.approvalRules.find((rule) => rule.department === department && rule.templateId === templateId)
     || buildDefaultRule(department, template)
@@ -172,8 +228,14 @@ function ApprovalRuleEditor({ actions, state, templates }) {
   const [draft, setDraft] = useState(() => cloneRule(activeRule));
   const [saveStatus, setSaveStatus] = useState("");
   const errors = validateRule(draft);
+  const unboundDraftApprovers = useMemo(() => {
+    if (!draft || draft.enabled === false) return [];
+    return uniqueStrings((draft.nodes || []).flatMap((node) => node.approvers || []))
+      .filter((name) => !availableApproverNames.has(normalizeApproverName(name)));
+  }, [availableApproverNames, draft]);
   const unresolvedApproverNames = knownUnresolvedApprovers(draft);
-  const bindingErrors = unresolvedApproverNames.length ? [`未绑定真实账号：${unresolvedApproverNames.join("、")}`] : [];
+  const missingApprovers = uniqueStrings([...unresolvedApproverNames, ...unboundDraftApprovers]);
+  const bindingErrors = missingApprovers.length ? [`未绑定真实账号：${missingApprovers.join("、")}`] : [];
   const blockingErrors = [...errors, ...bindingErrors];
 
   useEffect(() => {
@@ -190,6 +252,23 @@ function ApprovalRuleEditor({ actions, state, templates }) {
     setDraft((current) => ({
       ...current,
       nodes: current.nodes.map((node, index) => (index === nodeIndex ? { ...node, ...patch } : node))
+    }));
+  };
+
+  const addNodeApprover = (nodeIndex, name) => {
+    const approverName = String(name || "").trim();
+    if (!approverName) return;
+    setSaveStatus("");
+    setDraft((current) => ({
+      ...current,
+      nodes: current.nodes.map((node, index) => {
+        if (index !== nodeIndex) return node;
+        return {
+          ...node,
+          approvers: uniqueStrings([...(node.approvers || []), approverName]),
+          approverUsers: []
+        };
+      })
     }));
   };
 
@@ -397,6 +476,43 @@ function ApprovalRuleEditor({ actions, state, templates }) {
                 })}
               />
             </label>
+            <div className="approver-picker-row">
+              <select
+                aria-label={`给节点 ${index + 1} 添加真实账号审批人`}
+                defaultValue=""
+                onChange={(event) => {
+                  addNodeApprover(index, event.target.value);
+                  event.currentTarget.value = "";
+                }}
+              >
+                <option value="">从账号库添加审批人</option>
+                {approverOptions.map((option) => (
+                  <option key={`${option.name}-${option.email}`} value={option.name}>
+                    {option.name}{option.department ? ` · ${option.department}` : ""}{option.roleTitle ? ` · ${option.roleTitle}` : ""}
+                  </option>
+                ))}
+              </select>
+              <span>{approverOptions.length ? `${approverOptions.length} 个可用账号` : "请先在权限审计里创建员工账号"}</span>
+            </div>
+            <div className="approver-chip-list">
+              {node.approvers.map((approver) => {
+                const boundInDraft = availableApproverNames.has(normalizeApproverName(approver));
+                return (
+                  <button
+                    className={boundInDraft ? "" : "warning"}
+                    key={`${node.id}-${approver}`}
+                    type="button"
+                    onClick={() => updateNode(index, {
+                      approvers: node.approvers.filter((item) => item !== approver),
+                      approverUsers: []
+                    })}
+                    title="点击移除审批人"
+                  >
+                    {approver}
+                  </button>
+                );
+              })}
+            </div>
             <em>必须 {node.approvers.length} 人全部同意后才进入下一节点 · {approverBindingText(node)}</em>
           </div>
         ))}
@@ -473,7 +589,17 @@ function ApprovalDetail({ actions, approval, currentUser }) {
             <StatusPill value={decision.status} />
             <span>{decision.time || "等待处理"}</span>
             {decision.status === "待审批" && approval.status === "待审批" && currentUserCanActAs(currentUser, decision.approver) ? (
-              <button type="button" onClick={() => actions.decideApproval(approval.id, "pass", decision.approver)}>同意：{decision.approver}</button>
+              <button
+                type="button"
+                onClick={() => actions.decideApproval(
+                  approval.id,
+                  "pass",
+                  decision.approver,
+                  approvalActionKey(approval, "pass", decision.approver)
+                )}
+              >
+                同意：{decision.approver}
+              </button>
             ) : decision.status === "待审批" && approval.status === "待审批" ? <em className="muted-action">等待本人处理</em> : null}
           </div>
         ))}
@@ -519,7 +645,7 @@ function ApprovalDetail({ actions, approval, currentUser }) {
       </ul>
 
       <div className="action-row">
-        <button type="button" onClick={() => actions.withdrawApproval(approval.id)}>撤回</button>
+        <button type="button" onClick={() => actions.withdrawApproval(approval.id, approvalActionKey(approval, "withdraw"))}>撤回</button>
         <input
           aria-label="转交审批人"
           value={transferTarget}
@@ -529,12 +655,30 @@ function ApprovalDetail({ actions, approval, currentUser }) {
         <button
           type="button"
           disabled={!canHandleCurrentNode}
-          onClick={() => actions.transferApproval(approval.id, transferTarget || "财务负责人", primaryApprover)}
+          onClick={() => actions.transferApproval(
+            approval.id,
+            transferTarget || "财务负责人",
+            primaryApprover,
+            approvalActionKey(approval, "transfer", primaryApprover, transferTarget || "财务负责人")
+          )}
         >
           转交
         </button>
-        <button type="button" disabled={!canHandleCurrentNode} onClick={() => actions.decideApproval(approval.id, "reject", primaryApprover)}>驳回</button>
-        <button className="primary" type="button" disabled={!canHandleCurrentNode} onClick={() => actions.decideApproval(approval.id, "pass", primaryApprover)}>同意我的待办</button>
+        <button
+          type="button"
+          disabled={!canHandleCurrentNode}
+          onClick={() => actions.decideApproval(approval.id, "reject", primaryApprover, approvalActionKey(approval, "reject", primaryApprover))}
+        >
+          驳回
+        </button>
+        <button
+          className="primary"
+          type="button"
+          disabled={!canHandleCurrentNode}
+          onClick={() => actions.decideApproval(approval.id, "pass", primaryApprover, approvalActionKey(approval, "pass", primaryApprover))}
+        >
+          同意我的待办
+        </button>
       </div>
     </div>
   );

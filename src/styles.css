@@ -1018,6 +1018,43 @@ h3 {
   gap: 5px;
 }
 
+.approver-picker-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.approver-picker-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.approver-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.approver-chip-list button {
+  min-height: 26px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: var(--blue);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.approver-chip-list button.warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
 .rule-node-card em {
   color: var(--muted);
   font-size: 12px;
