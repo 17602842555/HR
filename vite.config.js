@@ -1,5 +1,6 @@
 import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 function boolEnv(value) {
@@ -8,8 +9,7 @@ function boolEnv(value) {
 
 function localDashboardHtml() {
   const requireApi = boolEnv(process.env.VITE_REQUIRE_API);
-  const demoFallback = boolEnv(process.env.VITE_DEMO_FALLBACK);
-  const includeDemoData = !requireApi && (process.env.NODE_ENV !== "production" || demoFallback);
+  const includeDemoData = !requireApi && process.env.NODE_ENV !== "production";
   if (!includeDemoData) return "";
   try {
     return readFileSync(new URL("./oa-dashboard.html", import.meta.url), "utf8");
@@ -18,12 +18,24 @@ function localDashboardHtml() {
   }
 }
 
+function localOaSystemModule() {
+  const requireApi = boolEnv(process.env.VITE_REQUIRE_API);
+  const commercialBuild = requireApi || process.env.NODE_ENV === "production";
+  const path = commercialBuild ? "./src/hooks/emptyOaSystem.js" : "./src/hooks/useOaSystem.js";
+  return fileURLToPath(new URL(path, import.meta.url));
+}
+
 export default defineConfig({
   base: process.env.VITE_BASE_PATH || "/",
   define: {
     __LOCAL_DASHBOARD_HTML__: JSON.stringify(localDashboardHtml())
   },
   plugins: [react()],
+  resolve: {
+    alias: {
+      "@local-oa-system": localOaSystemModule()
+    }
+  },
   build: {
     rollupOptions: {
       output: {

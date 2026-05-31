@@ -64,6 +64,7 @@ export function Finance({ actions, onOpenFlow, state, workflowTemplates }) {
         idempotencyKey: `finance-request-ui-${requestForm.requestNo}-${Date.now()}`
       };
       const result = await actions.createFinanceRequest(payload);
+      if (result?.ok === false) throw result.error || new Error("财务单据创建失败。");
       setRequestMessage(result?.alreadySubmitted ? "已识别重复提交，已返回原财务单据。" : "财务单据已创建，并进入审批链路。");
       setRequestForm(defaultFinanceRequestForm(requestForm.type));
     } catch (error) {
@@ -84,6 +85,7 @@ export function Finance({ actions, onOpenFlow, state, workflowTemplates }) {
         idempotencyKey: `payroll-ui-${payrollForm.batchNo}-${Date.now()}`
       };
       const result = await actions.createPayroll(payload);
+      if (result?.ok === false) throw result.error || new Error("工资单创建失败。");
       setPayrollMessage(result?.alreadySubmitted ? "已识别重复提交，已返回原工资单流程。" : "工资单已创建，并进入审批链路。");
       setPayrollForm(defaultPayrollForm(state));
     } catch (error) {

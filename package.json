@@ -54,6 +54,7 @@
     "validate:drill-evidence": "node scripts/validate-drill-evidence.mjs",
     "validate:local-recovery-drill": "node scripts/validate-local-recovery-drill.mjs",
     "validate:cloudflare-backend": "node scripts/validate-cloudflare-backend.mjs",
+    "validate:frontend-bundle": "node scripts/validate-frontend-commercial-bundle.mjs",
     "audit:evidence-permissions": "node scripts/validate-evidence-permissions.mjs",
     "validate:migrations": "node scripts/validate-migrations.mjs",
     "validate:supply-chain": "node scripts/validate-supply-chain.mjs",
@@ -65,7 +66,7 @@
     "prepare:release-inputs": "node scripts/materialize-release-inputs.mjs",
     "configure:release-inputs": "node scripts/configure-release-inputs.mjs",
     "preflight:commercial": "node scripts/commercial-preflight.mjs",
-    "verify": "npm run preflight:commercial && npm run validate:migrations && npm run validate:supply-chain && npm run sbom:generate -- --check --json && npm run brand:check && npm run contract:api && npm run db:generate && npm run test:server && npm run build",
+    "verify": "npm run preflight:commercial && npm run validate:migrations && npm run validate:supply-chain && npm run sbom:generate -- --check --json && npm run brand:check && npm run contract:api && npm run db:generate && npm run test:server && npm run build && npm run validate:frontend-bundle",
     "brand:check": "node scripts/brand-check.mjs"
   },
   "dependencies": {

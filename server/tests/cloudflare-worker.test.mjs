@@ -393,6 +393,21 @@ test("cloudflare worker file upload and download use real checksum guards", asyn
   assert.equal(uploadResponse.status, 200);
   assert.equal(uploadPayload.file.sizeBytes, content.length);
   assert.equal(uploadPayload.file.checksum, sha256(content));
+  assert.equal("contentBase64" in uploadPayload.file, false);
+  assert.equal(uploadPayload.file.downloadAvailable, true);
+
+  const listResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/files", {
+      headers: { cookie }
+    }),
+    TEST_ENV
+  );
+  const listPayload = await responseJson(listResponse);
+  const listedFile = listPayload.files.find((item) => item.id === uploadPayload.file.id);
+  assert.equal(listResponse.status, 200);
+  assert.equal(Boolean(listedFile), true);
+  assert.equal("contentBase64" in listedFile, false);
+  assert.equal(listedFile.downloadAvailable, true);
 
   const downloadResponse = await worker.fetch(
     new Request(`https://deep-oa-hr.example.workers.dev/api/files/${uploadPayload.file.id}/download`, {
@@ -428,6 +443,21 @@ test("cloudflare worker dashboard import stores source checksum blocks duplicate
   assert.equal(importResponse.status, 200);
   assert.equal(importPayload.importRun.sourceChecksum, sha256(html));
   assert.equal(importPayload.importRun.sourceSizeBytes, Buffer.byteLength(html));
+  assert.equal("sourceContentBase64" in importPayload.importRun, false);
+  assert.equal(importPayload.importRun.metadata.sourceArtifact.downloadAvailable, true);
+
+  const importsResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/imports", {
+      headers: { cookie }
+    }),
+    TEST_ENV
+  );
+  const importsPayload = await responseJson(importsResponse);
+  const listedImport = importsPayload.importRuns.find((item) => item.id === importPayload.importRun.id);
+  assert.equal(importsResponse.status, 200);
+  assert.equal(Boolean(listedImport), true);
+  assert.equal("sourceContentBase64" in listedImport, false);
+  assert.equal(listedImport.metadata.sourceArtifact.downloadAvailable, true);
 
   const sourceResponse = await worker.fetch(
     new Request(`https://deep-oa-hr.example.workers.dev/api/imports/${importPayload.importRun.id}/source`, {

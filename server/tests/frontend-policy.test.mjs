@@ -105,6 +105,9 @@ test("commercial web image build forces API-required frontend output", () => {
   const storage = readText("src/services/storage.js");
   const dashboardSource = readText("src/data/dashboardSource.js");
   const viteConfig = readText("vite.config.js");
+  const apiBackedHook = readText("src/hooks/query/useApiBackedOaSystem.js");
+  const packageJson = readText("package.json");
+  const bundleValidator = readText("scripts/validate-frontend-commercial-bundle.mjs");
 
   assert.match(dockerfile, /ARG VITE_REQUIRE_API=1/);
   assert.match(dockerfile, /ARG VITE_DEMO_FALLBACK=0/);
@@ -114,8 +117,17 @@ test("commercial web image build forces API-required frontend output", () => {
   assert.match(dashboardSource, /__LOCAL_DASHBOARD_HTML__/);
   assert.match(viteConfig, /VITE_REQUIRE_API/);
   assert.match(viteConfig, /__LOCAL_DASHBOARD_HTML__/);
+  assert.match(viteConfig, /@local-oa-system/);
+  assert.match(viteConfig, /emptyOaSystem/);
+  assert.match(apiBackedHook, /@local-oa-system/);
+  assert.doesNotMatch(apiBackedHook, /\.\.\/useOaSystem\.js/);
   assert.match(compose, /VITE_REQUIRE_API:\s+"1"/);
   assert.match(compose, /VITE_DEMO_FALLBACK:\s+"0"/);
   assert.match(storage, /localStatePersistenceAllowed/);
   assert.match(storage, /removeItem\(STORAGE_KEY\)/);
+  assert.match(packageJson, /validate:frontend-bundle/);
+  assert.match(packageJson, /npm run validate:frontend-bundle/);
+  assert.match(bundleValidator, /admin123456/);
+  assert.match(bundleValidator, /oa-dashboard\.html/);
+  assert.match(bundleValidator, /张三/);
 });

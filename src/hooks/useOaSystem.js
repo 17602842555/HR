@@ -4,17 +4,19 @@ import {
   assetEventSeed,
   attendanceRecordSeed,
   auditSeed,
+  initialAssets,
+  resourceBookingSeed,
+  resourceSeed
+} from "../data/demoSeed.js";
+import {
   fieldValueLabel,
   flowTemplates,
   formDefaults,
-  initialAssets,
   makeDepartmentApprovalRules,
   makeInitialApprovals,
   nextAssetId,
   permissionCatalog,
   roleSeed,
-  resourceBookingSeed,
-  resourceSeed
 } from "../data/seed.js";
 import { clearStoredState, readStoredState, writeStoredState } from "../services/storage.js";
 

@@ -54,7 +54,7 @@ export const flowTemplates = [
   {
     id: "expense",
     name: "费用报销",
-    owner: "张三",
+    owner: "申请人",
     department: "行政部",
     amount: "¥980.00",
     node: "财务复核",
@@ -74,7 +74,7 @@ export const flowTemplates = [
   {
     id: "payment",
     name: "付款申请",
-    owner: "王五",
+    owner: "采购申请人",
     department: "采购部",
     amount: "¥8,950.00",
     node: "出纳付款",
@@ -86,7 +86,7 @@ export const flowTemplates = [
     fields: [
       { id: "supplier", label: "收款方", type: "input", value: "供应商 A" },
       { id: "amount", label: "付款金额", type: "amount", value: "8950" },
-      { id: "bankAccount", label: "收款账号", type: "input", value: "6222 **** **** 8821" },
+      { id: "bankAccount", label: "收款账号", type: "input", value: "" },
       { id: "payDate", label: "期望付款日", type: "date", value: "2026-05-31" }
     ],
     nodes: ["申请人提交", "采购负责人审批", "财务复核", "出纳付款", "归档与通知"]
@@ -114,7 +114,7 @@ export const flowTemplates = [
   {
     id: "recruit",
     name: "招聘需求",
-    owner: "李四",
+    owner: "招聘申请人",
     department: "人力资源部",
     amount: "2人",
     node: "编制复核",
@@ -134,7 +134,7 @@ export const flowTemplates = [
   {
     id: "salary",
     name: "调薪申请",
-    owner: "周八",
+    owner: "部门申请人",
     department: "直播事业部",
     amount: "¥1,200.00",
     node: "薪酬审批",
@@ -144,7 +144,7 @@ export const flowTemplates = [
     condition: "调薪比例 > 15% 时增加总经理审批",
     approvalMode: "顺序审批",
     fields: [
-      { id: "employee", label: "调薪员工", type: "input", value: "周八" },
+      { id: "employee", label: "调薪员工", type: "input", value: "员工姓名" },
       { id: "adjustAmount", label: "调整金额", type: "amount", value: "1200" },
       { id: "effectiveDate", label: "生效日期", type: "date", value: "2026-06-01" },
       { id: "reasonType", label: "调薪原因", type: "select", value: "岗位调整", options: ["岗位调整", "绩效激励", "转正调薪", "留才调薪"] }
@@ -154,7 +154,7 @@ export const flowTemplates = [
   {
     id: "onboarding",
     name: "入职办理",
-    owner: "李四",
+    owner: "人事专员",
     department: "人力资源部",
     amount: "入职",
     node: "资料复核",
@@ -175,7 +175,7 @@ export const flowTemplates = [
   {
     id: "regularization",
     name: "转正申请",
-    owner: "李四",
+    owner: "人事专员",
     department: "人力资源部",
     amount: "转正",
     node: "绩效确认",
@@ -185,7 +185,7 @@ export const flowTemplates = [
     condition: "试用期转正需部门评价与人事归档",
     approvalMode: "会签",
     fields: [
-      { id: "employee", label: "转正员工", type: "input", value: "张三" },
+      { id: "employee", label: "转正员工", type: "input", value: "员工姓名" },
       { id: "probationResult", label: "试用期结论", type: "select", value: "按期转正", options: ["按期转正", "提前转正", "延期转正", "不予转正"] },
       { id: "effectiveDate", label: "生效日期", type: "date", value: "2026-06-01" },
       { id: "reviewer", label: "评估负责人", type: "input", value: "部门负责人" }
@@ -195,7 +195,7 @@ export const flowTemplates = [
   {
     id: "transfer",
     name: "调岗申请",
-    owner: "李四",
+    owner: "人事专员",
     department: "人力资源部",
     amount: "调岗",
     node: "调出调入会签",
@@ -205,7 +205,7 @@ export const flowTemplates = [
     condition: "调岗需原部门、接收部门、人事全部同意",
     approvalMode: "会签",
     fields: [
-      { id: "employee", label: "调岗员工", type: "input", value: "周八" },
+      { id: "employee", label: "调岗员工", type: "input", value: "员工姓名" },
       { id: "fromDepartment", label: "调出部门", type: "input", value: "直播事业部" },
       { id: "toDepartment", label: "调入部门", type: "input", value: "运营中心" },
       { id: "effectiveDate", label: "生效日期", type: "date", value: "2026-06-10" },
@@ -216,7 +216,7 @@ export const flowTemplates = [
   {
     id: "offboarding",
     name: "离职交接",
-    owner: "李四",
+    owner: "人事专员",
     department: "人力资源部",
     amount: "离职",
     node: "交接确认",
@@ -226,10 +226,10 @@ export const flowTemplates = [
     condition: "离职需工作交接、资产归还、财务结算全部完成",
     approvalMode: "会签",
     fields: [
-      { id: "employee", label: "离职员工", type: "input", value: "钱七" },
+      { id: "employee", label: "离职员工", type: "input", value: "员工姓名" },
       { id: "leaveDate", label: "最后工作日", type: "date", value: "2026-06-15" },
       { id: "reasonType", label: "离职类型", type: "select", value: "个人原因", options: ["个人原因", "合同到期", "组织调整", "绩效原因"] },
-      { id: "handover", label: "交接人", type: "input", value: "张三" },
+      { id: "handover", label: "交接人", type: "input", value: "交接人" },
       { id: "assetReturn", label: "资产归还", type: "select", value: "待确认", options: ["已归还", "待确认", "无需归还"] }
     ],
     nodes: ["申请人提交", "直属负责人交接确认", "行政资产核验", "财务结算", "人事归档"]
@@ -237,7 +237,7 @@ export const flowTemplates = [
   {
     id: "exception",
     name: "状态异常人员报备",
-    owner: "张三",
+    owner: "异常发现人",
     department: "行政部",
     amount: "异常报备",
     node: "人事核验",
@@ -257,7 +257,7 @@ export const flowTemplates = [
   {
     id: "weekly_report",
     name: "工作汇报",
-    owner: "张三",
+    owner: "汇报人",
     department: "行政部",
     amount: "汇报",
     node: "负责人阅示",
@@ -277,7 +277,7 @@ export const flowTemplates = [
   {
     id: "client_request",
     name: "客户接待申请",
-    owner: "王五",
+    owner: "客户负责人",
     department: "客户服务部",
     amount: "客户接待",
     node: "客服负责人确认",
@@ -297,7 +297,7 @@ export const flowTemplates = [
   {
     id: "culture_event",
     name: "文化活动申请",
-    owner: "李四",
+    owner: "活动申请人",
     department: "人力资源部",
     amount: "活动",
     node: "预算确认",
@@ -317,7 +317,7 @@ export const flowTemplates = [
   {
     id: "training_request",
     name: "培训申请",
-    owner: "李四",
+    owner: "培训申请人",
     department: "人力资源部",
     amount: "培训",
     node: "培训负责人审批",
@@ -328,7 +328,7 @@ export const flowTemplates = [
     approvalMode: "会签",
     fields: [
       { id: "courseName", label: "课程名称", type: "input", value: "OA 管理员培训" },
-      { id: "trainee", label: "参训人员", type: "input", value: "张三" },
+      { id: "trainee", label: "参训人员", type: "input", value: "参训人员" },
       { id: "trainingDate", label: "培训日期", type: "date", value: "2026-06-08" },
       { id: "cost", label: "培训费用", type: "amount", value: "1200" }
     ],
@@ -337,7 +337,7 @@ export const flowTemplates = [
   {
     id: "leave",
     name: "请假申请",
-    owner: "赵六",
+    owner: "请假申请人",
     department: "仓储部",
     amount: "2天",
     node: "直属负责人审批",
@@ -350,14 +350,14 @@ export const flowTemplates = [
       { id: "leaveType", label: "假期类型", type: "select", value: "年假", options: ["年假", "病假", "事假", "调休"] },
       { id: "dateRange", label: "请假日期", type: "input", value: "2026-05-30 ~ 2026-05-31" },
       { id: "days", label: "请假时长", type: "number", value: "2" },
-      { id: "handover", label: "工作交接人", type: "input", value: "张三" }
+      { id: "handover", label: "工作交接人", type: "input", value: "交接人" }
     ],
     nodes: ["申请人提交", "直属负责人审批", "人事备案", "归档与通知"]
   },
   {
     id: "item",
     name: "物品领用",
-    owner: "张三",
+    owner: "领用申请人",
     department: "行政部",
     amount: "直播耗材",
     node: "行政出库",
@@ -385,45 +385,6 @@ export const moduleCards = [
   { title: "招聘需求流程", desc: "编制、面试、Offer 与入职", icon: ClipboardList },
   { title: "调薪申请流程", desc: "薪酬调整审批与生效归档", icon: Landmark },
   { title: "假勤流程", desc: "定位打卡、请假、年假、病假", icon: CalendarDays }
-];
-
-export const initialAssets = [
-  { id: "IT-2024-000123", name: "联想 ThinkPad X1 Carbon", category: "办公电脑", owner: "张三", status: "借用中", location: "集团总部 · 行政部", qrVersion: 1 },
-  { id: "LIVE-2024-000088", name: "索尼直播相机 A7M4", category: "直播设备", owner: "直播间A", status: "使用中", location: "三楼直播间", qrVersion: 1 },
-  { id: "LIVE-2024-000120", name: "神牛补光灯 SL150", category: "直播设备", owner: "设备库", status: "空闲", location: "三楼设备库", qrVersion: 1 },
-  { id: "ADM-2023-000061", name: "会议平板 75寸", category: "会议设备", owner: "二号会议室", status: "固定资产", location: "二号会议室", qrVersion: 1 },
-  { id: "IT-2025-000018", name: "MacBook Pro 14", category: "办公电脑", owner: "剪辑组", status: "维修中", location: "IT维修区", qrVersion: 2 }
-];
-
-export const assetEventSeed = [
-  { id: "AE-1", assetId: "IT-2024-000123", time: "2026-05-28 11:20:00", type: "借用", operator: "张三", content: "借用给行政部，预计 7 天后归还" },
-  { id: "AE-2", assetId: "LIVE-2024-000088", time: "2026-05-27 15:18:00", type: "领用", operator: "直播间A", content: "固定用于三楼直播间" },
-  { id: "AE-3", assetId: "IT-2025-000018", time: "2026-05-26 09:12:00", type: "维修", operator: "IT服务台", content: "电池健康异常，进入维修区" }
-];
-
-export const resourceSeed = [
-  { type: "会议室", name: "一号会议室", capacity: "10人", slots: [3, 2, 0, 4, 0, 1, 0], total: 4 },
-  { type: "会议室", name: "二号会议室", capacity: "20人", slots: [5, 0, 2, 0, 0, 3, 1], total: 8 },
-  { type: "车辆", name: "商务车A", capacity: "7座", slots: [1, 0, 2, 0, 0, 1, 0], total: 2 },
-  { type: "工位", name: "直播一区", capacity: "12位", slots: [8, 9, 0, 12, 0, 7, 0], total: 12 },
-  { type: "设备", name: "补光灯组", capacity: "8套", slots: [5, 0, 2, 0, 0, 3, 1], total: 8 }
-];
-
-export const resourceBookingSeed = [
-  { id: "BOOK-1", resourceName: "一号会议室", type: "会议室", dayIndex: 0, period: "09:00-10:00", applicant: "张三", purpose: "周例会", status: "已预约" },
-  { id: "BOOK-2", resourceName: "商务车A", type: "车辆", dayIndex: 2, period: "14:00-18:00", applicant: "王五", purpose: "供应商拜访", status: "已预约" }
-];
-
-export const attendanceRecordSeed = [
-  { id: "ATT-1", employee: "张三", department: "行政部", workDate: "2026-05-29", checkIn: "2026-05-29 08:58", checkOut: "2026-05-29 18:05", status: "正常", minutesLate: 0, source: "门禁同步", reason: "" },
-  { id: "ATT-2", employee: "李四", department: "人事部", workDate: "2026-05-29", checkIn: "2026-05-29 09:18", checkOut: "2026-05-29 18:10", status: "迟到", minutesLate: 18, source: "门禁同步", reason: "地铁延误" },
-  { id: "ATT-3", employee: "王五", department: "财务中心", workDate: "2026-05-29", checkIn: "", checkOut: "2026-05-29 18:02", status: "缺卡", minutesLate: 0, source: "手动补录", reason: "早卡缺失" }
-];
-
-export const auditSeed = [
-  { id: "AUD-1", time: "2026-05-29 09:45:12", operator: "张三", type: "更新", object: "员工档案", content: "更新了联系方式，敏感字段已脱敏", result: "成功", ip: "10.10.2.15" },
-  { id: "AUD-2", time: "2026-05-29 09:30:21", operator: "李四", type: "新增", object: "员工入职", content: "新增员工入职信息", result: "成功", ip: "10.10.2.16" },
-  { id: "AUD-3", time: "2026-05-29 09:12:05", operator: "王五", type: "提交审批", object: "办公用品申领", content: "提交办公用品申领单", result: "成功", ip: "10.10.2.17" }
 ];
 
 export const permissionCatalog = [
@@ -562,7 +523,7 @@ export function workflowDefinitionToTemplate(definition = {}) {
     ...fallback,
     id: definition.templateId || fallback.id || definition.id || definition.code,
     name: definition.name || fallback.name || definition.code,
-    owner: definition.owner || fallback.owner || "张三",
+    owner: definition.owner || fallback.owner || "申请人",
     department: fallback.department || "行政部",
     amount: fallback.amount || "-",
     node: rawNodes.find((node) => !node.includes("归档")) || fallback.node || "待分配",
@@ -601,7 +562,7 @@ export function fieldValueLabel(template, formData = {}) {
 
 function approversFor(template, department, nodeName, index) {
   const owner = `${department}负责人`;
-  if (index === 0) return [owner, "张三"];
+  if (index === 0) return [owner, "直属负责人"];
   if (template.category === "财务行政") return nodeName.includes("付款") ? ["出纳", "财务负责人"] : ["财务负责人", "财务专员"];
   if (template.category === "组织人事") return ["人事负责人", "HRBP"];
   if (template.category === "行政资产") return ["行政资产管理员", owner];

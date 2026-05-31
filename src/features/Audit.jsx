@@ -263,7 +263,10 @@ export function Audit({ actions, state }) {
   const [syncRoleCodes, setSyncRoleCodes] = useState(["employee-self-service"]);
   const [passwordDraft, setPasswordDraft] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
+  const [iamBusyKey, setIamBusyKey] = useState("");
+  const [iamMessage, setIamMessage] = useState("");
   const [visibility, setVisibility] = useState("PRIVATE");
+  const [attachmentMessage, setAttachmentMessage] = useState("");
   const fileInputRef = useRef(null);
   const selectedRole = roles.find((role) => role.id === selectedRoleId) || roles[0] || null;
   const selectedUser = (iam.users || []).find((user) => user.id === selectedUserId) || iam.users?.[0] || null;
@@ -280,6 +283,22 @@ export function Audit({ actions, state }) {
   }, {}), [permissions]);
   const exportCount = exportRecords.length || state.auditLogs.filter((item) => item.type === "导出" || item.content.includes("导出")).length;
   const attachmentCount = files.length;
+  const runIamChange = async (busyKey, successMessage, change) => {
+    setIamBusyKey(busyKey);
+    setIamMessage("正在保存权限变更...");
+    try {
+      const result = await change();
+      if (result?.ok === false) {
+        setIamMessage(result.error?.message || "权限变更失败。");
+        return;
+      }
+      setIamMessage(successMessage);
+    } catch (error) {
+      setIamMessage(error?.message || "权限变更失败。");
+    } finally {
+      setIamBusyKey("");
+    }
+  };
   const togglePermission = (permissionCode, enabled) => {
     if (!selectedRole) return;
     const nextCodes = new Set(selectedPermissionCodes);
@@ -288,7 +307,11 @@ export function Audit({ actions, state }) {
     } else {
       nextCodes.delete(permissionCode);
     }
-    actions.updateRolePermissions(selectedRole.id, [...nextCodes]);
+    void runIamChange(
+      `role-permission:${selectedRole.id}:${permissionCode}`,
+      `已更新 ${selectedRole.name} 的权限。`,
+      () => actions.updateRolePermissions(selectedRole.id, [...nextCodes])
+    );
   };
   const toggleUserRole = (roleCode, enabled) => {
     if (!selectedUser) return;
@@ -298,7 +321,11 @@ export function Audit({ actions, state }) {
     } else {
       nextCodes.delete(roleCode);
     }
-    actions.updateUserRoles(selectedUser.id, [...nextCodes]);
+    void runIamChange(
+      `user-role:${selectedUser.id}:${roleCode}`,
+      `已更新 ${selectedUser.name} 的角色。`,
+      () => actions.updateUserRoles(selectedUser.id, [...nextCodes])
+    );
   };
   const toggleAccountRole = (roleCode, enabled) => {
     const nextCodes = new Set(accountDraft.roleCodes);
@@ -318,12 +345,18 @@ export function Audit({ actions, state }) {
     }
     setSyncRoleCodes([...nextCodes]);
   };
-  const submitAttachment = (event) => {
+  const submitAttachment = async (event) => {
     event.preventDefault();
     if (!selectedFile) return;
-    actions.uploadFile(selectedFile, { visibility });
+    setAttachmentMessage("正在上传附件...");
+    const result = await actions.uploadFile(selectedFile, { visibility });
+    if (result?.ok === false) {
+      setAttachmentMessage(result.error?.message || "附件上传失败。");
+      return;
+    }
     setSelectedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    setAttachmentMessage("附件已上传，并写入访问审计。");
   };
   const submitAccountCreate = async (event) => {
     event.preventDefault();
@@ -612,8 +645,8 @@ export function Audit({ actions, state }) {
         <div className="readiness-summary">
           <div>
             <span>运行环境</span>
-            <strong>{systemReadiness.runtime?.environment || "local-demo"}</strong>
-            <em>{systemReadiness.runtime?.service || "local-demo"}</em>
+            <strong>{systemReadiness.runtime?.environment || "未验证"}</strong>
+            <em>{systemReadiness.runtime?.service || "未连接"}</em>
           </div>
           <div>
             <span>开放缺口</span>
@@ -831,7 +864,7 @@ export function Audit({ actions, state }) {
                       <label key={permission.code}>
                         <input
                           checked={checked}
-                          disabled={protectedAdminPermission}
+                          disabled={protectedAdminPermission || Boolean(iamBusyKey)}
                           type="checkbox"
                           onChange={(event) => togglePermission(permission.code, event.target.checked)}
                         />
@@ -843,6 +876,7 @@ export function Audit({ actions, state }) {
                 </section>
               ))}
             </div>
+            {iamMessage ? <p className="iam-change-message">{iamMessage}</p> : null}
           </div>
         ) : null}
       </Panel>
@@ -981,7 +1015,7 @@ export function Audit({ actions, state }) {
                     <label key={`${selectedUser.id}-${role.code}`}>
                       <input
                         checked={checked}
-                        disabled={lastRole}
+                        disabled={lastRole || Boolean(iamBusyKey)}
                         type="checkbox"
                         onChange={(event) => toggleUserRole(role.code, event.target.checked)}
                       />
@@ -993,15 +1027,21 @@ export function Audit({ actions, state }) {
               </div>
               <div className="action-row">
                 <button
+                  disabled={Boolean(iamBusyKey)}
                   type="button"
-                  onClick={() => actions.updateUserStatus(
-                    selectedUser.id,
-                    selectedUser.status === "DISABLED" ? "ACTIVE" : "DISABLED"
-                  )}
+                  onClick={() => {
+                    const nextStatus = selectedUser.status === "DISABLED" ? "ACTIVE" : "DISABLED";
+                    void runIamChange(
+                      `user-status:${selectedUser.id}`,
+                      `已${nextStatus === "ACTIVE" ? "恢复" : "停用"} ${selectedUser.name} 的账号。`,
+                      () => actions.updateUserStatus(selectedUser.id, nextStatus)
+                    );
+                  }}
                 >
                   {selectedUser.status === "DISABLED" ? "恢复账号" : "停用账号"}
                 </button>
               </div>
+              {iamMessage ? <p className="iam-change-message">{iamMessage}</p> : null}
               <div className="password-reset-row">
                 <label>
                   <span>临时密码</span>
@@ -1038,7 +1078,7 @@ export function Audit({ actions, state }) {
             </select>
           </label>
           <button className="primary" disabled={!selectedFile} type="submit">上传附件</button>
-          <p>{selectedFile ? `${selectedFile.name} · ${formatBytes(selectedFile.size)}` : "未选择文件"}</p>
+          <p>{attachmentMessage || (selectedFile ? `${selectedFile.name} · ${formatBytes(selectedFile.size)}` : "未选择文件")}</p>
         </form>
         <DataTable columns={fileColumns} empty="暂无附件" rows={files} />
       </Panel>

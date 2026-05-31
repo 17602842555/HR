@@ -294,6 +294,32 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
+function publicFileRecord(file = {}) {
+  const { contentBase64, ...safeFile } = file;
+  return {
+    ...safeFile,
+    contentAvailable: Boolean(contentBase64),
+    downloadAvailable: Boolean(contentBase64)
+  };
+}
+
+function publicImportRun(run = {}) {
+  const { sourceContentBase64, ...safeRun } = run;
+  return {
+    ...safeRun,
+    metadata: {
+      ...(run.metadata || {}),
+      sourceArtifact: {
+        ...(run.metadata?.sourceArtifact || {}),
+        checksum: run.sourceChecksum || run.metadata?.sourceArtifact?.checksum || "",
+        downloadAvailable: Boolean(sourceContentBase64),
+        fileName: run.sourceName || run.metadata?.sourceArtifact?.fileName || "",
+        sizeBytes: run.sourceSizeBytes || run.metadata?.sourceArtifact?.sizeBytes || 0
+      }
+    }
+  };
+}
+
 async function nativePasswordHash(password, salt = crypto.randomUUID()) {
   const encoder = new TextEncoder();
   const bytes = await crypto.subtle.digest("SHA-256", encoder.encode(`${salt}:${password}`));
@@ -2617,7 +2643,7 @@ async function handleNativeApi(request, env) {
     ]), filename);
   }
 
-  if (pathname === "/files" && method === "GET") return ok({ files: state.files });
+  if (pathname === "/files" && method === "GET") return ok({ files: state.files.map(publicFileRecord) });
   if (pathname === "/files" && method === "POST") {
     const body = await readJson(request);
     if (!body.fileName || !body.contentBase64) return badRequest("文件名和 base64 内容必填。");
@@ -2640,7 +2666,7 @@ async function handleNativeApi(request, env) {
     state.files = [file, ...state.files];
     await appendAudit(env, state, { action: "上传附件", actor: actorName, content: file.fileName, object: "文件附件", objectId: file.id, request });
     await saveState(env, state);
-    return ok({ file });
+    return ok({ file: publicFileRecord(file) });
   }
   if (segments[0] === "files" && segments[1] && segments[2] === "download" && method === "GET") {
     const file = state.files.find((item) => item.id === decodeURIComponent(segments[1]));
@@ -2663,7 +2689,7 @@ async function handleNativeApi(request, env) {
     });
   }
 
-  if (pathname === "/imports" && method === "GET") return ok({ importRuns: state.importRuns });
+  if (pathname === "/imports" && method === "GET") return ok({ importRuns: state.importRuns.map(publicImportRun) });
   if (pathname === "/imports/dashboard-html" && method === "POST") {
     const body = await readJson(request);
     let html = String(body.html || body.content || "").trim();
@@ -2708,7 +2734,7 @@ async function handleNativeApi(request, env) {
     state.importRuns = [run, ...state.importRuns];
     await appendAudit(env, state, { action: "导入仪表盘数据", actor: actorName, content: `导入 ${sourceName} 数据`, object: "数据导入", objectId: run.id, request });
     await saveState(env, state);
-    return ok({ importRun: run, people: state.people });
+    return ok({ importRun: publicImportRun(run), people: state.people });
   }
   if (segments[0] === "imports" && segments[2] === "source" && method === "GET") {
     const run = state.importRuns.find((item) => item.id === decodeURIComponent(segments[1]));

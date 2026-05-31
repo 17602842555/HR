@@ -28,7 +28,7 @@ function labelForDate(dateToken) {
 }
 
 export function Resources({ actions, currentUser, state }) {
-  const currentUserName = currentUser?.name || "张三";
+  const currentUserName = currentUser?.name || "当前用户";
   const windowStart = state.resourceWindowStart || todayToken();
   const [form, setForm] = useState({
     resourceName: state.resources[0]?.name || "",

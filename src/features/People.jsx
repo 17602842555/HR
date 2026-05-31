@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { DataTable, MetricCard, Panel, StatusPill } from "../components/Primitives.jsx";
-import { maskPerson } from "../data/dashboardSource.js";
+import { maskPerson } from "../data/personMask.js";
 
 function formatImportTime(value) {
   if (!value) return "-";
@@ -122,7 +122,7 @@ export function People({ actions, state }) {
       <section className="module-title">
         <div>
           <h1>组织人事</h1>
-          <p>从 `oa-dashboard.html` 解析在职、离职、女性员工、当月离职和组织结构数据，默认隐藏敏感字段。</p>
+          <p>从受控人员源文件同步在职、离职、女性员工、当月离职和组织结构数据，默认隐藏敏感字段。</p>
         </div>
         <button className="primary" type="button" onClick={() => actions.toggleSensitive()}>
           {state.revealSensitive ? "关闭敏感字段" : "授权查看敏感字段"}
@@ -203,7 +203,7 @@ export function People({ actions, state }) {
           event.preventDefault();
           const file = event.currentTarget.dashboardFile.files?.[0];
           if (!file) {
-            setImportStatus("请选择 oa-dashboard.html 文件");
+            setImportStatus("请选择人员源 HTML 文件");
             return;
           }
           const html = await file.text();
@@ -215,7 +215,7 @@ export function People({ actions, state }) {
             <input accept=".html,text/html" name="dashboardFile" type="file" />
           </label>
           <button className="primary" type="submit">导入人员数据</button>
-          <p>{importStatus || "支持重新导入 oa-dashboard.html，系统会记录来源、校验和、导入行数和审计日志。"}</p>
+          <p>{importStatus || "支持重新导入人员源 HTML，系统会记录来源、校验和、导入行数和审计日志。"}</p>
         </form>
         <DataTable columns={importColumns} empty="暂无导入记录" rows={state.importRuns || []} />
       </Panel>

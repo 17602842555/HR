@@ -1,3 +1,5 @@
+import { maskPerson } from "./personMask.js";
+
 const dashboardHtml = typeof __LOCAL_DASHBOARD_HTML__ === "string" ? __LOCAL_DASHBOARD_HTML__ : "";
 
 const personColumns = [
@@ -94,12 +96,4 @@ export function loadDashboardPeople() {
   return loadDashboardPeopleFromHtml(dashboardHtml);
 }
 
-export function maskPerson(person, revealSensitive = false) {
-  if (revealSensitive) return person;
-  return {
-    ...person,
-    school: person.school ? `${person.school.slice(0, 2)}***` : "",
-    major: person.major ? `${person.major.slice(0, 2)}***` : "",
-    hukou: person.hukou ? `${person.hukou.slice(0, 2)}***` : ""
-  };
-}
+export { maskPerson };

@@ -1,6 +1,6 @@
 const FALLBACK_USER = {
-  id: "mock-user",
-  name: "张三",
+  id: "anonymous-user",
+  name: "未登录用户",
   department: "行政部",
   organization: "集团总部",
   title: "行政负责人",

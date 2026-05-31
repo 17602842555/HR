@@ -15,7 +15,7 @@ export function AppShell({
   setQuery
 }) {
   const organization = currentUser?.organization || "集团总部";
-  const userName = currentUser?.name || "张三";
+  const userName = currentUser?.name || "未登录用户";
   const department = currentUser?.department || "行政部";
   const trimmedQuery = query.trim();
 

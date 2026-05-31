@@ -43,7 +43,7 @@ function FlowForm({ actions, departments, initialTemplate, onClose, workflowTemp
   const departmentOptions = departments.includes(template.department) ? departments : [template.department, ...departments];
   const [form, setForm] = useState({
     title: initialTemplate?.name || template.name,
-    applicant: initialTemplate?.owner || "张三",
+    applicant: initialTemplate?.owner || "申请人",
     department: initialTemplate?.department || template.department,
     reason: "用于当前业务流程审批，完成后自动归档并写入审计。",
     formData: formDefaults(template)
@@ -330,7 +330,7 @@ function FirstLoginSetupScreen({ apiStatus, auth, currentUser }) {
 }
 
 function LeaveForm({ actions, onClose }) {
-  const [form, setForm] = useState({ employee: "张三", type: "年假", dates: "2026-05-30 ~ 2026-05-31", days: 2 });
+  const [form, setForm] = useState({ employee: "当前员工", type: "年假", dates: "2026-05-30 ~ 2026-05-31", days: 2 });
   const submit = () => {
     actions.createLeave(form);
     onClose();

@@ -1,7 +1,7 @@
 import { apiRequest } from "./client.js";
 
 function safeFileName(fileName) {
-  return String(fileName || "oa-dashboard.html").replace(/[\\/:*?"<>|]/g, "_").slice(0, 120) || "oa-dashboard.html";
+  return String(fileName || "people-source.html").replace(/[\\/:*?"<>|]/g, "_").slice(0, 120) || "people-source.html";
 }
 
 function downloadBlob(blob, fileName) {
@@ -40,6 +40,6 @@ export async function downloadImportSource(run) {
     headers: { accept: "application/octet-stream" },
     responseType: "blob"
   });
-  downloadBlob(blob, run.metadata?.sourceArtifact?.fileName || run.sourceName || "oa-dashboard.html");
+  downloadBlob(blob, run.metadata?.sourceArtifact?.fileName || run.sourceName || "people-source.html");
   return blob;
 }

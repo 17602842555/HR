@@ -16,7 +16,7 @@ import * as systemApi from "../../api/system.js";
 import { apiUnavailableStatus, resolveApiPolicy } from "../../config/apiPolicy.mjs";
 import { apiActionErrorStatus, canFallbackToLocalAction } from "../../services/apiFallbackPolicy.mjs";
 import { apiRequiredBaselineState, fallbackUser, mergeApiState, normalizeApiStatePayload, normalizeCurrentUser } from "../../services/apiState.js";
-import { useOaSystem } from "../useOaSystem.js";
+import { useOaSystem as useLocalOaSystem } from "@local-oa-system";
 
 const DOMAIN_LOADERS = {
   analytics: [
@@ -163,8 +163,15 @@ function assetActionForStatus(status) {
   }[status] || "";
 }
 
+function okActionResult(result, extra = {}) {
+  if (result && typeof result === "object" && "ok" in result) return result;
+  return result && typeof result === "object"
+    ? { ...result, ok: true, ...extra }
+    : { ok: true, data: result ?? null, ...extra };
+}
+
 export function useApiBackedOaSystem() {
-  const fallback = useOaSystem();
+  const fallback = useLocalOaSystem();
   const apiPolicy = useMemo(() => resolveApiPolicy(import.meta.env), []);
   const baselineState = useMemo(() => (
     apiPolicy.requireApi ? apiRequiredBaselineState(fallback.state) : fallback.state
@@ -378,25 +385,25 @@ export function useApiBackedOaSystem() {
       localAction(...args);
     };
 
-    const apiBacked = (domains, apiCall, localAction) => (...args) => {
+    const apiBacked = (domains, apiCall, localAction) => async (...args) => {
       if (!shouldUseApi) {
         markLocalOverride(domains);
-        localAction(...args);
-        return;
+        return okActionResult(localAction(...args), { source: "local" });
       }
 
-      void (async () => {
-        try {
-          await apiCall(...args);
-          await reloadDomains(domains);
-        } catch (error) {
-          if (canFallbackToLocalAction(error, apiPolicy)) {
-            markLocalOverride(domains);
-            localAction(...args);
-          }
-          setApiStatus(apiActionErrorStatus(error, apiPolicy));
+      try {
+        const result = await apiCall(...args);
+        await reloadDomains(domains);
+        setApiStatus({ error: "", mode: "ready", source: "api" });
+        return okActionResult(result, { source: "api" });
+      } catch (error) {
+        if (canFallbackToLocalAction(error, apiPolicy)) {
+          markLocalOverride(domains);
+          return okActionResult(localAction(...args), { fallback: true, source: "local" });
         }
-      })();
+        setApiStatus(apiActionErrorStatus(error, apiPolicy));
+        return { ok: false, error };
+      }
     };
 
     const toggleSensitive = () => {

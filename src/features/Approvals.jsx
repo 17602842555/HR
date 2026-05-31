@@ -10,7 +10,7 @@ const approvalTabs = [
   { id: "all", label: "全部" }
 ];
 
-function visibleRows(rows, tab, currentUserName = "张三") {
+function visibleRows(rows, tab, currentUserName = "当前用户") {
   if (tab === "todo") return rows.filter((item) => item.status.includes("待") || item.status.includes("超时") || item.status.includes("付款"));
   if (tab === "mine") return rows.filter((item) => item.applicant === currentUserName);
   if (tab === "done") return rows.filter((item) => ["已通过", "已驳回", "已撤回"].includes(item.status));
@@ -37,7 +37,7 @@ function cloneRule(rule) {
 
 function fallbackApprovers(template, department, nodeName, index) {
   const departmentOwner = `${department}负责人`;
-  if (index === 0) return [departmentOwner, "张三"];
+  if (index === 0) return [departmentOwner, "直属负责人"];
   if (template.category === "财务行政") return nodeName.includes("付款") ? ["出纳", "财务负责人"] : ["财务负责人", "财务专员"];
   if (template.category === "组织人事") return ["人事负责人", "HRBP"];
   if (template.category === "行政资产") return ["行政资产管理员", departmentOwner];
@@ -454,8 +454,8 @@ function ApprovalDetail({ actions, approval }) {
         >
           转交
         </button>
-        <button type="button" onClick={() => actions.decideApproval(approval.id, "reject", pendingApprovers[0]?.approver || "张三")}>驳回</button>
-        <button className="primary" type="button" onClick={() => actions.decideApproval(approval.id, "pass", pendingApprovers[0]?.approver || "张三")}>同意下一个待处理人</button>
+        <button type="button" onClick={() => actions.decideApproval(approval.id, "reject", pendingApprovers[0]?.approver || currentUserName)}>驳回</button>
+        <button className="primary" type="button" onClick={() => actions.decideApproval(approval.id, "pass", pendingApprovers[0]?.approver || currentUserName)}>同意下一个待处理人</button>
       </div>
     </div>
   );
@@ -465,7 +465,7 @@ export function Approvals({ actions, currentUser, onOpenFlow, state, workflowTem
   const templateOptions = workflowTemplates?.length ? workflowTemplates : flowTemplates;
   const [selected, setSelected] = useState(state.approvals[0]?.id || "");
   const [tab, setTab] = useState("todo");
-  const currentUserName = currentUser?.name || "张三";
+  const currentUserName = currentUser?.name || "当前用户";
   const rows = useMemo(() => visibleRows(state.approvals, tab, currentUserName), [currentUserName, state.approvals, tab]);
   const current = state.approvals.find((item) => item.id === selected) || rows[0] || state.approvals[0];
   const definitionCount = templateOptions.length;

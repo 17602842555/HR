@@ -4,7 +4,7 @@ import { DataTable, MetricCard, Panel, StatusPill } from "../components/Primitiv
 function defaultRecordForm() {
   const today = new Date().toISOString().slice(0, 10);
   return {
-    employee: "张三",
+    employee: "当前员工",
     department: "行政部",
     workDate: today,
     checkIn: `${today} 09:00`,
@@ -45,7 +45,8 @@ export function Attendance({ actions, onOpenLeave, state }) {
     event.preventDefault();
     setRecordMessage("正在保存考勤记录...");
     try {
-      await actions.createAttendanceRecord({ ...recordForm, minutesLate: Number(recordForm.minutesLate || 0) });
+      const result = await actions.createAttendanceRecord({ ...recordForm, minutesLate: Number(recordForm.minutesLate || 0) });
+      if (result?.ok === false) throw result.error || new Error("考勤记录保存失败。");
       setRecordMessage("考勤记录已保存，并写入审计日志。");
       setRecordForm(defaultRecordForm());
     } catch (error) {
