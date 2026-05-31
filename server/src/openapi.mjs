@@ -692,8 +692,8 @@ export const openApiDocument = {
         required: ["login", "password"],
         properties: {
           tenantCode: { type: "string", default: "default" },
-          login: { type: "string", description: "Preferred login identifier: mobile phone number; email remains supported for legacy accounts." },
-          email: { type: "string", description: "Login identifier: email address or mobile phone number." },
+          login: { type: "string", description: "Primary login identifier: mobile phone number. Legacy email accounts remain supported." },
+          email: { type: "string", description: "Legacy alias for the login identifier." },
           phone: { type: "string", description: "Mobile phone login alias." },
           password: { type: "string", minLength: 1 }
         }
@@ -715,8 +715,8 @@ export const openApiDocument = {
         required: ["currentPassword", "login", "name", "newPassword"],
         properties: {
           currentPassword: { type: "string", minLength: 1 },
-          login: { type: "string", description: "Preferred new login identifier: mobile phone number; email remains supported." },
-          email: { type: "string", description: "Login identifier: email address or mobile phone number." },
+          login: { type: "string", description: "Primary new login identifier: mobile phone number. Legacy email accounts remain supported." },
+          email: { type: "string", description: "Legacy alias for the login identifier." },
           phone: { type: "string", description: "Mobile phone login alias." },
           name: { type: "string", minLength: 1 },
           newPassword: { type: "string", minLength: 12 }
@@ -729,8 +729,8 @@ export const openApiDocument = {
           activationCode: { type: "string", minLength: 12 },
           employeeNo: { type: "string", minLength: 1 },
           name: { type: "string", minLength: 1 },
-          login: { type: "string", description: "Preferred new login identifier: mobile phone number; email remains supported." },
-          email: { type: "string", description: "Login identifier: email address or mobile phone number." },
+          login: { type: "string", description: "Primary new login identifier: mobile phone number. Legacy email accounts remain supported." },
+          email: { type: "string", description: "Legacy alias for the login identifier." },
           phone: { type: "string", description: "Mobile phone login alias." },
           password: { type: "string", minLength: 12 },
           tenantCode: { type: "string", default: "default" }
@@ -747,8 +747,8 @@ export const openApiDocument = {
         type: "object",
         required: ["login", "name", "newPassword", "roleCodes"],
         properties: {
-          login: { type: "string", description: "Preferred login identifier: mobile phone number; email remains supported." },
-          email: { type: "string", description: "Login identifier: email address or mobile phone number." },
+          login: { type: "string", description: "Primary login identifier: mobile phone number. Legacy email accounts remain supported." },
+          email: { type: "string", description: "Legacy alias for the login identifier." },
           phone: { type: "string", description: "Mobile phone login alias." },
           name: { type: "string", minLength: 1 },
           newPassword: { type: "string", minLength: 12 },
@@ -785,7 +785,7 @@ export const openApiDocument = {
                 employeeId: { type: "string" },
                 employeeNo: { type: "string" },
                 name: { type: "string" },
-                email: { type: "string", description: "Login identifier: email address or mobile phone number." },
+                email: { type: "string", description: "Stored login identifier. Prefer mobile phone numbers for new accounts." },
                 temporaryPassword: { type: "string" },
                 roleCodes: { type: "array", items: { type: "string" } }
               }

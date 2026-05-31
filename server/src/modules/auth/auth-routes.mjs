@@ -267,7 +267,7 @@ export async function registerAuthRoutes(app) {
       });
     }
     if (!validLoginIdentifier(email)) {
-      return reply.code(400).send({ error: "invalid_login_identifier", message: "登录账号需要使用邮箱或手机号。" });
+      return reply.code(400).send({ error: "invalid_login_identifier", message: "登录账号需要使用手机号；历史邮箱账号仍可兼容登录。" });
     }
     const validation = validateNewPassword(password);
     if (!validation.ok) {
@@ -491,7 +491,7 @@ export async function registerAuthRoutes(app) {
       });
     }
     if (!validLoginIdentifier(email)) {
-      return reply.code(400).send({ error: "invalid_login_identifier", message: "登录账号需要使用邮箱或手机号。" });
+      return reply.code(400).send({ error: "invalid_login_identifier", message: "登录账号需要使用手机号；历史邮箱账号仍可兼容登录。" });
     }
 
     const validation = validateNewPassword(newPassword);

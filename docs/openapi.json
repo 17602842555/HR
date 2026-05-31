@@ -5979,11 +5979,11 @@
           },
           "login": {
             "type": "string",
-            "description": "Preferred login identifier: mobile phone number; email remains supported for legacy accounts."
+            "description": "Primary login identifier: mobile phone number. Legacy email accounts remain supported."
           },
           "email": {
             "type": "string",
-            "description": "Login identifier: email address or mobile phone number."
+            "description": "Legacy alias for the login identifier."
           },
           "phone": {
             "type": "string",
@@ -6038,11 +6038,11 @@
           },
           "login": {
             "type": "string",
-            "description": "Preferred new login identifier: mobile phone number; email remains supported."
+            "description": "Primary new login identifier: mobile phone number. Legacy email accounts remain supported."
           },
           "email": {
             "type": "string",
-            "description": "Login identifier: email address or mobile phone number."
+            "description": "Legacy alias for the login identifier."
           },
           "phone": {
             "type": "string",
@@ -6082,11 +6082,11 @@
           },
           "login": {
             "type": "string",
-            "description": "Preferred new login identifier: mobile phone number; email remains supported."
+            "description": "Primary new login identifier: mobile phone number. Legacy email accounts remain supported."
           },
           "email": {
             "type": "string",
-            "description": "Login identifier: email address or mobile phone number."
+            "description": "Legacy alias for the login identifier."
           },
           "phone": {
             "type": "string",
@@ -6125,11 +6125,11 @@
         "properties": {
           "login": {
             "type": "string",
-            "description": "Preferred login identifier: mobile phone number; email remains supported."
+            "description": "Primary login identifier: mobile phone number. Legacy email accounts remain supported."
           },
           "email": {
             "type": "string",
-            "description": "Login identifier: email address or mobile phone number."
+            "description": "Legacy alias for the login identifier."
           },
           "phone": {
             "type": "string",
@@ -6221,7 +6221,7 @@
                 },
                 "email": {
                   "type": "string",
-                  "description": "Login identifier: email address or mobile phone number."
+                  "description": "Stored login identifier. Prefer mobile phone numbers for new accounts."
                 },
                 "temporaryPassword": {
                   "type": "string"

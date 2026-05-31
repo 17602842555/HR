@@ -4745,6 +4745,7 @@ test("iam employee account library sync creates one account per active employee 
         employeeNo: "EMP-2",
         name: "李四",
         email: "lisi@oa.local",
+        phone: "17600000002",
         departmentId: "dept-admin",
         roleTitle: "HRBP",
         status: "ACTIVE"
@@ -4780,14 +4781,14 @@ test("iam employee account library sync creates one account per active employee 
   assert.equal(synced.json().credentials.every((item) => item.roleCodes.includes("employee-self-service")), true);
   assert.equal(synced.json().credentials.every((item) => item.temporaryPassword.length >= 12), true);
 
-  const credential = synced.json().credentials.find((item) => item.email === "lisi@oa.local");
+  const credential = synced.json().credentials.find((item) => item.email === "17600000002");
   assert.ok(credential);
   const login = await app.inject({
     method: "POST",
     url: "/api/auth/login",
     payload: {
       tenantCode: "default",
-      email: credential.email,
+      login: credential.email,
       password: credential.temporaryPassword
     }
   });
@@ -4821,13 +4822,13 @@ test("iam employee account library sync creates one account per active employee 
     headers: { authorization: `Bearer ${firstLoginToken}` },
     payload: {
       currentPassword: credential.temporaryPassword,
-      email: "lisi.self@oa.local",
+      login: "17600000999",
       name: "李四自助账号",
       newPassword: "EmployeeNewPass123"
     }
   });
   assert.equal(completedSetup.statusCode, 200);
-  assert.equal(completedSetup.json().user.email, "lisi.self@oa.local");
+  assert.equal(completedSetup.json().user.email, "17600000999");
   assert.equal(completedSetup.json().user.name, "李四自助账号");
   assert.equal(completedSetup.json().user.mustChangePassword, false);
 
@@ -4836,7 +4837,7 @@ test("iam employee account library sync creates one account per active employee 
     url: "/api/auth/login",
     payload: {
       tenantCode: "default",
-      email: credential.email,
+      login: credential.email,
       password: credential.temporaryPassword
     }
   });
@@ -4847,7 +4848,7 @@ test("iam employee account library sync creates one account per active employee 
     url: "/api/auth/login",
     payload: {
       tenantCode: "default",
-      email: "lisi.self@oa.local",
+      login: "17600000999",
       password: "EmployeeNewPass123"
     }
   });
@@ -4855,7 +4856,7 @@ test("iam employee account library sync creates one account per active employee 
 
   const overview = await app.inject({ method: "GET", url: "/api/iam", headers });
   const account = overview.json().accounts.find((item) => item.employeeNo === "EMP-2");
-  assert.equal(account.accountEmail, "lisi.self@oa.local");
+  assert.equal(account.accountEmail, "17600000999");
   assert.equal(account.accountMustChangePassword, false);
   assert.deepEqual(account.roleCodes, ["employee-self-service"]);
   assert.equal(overview.json().accountStats.missingAccounts, 0);

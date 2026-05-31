@@ -198,6 +198,39 @@ function requestLoginIdentifier(body = {}) {
   return normalizeLoginEmail(body.login || body.phone || body.email);
 }
 
+function normalizePhoneLogin(input) {
+  const value = String(input || "").replace(/\D+/g, "");
+  return /^1[3-9]\d{9}$/.test(value) ? value : "";
+}
+
+function sanitizeLoginLocalPart(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, ".")
+    .replace(/^[._-]+|[._-]+$/g, "")
+    .slice(0, 48) || "employee";
+}
+
+function employeeFallbackLogin(employee, domain = "oa.local", suffix = "") {
+  const source = employee.employeeNo || employee.seq || employee.email || employee.name || employee.id;
+  const localPart = `${sanitizeLoginLocalPart(source)}${suffix ? `-${suffix}` : ""}`;
+  return `${localPart}@${domain}`;
+}
+
+function normalizeLoginDomain(input) {
+  const domain = normalizeLoginEmail(input || "oa.local").replace(/^@+/, "");
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) ? domain : "oa.local";
+}
+
+function employeeLoginIdentifier(employee, domain = "oa.local") {
+  const phone = normalizePhoneLogin(employee.phone || employee.mobile || employee.telephone || employee.contactPhone);
+  if (phone) return phone;
+  const email = normalizeLoginEmail(employee.email);
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return email;
+  return employeeFallbackLogin(employee, domain);
+}
+
 function normalizeActivationCode(input) {
   return String(input || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -1947,7 +1980,7 @@ async function handleNativeApi(request, env) {
     const employeeNo = String(body.employeeNo || "").trim();
     const name = String(body.name || "").trim();
     if (!codeHash || !validLoginIdentifier(email) || !validNewPassword(password) || !employeeNo || !name) {
-      return badRequest("激活码、工号、姓名、新登录账号和新密码必填，登录账号需为邮箱或手机号，密码至少 12 位并包含字母和数字。");
+      return badRequest("激活码、工号、姓名、新手机号账号和新密码必填；历史邮箱账号仍可兼容登录，密码至少 12 位并包含字母和数字。");
     }
     const activation = (state.accountActivations || []).find((item) => item.tokenHash === codeHash && item.status === "PENDING");
     if (!activation) {
@@ -2063,7 +2096,7 @@ async function handleNativeApi(request, env) {
     const email = requestLoginIdentifier(body);
     const name = String(body.name || "").trim();
     if (!validLoginIdentifier(email) || !name || !body.currentPassword || !body.newPassword) {
-      return badRequest("登录账号、姓名、当前密码和新密码必填，登录账号需为邮箱或手机号。");
+      return badRequest("手机号账号、姓名、当前密码和新密码必填；历史邮箱账号仍可兼容登录。");
     }
     if (!validNewPassword(body.newPassword)) {
       return badRequest("密码至少 12 位，并且必须同时包含字母和数字。");
@@ -2212,7 +2245,7 @@ async function handleNativeApi(request, env) {
 	      sessionVersion: 0,
 	      status: "ACTIVE"
 	    };
-    if (!validLoginIdentifier(user.email) || !user.name) return badRequest("登录账号和姓名必填，登录账号需为邮箱或手机号。");
+    if (!validLoginIdentifier(user.email) || !user.name) return badRequest("手机号账号和姓名必填；历史邮箱账号仍可兼容登录。");
     if (state.iam.users.some((item) => normalizeLoginEmail(item.email) === user.email)) {
       return json({ code: "USER_EMAIL_EXISTS", message: "该登录账号已存在。", ok: false }, { status: 409 });
     }
@@ -2226,18 +2259,25 @@ async function handleNativeApi(request, env) {
 	    const existingEmployeeIds = new Set(state.iam.users.map((user) => user.employee?.id).filter(Boolean));
 	    const existingEmails = new Set(state.iam.users.map((user) => normalizeLoginEmail(user.email)).filter(Boolean));
 	    const existingNames = new Set(state.iam.users.map((user) => user.name));
+	    const emailDomain = normalizeLoginDomain(body.emailDomain);
 	    const normalizedRoles = normalizeRequestedRoleCodes(state, body.roleCodes);
 	    if (normalizedRoles.invalid.length) return badRequest(`未知角色：${normalizedRoles.invalid.join(", ")}`);
 	    const roleCodes = normalizedRoles.roleCodes;
 	    const createdUsers = [];
 	    const credentials = [];
-	    for (const employee of state.people.employees.filter((item) => {
-	      const email = normalizeLoginEmail(item.email || `${String(item.seq || item.name).toLowerCase().replace(/[^a-z0-9]+/g, ".")}@oa.local`);
-	      return !existingEmployeeIds.has(item.id) && !existingEmails.has(email) && !existingNames.has(item.name);
-	    })) {
+	    const activeEmployees = state.people.employees.filter((item) => ["ACTIVE", "在职"].includes(String(item.status || "在职")));
+	    const missingAccountEmployees = activeEmployees.filter((item) => !existingEmployeeIds.has(item.id) && !existingNames.has(item.name));
+	    for (const employee of missingAccountEmployees) {
+	      let email = employeeLoginIdentifier(employee, emailDomain);
+	      let suffix = 2;
+	      while (existingEmails.has(email)) {
+	        email = employeeFallbackLogin(employee, emailDomain, suffix);
+	        suffix += 1;
+	      }
+	      existingEmails.add(email);
 	      const temporaryPassword = generatedTemporaryPassword();
 	      const user = {
-	        email: normalizeLoginEmail(employee.email || `${String(employee.seq || employee.name).toLowerCase().replace(/[^a-z0-9]+/g, ".")}@oa.local`),
+	        email,
 	        employee: { id: employee.id, name: employee.name },
 	        id: nextId("USER"),
 	        mustChangePassword: true,
@@ -2260,7 +2300,12 @@ async function handleNativeApi(request, env) {
     state.iam.users = [...createdUsers, ...state.iam.users];
     await appendAudit(env, state, { action: "批量开户", actor: actorName, content: `为 ${createdUsers.length} 名员工生成账号`, object: "账号权限", request });
     await saveState(env, state);
-    return ok({ createdCount: createdUsers.length, credentials, createdUsers: createdUsers.map(publicUserRecord) });
+    return ok({
+      createdCount: createdUsers.length,
+      credentials,
+      createdUsers: createdUsers.map(publicUserRecord),
+      skippedCount: activeEmployees.length - missingAccountEmployees.length
+    });
   }
 	  if (segments[0] === "iam" && segments[1] === "roles" && segments[3] === "permissions" && method === "PUT") {
 	    const body = await readJson(request);

@@ -171,6 +171,11 @@ function requestLoginIdentifier(body = {}) {
   return normalizeEmail(body.login || body.phone || body.email);
 }
 
+function normalizePhoneLogin(input) {
+  const value = String(input || "").replace(/\D+/g, "");
+  return /^1[3-9]\d{9}$/.test(value) ? value : "";
+}
+
 function validLoginIdentifier(input) {
   const value = normalizeEmail(input);
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || /^1[3-9]\d{9}$/.test(value);
@@ -196,11 +201,18 @@ function normalizeEmailDomain(input) {
   return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) ? domain : "oa.local";
 }
 
-function generatedEmployeeEmail(employee, domain) {
+function generatedEmployeeFallbackEmail(employee, domain, suffix = "") {
+  const source = employee.employeeNo || employee.email || employee.name || employee.id;
+  const localPart = `${sanitizeEmailLocalPart(source)}${suffix ? `-${suffix}` : ""}`;
+  return `${localPart}@${domain}`;
+}
+
+function generatedEmployeeLoginIdentifier(employee, domain) {
+  const phone = normalizePhoneLogin(employee.phone || employee.mobile || employee.telephone || employee.contactPhone);
+  if (phone) return phone;
   const directEmail = normalizeEmail(employee.email);
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(directEmail)) return directEmail;
-  const source = employee.email || employee.employeeNo || employee.name || employee.id;
-  return `${sanitizeEmailLocalPart(source)}@${domain}`;
+  return generatedEmployeeFallbackEmail(employee, domain);
 }
 
 function generatedTemporaryPassword() {
@@ -283,13 +295,13 @@ export async function registerIamRoutes(app) {
 
     await app.prisma.$transaction(async (tx) => {
       for (const employee of missingAccountEmployees) {
-        let email = generatedEmployeeEmail(employee, emailDomain);
+        let email = generatedEmployeeLoginIdentifier(employee, emailDomain);
         let suffix = 2;
-        // Existing employee emails from the source data are preferred, but tenant
-        // login emails must remain unique even when a dashboard import has blanks
-        // or duplicates.
+        // Phone is the primary login identifier. If a phone/email imported from
+        // the employee source collides, fall back to a deterministic temporary
+        // account so the employee can set their phone number on first login.
         while (await tx.user.findUnique({ where: { tenantId_email: { tenantId: request.user.tenantId, email } } })) {
-          email = `${sanitizeEmailLocalPart(employee.employeeNo || employee.id)}-${suffix}@${emailDomain}`;
+          email = generatedEmployeeFallbackEmail(employee, emailDomain, suffix);
           suffix += 1;
         }
 
@@ -440,7 +452,7 @@ export async function registerIamRoutes(app) {
     const requestedStatus = request.body?.status === undefined ? "ACTIVE" : normalizeUserStatus(request.body?.status);
 
     if (!validLoginIdentifier(email)) {
-      return reply.code(400).send({ error: "invalid_login_identifier", message: "登录账号需要使用邮箱或手机号。" });
+      return reply.code(400).send({ error: "invalid_login_identifier", message: "登录账号需要使用手机号；历史邮箱账号仍可兼容登录。" });
     }
     if (!name) {
       return reply.code(400).send({ error: "user_name_required", message: "账号姓名必填。" });

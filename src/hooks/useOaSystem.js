@@ -91,10 +91,23 @@ function accountLocalPart(value) {
     .slice(0, 48) || "employee";
 }
 
+function phoneLogin(value) {
+  const normalized = String(value || "").replace(/\D+/g, "");
+  return /^1[3-9]\d{9}$/.test(normalized) ? normalized : "";
+}
+
+function fallbackAccountEmail(employee, domain = "oa.local", suffix = "") {
+  const source = employee.employeeNo || employee.seq || employee.email || employee.name || employee.id;
+  const localPart = `${accountLocalPart(source)}${suffix ? `-${suffix}` : ""}`;
+  return `${localPart}@${domain}`;
+}
+
 function employeeAccountEmail(employee, domain = "oa.local") {
+  const directPhone = phoneLogin(employee.phone || employee.mobile || employee.telephone || employee.contactPhone);
+  if (directPhone) return directPhone;
   const directEmail = String(employee.email || "").trim().toLowerCase();
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(directEmail)) return directEmail;
-  return `${accountLocalPart(employee.email || employee.employeeNo || employee.seq || employee.name || employee.id)}@${domain}`;
+  return fallbackAccountEmail(employee, domain);
 }
 
 function isActiveEmployee(employee) {
@@ -1124,7 +1137,7 @@ export function useOaSystem() {
           let email = employeeAccountEmail(employee, emailDomain);
           let suffix = 2;
           while (existingEmails.has(email)) {
-            email = `${accountLocalPart(employee.employeeNo || employee.seq || employeeId)}-${suffix}@${emailDomain}`;
+            email = fallbackAccountEmail(employee, emailDomain, suffix);
             suffix += 1;
           }
           existingEmails.add(email);

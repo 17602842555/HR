@@ -715,6 +715,60 @@ test("cloudflare worker supports employee activation with phone-number login", a
   assert.equal(auditText.includes("PhoneLoginPass123"), false);
 });
 
+test("cloudflare worker bulk account sync prefers employee phone as login", async () => {
+  const adminLogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const adminCookie = adminLogin.headers.get("set-cookie");
+  const iamResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/iam", {
+      headers: { cookie: adminCookie }
+    }),
+    TEST_ENV
+  );
+  const missingAccount = (await responseJson(iamResponse)).iam.accounts.find((account) => !account.accountId);
+  assert.ok(missingAccount);
+
+  const phone = `177${String(Date.now()).slice(-8)}`;
+  const patchResponse = await worker.fetch(
+    new Request(`https://deep-oa-hr.example.workers.dev/api/people/employees/${encodeURIComponent(missingAccount.employeeId)}`, {
+      body: JSON.stringify({ phone }),
+      headers: { "content-type": "application/json", cookie: adminCookie },
+      method: "PATCH"
+    }),
+    TEST_ENV
+  );
+  assert.equal(patchResponse.status, 200);
+
+  const syncResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/iam/accounts/sync-employees", {
+      body: JSON.stringify({ roleCodes: ["employee-self-service"] }),
+      headers: { "content-type": "application/json", cookie: adminCookie },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const syncPayload = await responseJson(syncResponse);
+  assert.equal(syncResponse.status, 200);
+  const credential = syncPayload.credentials.find((item) => item.employeeId === missingAccount.employeeId);
+  assert.equal(credential?.email, phone);
+
+  const phoneLogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ login: phone, password: credential.temporaryPassword }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  assert.equal(phoneLogin.status, 200);
+});
+
 test("cloudflare worker native approval decisions require every current approver before next node", async () => {
   const loginResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {

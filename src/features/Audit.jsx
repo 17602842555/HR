@@ -886,8 +886,8 @@ export function Audit({ actions, state }) {
       >
         <div className="account-library-toolbar">
           <div>
-            <strong>批量给未开户员工生成登录账号</strong>
-            <span>默认只处理在职员工；有手机号的员工可通过激活码自行设置手机号账号，批量生成仍兼容企业邮箱账号。</span>
+            <strong>批量给未开户员工生成手机号优先账号</strong>
+            <span>默认只处理在职员工；员工档案已有手机号时直接作为登录账号，没有手机号时生成临时账号并要求首次登录改为手机号。</span>
           </div>
           <div className="account-role-options">
             {roles.map((role) => (
@@ -910,7 +910,7 @@ export function Audit({ actions, state }) {
           <div className="credential-result">
             <div>
             <strong>本次临时密码</strong>
-              <span>交付给员工后只能用于首次登录；员工首次登录时可以把账号改成自己的手机号。</span>
+              <span>交付给员工后只能用于首次登录；没有手机号档案的员工首次登录时必须把账号改成自己的手机号。</span>
             </div>
             <DataTable columns={credentialColumns} rows={syncCredentials} rowKey={(row) => row.employeeId} />
           </div>
@@ -940,7 +940,7 @@ export function Audit({ actions, state }) {
             <input
               autoComplete="off"
               inputMode="tel"
-              placeholder="17602842555，也兼容邮箱账号"
+              placeholder="17602842555"
               value={accountDraft.email}
               onChange={(event) => setAccountDraft({ ...accountDraft, email: event.target.value })}
             />
