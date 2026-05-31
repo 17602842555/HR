@@ -4,12 +4,16 @@ import { basename, isAbsolute, resolve } from "node:path";
 import { parseProductionEnvText, validateProductionEnv } from "./validate-production-env.mjs";
 
 export const requiredApprovalRoles = Object.freeze(["Security owner", "Deployment owner"]);
-export const requiredManagedSecrets = Object.freeze([
+export const requiredNativeManagedSecrets = Object.freeze([
   "POSTGRES_PASSWORD",
   "JWT_SECRET",
-  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_API_TOKEN"
+]);
+export const requiredTunnelManagedSecrets = Object.freeze([
+  ...requiredNativeManagedSecrets,
   "CLOUDFLARE_TUNNEL_TOKEN"
 ]);
+export const requiredManagedSecrets = requiredNativeManagedSecrets;
 
 const placeholderFragments = Object.freeze([
   "example",
@@ -58,6 +62,19 @@ function sameStringSet(left, right) {
   return a.length === b.length && a.every((item, index) => item === b[index]);
 }
 
+export function normalizeSecretsBackendMode(value) {
+  const mode = String(value || "native-worker").trim().toLowerCase();
+  if (["native", "native-worker", "worker", "cloudflare-native"].includes(mode)) return "native-worker";
+  if (["tunnel", "cloudflare-tunnel", "proxy"].includes(mode)) return "tunnel";
+  throw new Error("secrets signoff backend mode must be native-worker or tunnel.");
+}
+
+export function managedSecretsForMode(mode = "native-worker") {
+  return normalizeSecretsBackendMode(mode) === "tunnel"
+    ? [...requiredTunnelManagedSecrets]
+    : [...requiredNativeManagedSecrets];
+}
+
 export function sha256Text(text) {
   return createHash("sha256").update(String(text || "")).digest("hex");
 }
@@ -98,7 +115,8 @@ export function validateSecretsSignoff(signoff, {
   allowExample = false,
   env = null,
   envChecksum = "",
-  envPath = ".env.production"
+  envPath = ".env.production",
+  mode = ""
 } = {}) {
   const errors = [];
   const warnings = [];
@@ -111,6 +129,13 @@ export function validateSecretsSignoff(signoff, {
   const permitPlaceholders = allowExample && signoff?.example === true;
   const envResult = env ? validateProductionEnv(env) : null;
   const envSummary = envResult?.summary || {};
+  let backendMode = "native-worker";
+  try {
+    backendMode = normalizeSecretsBackendMode(mode || signoff?.backendMode || signoff?.deployment?.mode || env?.CLOUDFLARE_BACKEND_MODE || env?.OA_API_MODE);
+  } catch (error) {
+    errors.push(error.message);
+  }
+  const requiredSecrets = managedSecretsForMode(backendMode);
 
   if (!signoff || typeof signoff !== "object" || Array.isArray(signoff)) {
     return { ok: false, errors: ["Secrets signoff payload must be a JSON object."], warnings, summary: {} };
@@ -166,9 +191,12 @@ export function validateSecretsSignoff(signoff, {
     errors.push("secretStore.nextRotationDueAt must be after lastRotatedAt.");
   }
   const managedSecrets = list(secretStore.managedSecrets);
-  requiredManagedSecrets.forEach((secretName) => {
+  requiredSecrets.forEach((secretName) => {
     if (!managedSecrets.includes(secretName)) errors.push(`secretStore.managedSecrets must include ${secretName}.`);
   });
+  if (backendMode === "native-worker" && managedSecrets.includes("CLOUDFLARE_TUNNEL_TOKEN")) {
+    warnings.push("CLOUDFLARE_TUNNEL_TOKEN is not required for native-worker mode; keep it only for a future Tunnel deployment.");
+  }
   if (env && envResult?.summary?.runDbSeed && !managedSecrets.includes("DEFAULT_ADMIN_PASSWORD")) {
     errors.push("secretStore.managedSecrets must include DEFAULT_ADMIN_PASSWORD when RUN_DB_SEED=1.");
   }
@@ -234,7 +262,9 @@ export function validateSecretsSignoff(signoff, {
       secretProvider: secretStore.provider || null,
       managedSecrets,
       approvedOrigins,
+      backendMode,
       runDbSeed: bootstrapSeedPolicy.runDbSeed ?? null,
+      requiredManagedSecrets: requiredSecrets,
       approvalRoles: approvals.map((item) => item.role).filter(Boolean),
       openExceptionCount: exceptions.length,
       productionEnvValidated: Boolean(envResult?.ok)
@@ -255,12 +285,16 @@ export function parseSecretsSignoffArgs(argv = []) {
     signoffPath: "docs/production-secrets-signoff.json",
     envPath: ".env.production",
     json: argv.includes("--json"),
-    allowExample: argv.includes("--allow-example")
+    allowExample: argv.includes("--allow-example"),
+    mode: ""
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--env") {
       options.envPath = argv[index + 1] || options.envPath;
+      index += 1;
+    } else if (arg === "--mode") {
+      options.mode = normalizeSecretsBackendMode(argv[index + 1] || "");
       index += 1;
     } else if (!arg.startsWith("--")) {
       options.signoffPath = arg;
@@ -284,7 +318,8 @@ async function main(argv = process.argv.slice(2)) {
       allowExample: options.allowExample,
       env: envText ? parseProductionEnvText(envText) : null,
       envChecksum: envText ? sha256Text(envText) : "",
-      envPath
+      envPath,
+      mode: options.mode
     });
     const payload = { path: signoffPath, envPath, ...result };
     if (options.json) {

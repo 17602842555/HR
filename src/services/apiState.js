@@ -69,6 +69,8 @@ export function normalizeCurrentUser(payload) {
     avatarUrl: user.avatarUrl || user.avatar || "",
     email: user.email || user.login || "",
     mustChangePassword: Boolean(user.mustChangePassword || user.firstLoginRequired),
+    permissions: Array.isArray(user.permissions) ? user.permissions : null,
+    roles: Array.isArray(user.roles) ? user.roles : [],
     source: "api"
   };
 }

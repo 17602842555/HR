@@ -23,6 +23,8 @@ const DEFAULT_CORS_ORIGINS = new Set([
 const SESSION_COOKIE = "oa_cf_session";
 const STATE_KEY = "oa_state_v1";
 const STATE_SCHEMA_VERSION = 1;
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 
 let memoryState = null;
 
@@ -138,6 +140,23 @@ function corsPreflight(request, env) {
     },
     status: 204
   });
+}
+
+function isMutatingMethod(method = "") {
+  return ["POST", "PUT", "PATCH", "DELETE"].includes(String(method || "").toUpperCase());
+}
+
+function csrfGuard(request, env) {
+  if (!isMutatingMethod(request.method)) return null;
+  const origin = request.headers.get("origin");
+  if (!origin) return null;
+  if (allowedCorsOrigin(request, env)) return null;
+  return json({
+    code: "CSRF_ORIGIN_DENIED",
+    error: "csrf_origin_denied",
+    message: "请求来源未被允许。",
+    ok: false
+  }, { status: 403 });
 }
 
 function clone(value) {
@@ -324,12 +343,18 @@ const permissions = [
   { id: "PERM-workflow.export", code: "workflow.export", name: "导出审批列表", module: "workflow" },
   { id: "PERM-attendance.read", code: "attendance.read", name: "查看假勤", module: "attendance" },
   { id: "PERM-attendance.write", code: "attendance.write", name: "管理假勤", module: "attendance" },
+  { id: "PERM-attendance.export", code: "attendance.export", name: "导出考勤记录", module: "attendance" },
   { id: "PERM-finance.read", code: "finance.read", name: "查看财务", module: "finance" },
   { id: "PERM-finance.write", code: "finance.write", name: "管理财务", module: "finance" },
+  { id: "PERM-finance.export", code: "finance.export", name: "导出财务单据", module: "finance" },
   { id: "PERM-asset.read", code: "asset.read", name: "查看资产", module: "asset" },
   { id: "PERM-asset.write", code: "asset.write", name: "管理资产", module: "asset" },
+  { id: "PERM-asset.export", code: "asset.export", name: "导出资产台账", module: "asset" },
+  { id: "PERM-import.read", code: "import.read", name: "查看数据导入记录", module: "import" },
+  { id: "PERM-import.write", code: "import.write", name: "导入人员数据", module: "import" },
   { id: "PERM-resource.read", code: "resource.read", name: "查看资源", module: "resource" },
   { id: "PERM-resource.book", code: "resource.book", name: "预约资源", module: "resource" },
+  { id: "PERM-resource.export", code: "resource.export", name: "导出资源预约", module: "resource" },
   { id: "PERM-audit.read", code: "audit.read", name: "查看审计日志", module: "audit" },
   { id: "PERM-audit.export", code: "audit.export", name: "导出审计日志", module: "audit" },
   { id: "PERM-file.read", code: "file.read", name: "查看附件", module: "file" },
@@ -361,28 +386,28 @@ const roles = [
     code: "hr-specialist",
     name: "人事专员",
     description: "维护人员档案、入转调离和假勤流程",
-    permissionCodes: ["employee.read", "employee.write", "employee.export", "attendance.read", "attendance.write", "workflow.read", "workflow.write", "workflow.approve"]
+    permissionCodes: ["employee.read", "employee.write", "employee.export", "attendance.read", "attendance.write", "attendance.export", "workflow.read", "workflow.write", "workflow.approve", "import.read", "import.write"]
   },
   {
     id: "ROLE-department-manager",
     code: "department-manager",
     name: "部门负责人",
     description: "按所属部门查看人员，并处理本部门审批",
-    permissionCodes: ["employee.read", "workflow.read", "workflow.approve"]
+    permissionCodes: ["employee.read", "employee.export", "attendance.read", "workflow.read", "workflow.approve"]
   },
   {
     id: "ROLE-asset",
     code: "asset-admin",
     name: "行政资产管理员",
     description: "管理资产台账、二维码、借还和盘点",
-    permissionCodes: ["asset.read", "asset.write", "resource.read", "resource.book", "workflow.read", "workflow.approve"]
+    permissionCodes: ["asset.read", "asset.write", "asset.export", "resource.read", "resource.book", "resource.export", "workflow.read", "workflow.approve"]
   },
   {
     id: "ROLE-finance",
     code: "finance-approver",
     name: "财务审批人",
     description: "处理付款、报销和工资单流程",
-    permissionCodes: ["finance.read", "finance.write", "workflow.read", "workflow.approve", "audit.read"]
+    permissionCodes: ["finance.read", "finance.write", "finance.export", "workflow.read", "workflow.approve", "audit.read"]
   },
   {
     id: "ROLE-auditor",
@@ -396,6 +421,71 @@ const roles = [
   permissions: permissionsByCode(role.permissionCodes),
   userCount: role.code === "admin" ? 1 : 0
 }));
+
+const workerOpenApiPaths = [
+  "/analytics/export",
+  "/analytics/overview",
+  "/approvals",
+  "/approvals/definitions",
+  "/approvals/export",
+  "/approvals/rules",
+  "/approvals/rules/coverage",
+  "/approvals/rules/preview",
+  "/approvals/rules/{id}",
+  "/approvals/{id}/comments",
+  "/approvals/{id}/decision",
+  "/approvals/{id}/transfer",
+  "/approvals/{id}/withdraw",
+  "/assets",
+  "/assets/events",
+  "/assets/export",
+  "/assets/{id}",
+  "/assets/{id}/actions",
+  "/assets/{id}/qr",
+  "/attendance/leaves",
+  "/attendance/records",
+  "/attendance/records/export",
+  "/audit",
+  "/audit/export",
+  "/audit/export-records",
+  "/audit/integrity",
+  "/audit/sensitive-access",
+  "/auth/change-password",
+  "/auth/complete-first-login",
+  "/auth/login",
+  "/auth/logout",
+  "/auth/me",
+  "/files",
+  "/files/{id}/download",
+  "/finance/payrolls",
+  "/finance/payrolls/{id}/review",
+  "/finance/requests",
+  "/finance/requests/export",
+  "/health",
+  "/iam",
+  "/iam/accounts/sync-employees",
+  "/iam/roles/{id}/permissions",
+  "/iam/users",
+  "/iam/users/{id}/password",
+  "/iam/users/{id}/roles",
+  "/iam/users/{id}/status",
+  "/imports",
+  "/imports/dashboard-html",
+  "/imports/{id}/source",
+  "/openapi.json",
+  "/people",
+  "/people/employees",
+  "/people/employees/{id}",
+  "/people/export",
+  "/people/leavers",
+  "/ready",
+  "/resources",
+  "/resources/bookings",
+  "/resources/bookings/export",
+  "/resources/bookings/{id}/cancel",
+  "/system/readiness",
+  "/workflows/definitions"
+];
 
 const flowTemplates = [
   {
@@ -747,6 +837,7 @@ function buildAccountLibrary(people, iam) {
       account: user,
       accountEmail: user?.email || "",
       accountId: user?.id || null,
+      accountMustChangePassword: Boolean(user?.mustChangePassword),
       accountStatus: user?.status || "UNASSIGNED",
       department: employee.department || "",
       email: employee.email || "",
@@ -1074,30 +1165,100 @@ function parseCookie(request) {
     }));
 }
 
-function isAuthenticated(request) {
-  return parseCookie(request)[SESSION_COOKIE] === "admin";
+function base64Url(bytes) {
+  const binary = String.fromCharCode(...new Uint8Array(bytes));
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+}
+
+function unbase64Url(value) {
+  const padded = `${String(value || "").replaceAll("-", "+").replaceAll("_", "/")}${"=".repeat((4 - String(value || "").length % 4) % 4)}`;
+  const binary = atob(padded);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+function randomHex(byteLength = 32) {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function ensureSessionSecret(state) {
+  if (!state.sessionSecret) state.sessionSecret = randomHex(32);
+  return state.sessionSecret;
+}
+
+async function hmacSessionSignature(secret, body) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    textEncoder.encode(secret),
+    { hash: "SHA-256", name: "HMAC" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, textEncoder.encode(body));
+  return base64Url(signature);
+}
+
+function constantTimeEqual(left = "", right = "") {
+  const a = textEncoder.encode(String(left));
+  const b = textEncoder.encode(String(right));
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let index = 0; index < a.length; index += 1) diff |= a[index] ^ b[index];
+  return diff === 0;
+}
+
+async function signedSessionValue(state, user, maxAgeSeconds) {
+  const payload = {
+    exp: Date.now() + (Number(maxAgeSeconds) || 0) * 1000,
+    sub: user.id,
+    sv: Number(user.sessionVersion || 0),
+    v: 1
+  };
+  const body = base64Url(textEncoder.encode(JSON.stringify(payload)));
+  const signature = await hmacSessionSignature(ensureSessionSecret(state), body);
+  return `${body}.${signature}`;
+}
+
+async function verifySessionValue(state, value) {
+  const [body, signature] = String(value || "").split(".");
+  if (!body || !signature) return null;
+  const expected = await hmacSessionSignature(ensureSessionSecret(state), body);
+  if (!constantTimeEqual(signature, expected)) return null;
+  let payload = null;
+  try {
+    payload = JSON.parse(textDecoder.decode(unbase64Url(body)));
+  } catch {
+    return null;
+  }
+  if (!payload?.sub || Number(payload.exp || 0) < Date.now()) return null;
+  const user = state.iam.users.find((item) => item.id === payload.sub);
+  if (!user || user.status !== "ACTIVE") return null;
+  if (Number(user.sessionVersion || 0) !== Number(payload.sv || 0)) return null;
+  return user;
 }
 
 function adminUser(state) {
   return state.iam.users.find((item) => item.email === "admin@oa.local") || state.iam.users[0] || null;
 }
 
-function authenticatedUser(state, request) {
+async function authenticatedUser(state, request) {
   const sessionValue = parseCookie(request)[SESSION_COOKIE];
   if (!sessionValue) return null;
-  const user = sessionValue === "admin"
-    ? adminUser(state)
-    : state.iam.users.find((item) => item.id === sessionValue);
-  return user?.status === "ACTIVE" ? user : null;
+  return verifySessionValue(state, sessionValue);
 }
 
-function sessionCookie(request, value, maxAge) {
+function sessionCookieHeader(request, value, maxAge) {
   const url = new URL(request.url);
   const origin = request.headers.get("origin") || "";
   const crossOrigin = Boolean(origin) && origin !== url.origin;
   const secure = url.protocol === "https:" ? "; Secure" : "";
   const sameSite = crossOrigin && secure ? "None" : "Lax";
   return `${SESSION_COOKIE}=${value}; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=${maxAge}${secure}`;
+}
+
+async function sessionCookie(request, state, user, maxAge) {
+  return sessionCookieHeader(request, await signedSessionValue(state, user, maxAge), maxAge);
 }
 
 async function readJson(request) {
@@ -1138,7 +1299,113 @@ function badRequest(message) {
   return json({ code: "BAD_REQUEST", message, ok: false }, { status: 400 });
 }
 
+function forbidden(permissionCode) {
+  return json({
+    code: "PERMISSION_DENIED",
+    error: "permission_denied",
+    message: `当前账号缺少 ${permissionCode} 权限。`,
+    ok: false
+  }, { status: 403 });
+}
+
+function rolePermissionCodes(role = {}) {
+  if (Array.isArray(role.permissionCodes)) return role.permissionCodes;
+  return (role.permissions || []).map((permission) => permission.code).filter(Boolean);
+}
+
+function roleObjectsForUser(state, user = {}) {
+  const roleCodes = new Set(user.roleCodes || []);
+  const availableRoles = state?.iam?.roles?.length ? state.iam.roles : roles;
+  return availableRoles.filter((role) => roleCodes.has(role.code));
+}
+
+function permissionCodesForUser(state, user = {}) {
+  const codes = new Set(roleObjectsForUser(state, user).flatMap(rolePermissionCodes));
+  if (codes.has("system.admin")) permissions.forEach((permission) => codes.add(permission.code));
+  return codes;
+}
+
+function hasPermission(state, user, permissionCode) {
+  if (!permissionCode) return true;
+  const codes = permissionCodesForUser(state, user);
+  return codes.has("system.admin") || codes.has(permissionCode);
+}
+
+function invalidPermissionCodes(permissionCodes = []) {
+  const known = new Set(permissions.map((permission) => permission.code));
+  return [...new Set(permissionCodes)].filter((code) => !known.has(code));
+}
+
+function invalidRoleCodes(state, roleCodes = []) {
+  const known = new Set((state?.iam?.roles?.length ? state.iam.roles : roles).map((role) => role.code));
+  return [...new Set(roleCodes)].filter((code) => !known.has(code));
+}
+
+function normalizeRequestedRoleCodes(state, roleCodes = [], fallback = ["employee-self-service"]) {
+  const next = [...new Set((Array.isArray(roleCodes) && roleCodes.length ? roleCodes : fallback).map(String))];
+  const invalid = invalidRoleCodes(state, next);
+  return { invalid, roleCodes: next };
+}
+
+function requiredPermissionForRequest(pathname, segments, method) {
+  if (pathname === "/analytics/overview" && method === "GET") return "analytics.read";
+  if (pathname === "/analytics/export" && method === "POST") return "analytics.export";
+
+  if (segments[0] === "people") {
+    if (pathname === "/people/export" && method === "POST") return "employee.export";
+    if (segments[1] === "employees" && segments[2] && method === "PATCH") return "employee.write";
+    return "employee.read";
+  }
+
+  if (segments[0] === "iam") return pathname === "/iam" && method === "GET" ? "iam.read" : "iam.write";
+
+  if (segments[0] === "approvals") {
+    if (pathname === "/approvals/export" && method === "POST") return "workflow.export";
+    if (segments[1] === "rules" && ["POST", "PUT", "DELETE"].includes(method)) return "workflow.write";
+    if (segments[2] === "decision" || segments[2] === "transfer") return "workflow.approve";
+    if (segments[2] === "withdraw" || segments[2] === "comments" || (pathname === "/approvals" && method === "POST")) return "workflow.write";
+    return "workflow.read";
+  }
+
+  if (segments[0] === "workflows") return "workflow.read";
+
+  if (segments[0] === "assets") {
+    if (pathname === "/assets/export" && method === "POST") return "asset.export";
+    if (method === "GET") return "asset.read";
+    return "asset.write";
+  }
+
+  if (segments[0] === "attendance") {
+    if (pathname === "/attendance/records/export" && method === "POST") return "attendance.export";
+    return method === "GET" ? "attendance.read" : "attendance.write";
+  }
+
+  if (segments[0] === "finance") {
+    if (pathname === "/finance/requests/export" && method === "POST") return "finance.export";
+    return method === "GET" ? "finance.read" : "finance.write";
+  }
+
+  if (segments[0] === "resources") {
+    if (pathname === "/resources/bookings/export" && method === "POST") return "resource.export";
+    return method === "GET" ? "resource.read" : "resource.book";
+  }
+
+  if (segments[0] === "files") return method === "GET" ? "file.read" : "file.upload";
+  if (segments[0] === "imports") return method === "GET" ? "import.read" : "import.write";
+
+  if (segments[0] === "audit") {
+    if (pathname === "/audit/export" && method === "POST") return "audit.export";
+    if (pathname === "/audit/sensitive-access" && method === "POST") return "employee.sensitive.read";
+    return "audit.read";
+  }
+
+  if (pathname === "/system/readiness" && method === "GET") return "system.admin";
+  return "";
+}
+
 function currentUser(state, user = adminUser(state)) {
+  const userRoles = roleObjectsForUser(state, user).map((role) => ({ code: role.code, name: role.name }));
+  const userPermissions = [...permissionCodesForUser(state, user)].sort();
   return {
     user: {
       avatarUrl: "",
@@ -1148,6 +1415,8 @@ function currentUser(state, user = adminUser(state)) {
       mustChangePassword: Boolean(user?.mustChangePassword),
       name: user?.name || "张三",
       organization: "集团总部",
+      permissions: userPermissions,
+      roles: userRoles,
       source: "cloudflare-native",
       title: user?.roleCodes?.includes("admin") ? "系统管理员" : user?.employee?.roleTitle || "员工"
     }
@@ -1250,13 +1519,7 @@ async function handleNativeApi(request, env) {
     return json({
       info: { title: "集团人事行政 OA Commercial API", version: "cloudflare-native-v1" },
       openapi: "3.1.0",
-      paths: {
-        "/analytics/overview": {},
-        "/approvals": {},
-        "/auth/login": {},
-        "/iam": {},
-        "/people": {}
-      }
+      paths: Object.fromEntries(workerOpenApiPaths.map((path) => [path, {}]))
     });
   }
 
@@ -1269,16 +1532,17 @@ async function handleNativeApi(request, env) {
       : email === "admin@oa.local" && body.password === "admin123456";
     if (!user || user.status !== "ACTIVE" || !validPassword) {
       return json({ code: "INVALID_CREDENTIALS", message: "账号或密码错误。", ok: false }, { status: 401 });
-    }
-    user.lastLoginAt = nowIso();
-    await appendAudit(env, state, { action: "登录", actor: user.name, content: "Cloudflare 原生后端登录", object: "认证", objectId: user.id });
+	    }
+	    user.lastLoginAt = nowIso();
+	    ensureSessionSecret(state);
+	    await appendAudit(env, state, { action: "登录", actor: user.name, content: "Cloudflare 原生后端登录", object: "认证", objectId: user.id });
     await saveState(env, state);
     return json({ ok: true, ...currentUser(state, user) }, {
-      headers: { "set-cookie": sessionCookie(request, user.id, 60 * 60 * 8) }
+      headers: { "set-cookie": await sessionCookie(request, state, user, 60 * 60 * 8) }
     });
   }
 
-  const actor = authenticatedUser(state, request);
+  const actor = await authenticatedUser(state, request);
   if (!actor) {
     if (pathname === "/auth/me") return unauthorized();
     if (pathname !== "/auth/logout") return unauthorized();
@@ -1293,10 +1557,26 @@ async function handleNativeApi(request, env) {
     }, { status: 403 });
   }
 
+  const requiredPermission = requiredPermissionForRequest(pathname, segments, method);
+  if (requiredPermission && !hasPermission(state, actor, requiredPermission)) {
+    await appendAudit(env, state, {
+      action: "权限拒绝",
+      actor: actor.name || actor.email || "未知账号",
+      content: `${method} ${pathname} 缺少 ${requiredPermission}`,
+      object: "权限审计",
+      objectId: actor.id,
+      result: "失败",
+      type: "权限拒绝"
+    });
+    await saveState(env, state);
+    return forbidden(requiredPermission);
+  }
+  const actorName = actor?.name || actor?.email || "张三";
+
   if (pathname === "/auth/me" && method === "GET") return ok(currentUser(state, actor));
   if (pathname === "/auth/logout" && method === "POST") {
     return json({ ok: true }, {
-      headers: { "set-cookie": sessionCookie(request, "", 0) }
+      headers: { "set-cookie": sessionCookieHeader(request, "", 0) }
     });
   }
   if (pathname === "/auth/change-password" && method === "POST") {
@@ -1304,18 +1584,22 @@ async function handleNativeApi(request, env) {
     const validCurrent = actor.passwordHash
       ? await verifyNativePassword(String(body.currentPassword || ""), actor.passwordHash)
       : actor.email === "admin@oa.local" && body.currentPassword === "admin123456";
-    if (!validCurrent) {
-      return json({ code: "CURRENT_PASSWORD_INVALID", message: "当前密码不正确。", ok: false }, { status: 401 });
-    }
-    if (!validNewPassword(body.newPassword)) {
-      return badRequest("密码至少 12 位，并且必须同时包含字母和数字。");
-    }
-    actor.passwordHash = await nativePasswordHash(body.newPassword);
-    actor.mustChangePassword = false;
-    await appendAudit(env, state, { action: "修改密码", actor: actor.name, content: "用户修改登录密码", object: "认证", objectId: actor.id });
-    await saveState(env, state);
-    return ok(currentUser(state, actor));
-  }
+	    if (!validCurrent) {
+	      return json({ code: "CURRENT_PASSWORD_INVALID", message: "当前密码不正确。", ok: false }, { status: 401 });
+	    }
+	    if (!validNewPassword(body.newPassword)) {
+	      return badRequest("密码至少 12 位，并且必须同时包含字母和数字。");
+	    }
+	    actor.passwordHash = await nativePasswordHash(body.newPassword);
+	    actor.mustChangePassword = false;
+	    actor.sessionVersion = Number(actor.sessionVersion || 0) + 1;
+	    ensureSessionSecret(state);
+	    await appendAudit(env, state, { action: "修改密码", actor: actor.name, content: "用户修改登录密码", object: "认证", objectId: actor.id });
+	    await saveState(env, state);
+	    return json({ ok: true, ...currentUser(state, actor) }, {
+	      headers: { "set-cookie": await sessionCookie(request, state, actor, 60 * 60 * 8) }
+	    });
+	  }
   if (pathname === "/auth/complete-first-login" && method === "POST") {
     const body = await readJson(request);
     const email = normalizeLoginEmail(body.email);
@@ -1334,22 +1618,27 @@ async function handleNativeApi(request, env) {
     const beforeEmail = actor.email;
     const beforeName = actor.name;
     actor.email = email;
-    actor.name = name;
-    actor.passwordHash = await nativePasswordHash(body.newPassword);
-    actor.mustChangePassword = false;
-    await appendAudit(env, state, {
+	    actor.name = name;
+	    actor.passwordHash = await nativePasswordHash(body.newPassword);
+	    actor.mustChangePassword = false;
+	    actor.sessionVersion = Number(actor.sessionVersion || 0) + 1;
+	    ensureSessionSecret(state);
+	    await appendAudit(env, state, {
       action: "首次登录设置",
       actor: name,
       content: `账号 ${beforeEmail} 完成首次登录设置`,
-      object: "认证",
-      objectId: actor.id
-    });
-    await saveState(env, state);
-    return ok({
-      ...currentUser(state, actor),
-      changed: { emailBefore: beforeEmail, emailAfter: email, nameBefore: beforeName, nameAfter: name }
-    });
-  }
+	      object: "认证",
+	      objectId: actor.id
+	    });
+	    await saveState(env, state);
+	    return json({
+	      ok: true,
+	      ...currentUser(state, actor),
+	      changed: { emailBefore: beforeEmail, emailAfter: email, nameBefore: beforeName, nameAfter: name }
+	    }, {
+	      headers: { "set-cookie": await sessionCookie(request, state, actor, 60 * 60 * 8) }
+	    });
+	  }
 
   if (pathname === "/analytics/overview" && method === "GET") return ok({ analytics: state.analytics });
   if (pathname === "/analytics/export" && method === "POST") {
@@ -1387,18 +1676,22 @@ async function handleNativeApi(request, env) {
   }
 
   if (pathname === "/iam" && method === "GET") return ok({ iam: state.iam });
-  if (pathname === "/iam/users" && method === "POST") {
-    const body = await readJson(request);
-    const temporaryPassword = body.newPassword || generatedTemporaryPassword();
-    const user = {
-      email: normalizeLoginEmail(body.email),
-      id: nextId("USER"),
-      mustChangePassword: body.mustChangePassword === false ? false : true,
-      name: body.name,
-      passwordHash: await nativePasswordHash(temporaryPassword),
-      roleCodes: body.roleCodes || ["employee-self-service"],
-      status: "ACTIVE"
-    };
+	  if (pathname === "/iam/users" && method === "POST") {
+	    const body = await readJson(request);
+	    const temporaryPassword = body.newPassword || generatedTemporaryPassword();
+	    if (!validNewPassword(temporaryPassword)) return badRequest("初始密码至少 12 位，并且必须同时包含字母和数字。");
+	    const normalizedRoles = normalizeRequestedRoleCodes(state, body.roleCodes);
+	    if (normalizedRoles.invalid.length) return badRequest(`未知角色：${normalizedRoles.invalid.join(", ")}`);
+	    const user = {
+	      email: normalizeLoginEmail(body.email),
+	      id: nextId("USER"),
+	      mustChangePassword: body.mustChangePassword === false ? false : true,
+	      name: body.name,
+	      passwordHash: await nativePasswordHash(temporaryPassword),
+	      roleCodes: normalizedRoles.roleCodes,
+	      sessionVersion: 0,
+	      status: "ACTIVE"
+	    };
     if (!validLoginEmail(user.email) || !user.name) return badRequest("账号邮箱和姓名必填。");
     if (state.iam.users.some((item) => normalizeLoginEmail(item.email) === user.email)) {
       return json({ code: "USER_EMAIL_EXISTS", message: "该登录账号已存在。", ok: false }, { status: 409 });
@@ -1408,24 +1701,32 @@ async function handleNativeApi(request, env) {
     await saveState(env, state);
     return ok({ temporaryPassword, user });
   }
-  if (pathname === "/iam/accounts/sync-employees" && method === "POST") {
-    const body = await readJson(request);
-    const existingNames = new Set(state.iam.users.map((user) => user.name));
-    const roleCodes = body.roleCodes?.length ? body.roleCodes : ["employee-self-service"];
-    const createdUsers = [];
-    const credentials = [];
-    for (const employee of state.people.employees.filter((item) => !existingNames.has(item.name))) {
-      const temporaryPassword = generatedTemporaryPassword();
-      const user = {
-        email: `${String(employee.seq || employee.name).toLowerCase().replace(/[^a-z0-9]+/g, ".")}@oa.local`,
-        employee: { id: employee.id, name: employee.name },
-        id: nextId("USER"),
-        mustChangePassword: true,
-        name: employee.name,
-        passwordHash: await nativePasswordHash(temporaryPassword),
-        roleCodes,
-        status: "ACTIVE"
-      };
+	  if (pathname === "/iam/accounts/sync-employees" && method === "POST") {
+	    const body = await readJson(request);
+	    const existingEmployeeIds = new Set(state.iam.users.map((user) => user.employee?.id).filter(Boolean));
+	    const existingEmails = new Set(state.iam.users.map((user) => normalizeLoginEmail(user.email)).filter(Boolean));
+	    const existingNames = new Set(state.iam.users.map((user) => user.name));
+	    const normalizedRoles = normalizeRequestedRoleCodes(state, body.roleCodes);
+	    if (normalizedRoles.invalid.length) return badRequest(`未知角色：${normalizedRoles.invalid.join(", ")}`);
+	    const roleCodes = normalizedRoles.roleCodes;
+	    const createdUsers = [];
+	    const credentials = [];
+	    for (const employee of state.people.employees.filter((item) => {
+	      const email = normalizeLoginEmail(item.email || `${String(item.seq || item.name).toLowerCase().replace(/[^a-z0-9]+/g, ".")}@oa.local`);
+	      return !existingEmployeeIds.has(item.id) && !existingEmails.has(email) && !existingNames.has(item.name);
+	    })) {
+	      const temporaryPassword = generatedTemporaryPassword();
+	      const user = {
+	        email: normalizeLoginEmail(employee.email || `${String(employee.seq || employee.name).toLowerCase().replace(/[^a-z0-9]+/g, ".")}@oa.local`),
+	        employee: { id: employee.id, name: employee.name },
+	        id: nextId("USER"),
+	        mustChangePassword: true,
+	        name: employee.name,
+	        passwordHash: await nativePasswordHash(temporaryPassword),
+	        roleCodes,
+	        sessionVersion: 0,
+	        status: "ACTIVE"
+	      };
       createdUsers.push(user);
       credentials.push({
         email: user.email,
@@ -1441,33 +1742,54 @@ async function handleNativeApi(request, env) {
     await saveState(env, state);
     return ok({ createdCount: createdUsers.length, credentials, createdUsers });
   }
-  if (segments[0] === "iam" && segments[1] === "roles" && segments[3] === "permissions" && method === "PUT") {
-    const body = await readJson(request);
-    const role = state.iam.roles.find((item) => item.id === decodeURIComponent(segments[2]));
-    if (!role) return notFound(pathname);
-    role.permissionCodes = [...new Set(body.permissionCodes || [])];
-    role.permissions = permissionsByCode(role.permissionCodes);
+	  if (segments[0] === "iam" && segments[1] === "roles" && segments[3] === "permissions" && method === "PUT") {
+	    const body = await readJson(request);
+	    const role = state.iam.roles.find((item) => item.id === decodeURIComponent(segments[2]));
+	    if (!role) return notFound(pathname);
+	    const nextPermissionCodes = [...new Set(body.permissionCodes || [])];
+	    const invalidPermissions = invalidPermissionCodes(nextPermissionCodes);
+	    if (invalidPermissions.length) return badRequest(`未知权限：${invalidPermissions.join(", ")}`);
+	    if (role.code === "admin" && (!nextPermissionCodes.includes("system.admin") || !nextPermissionCodes.includes("iam.write"))) {
+	      return badRequest("系统管理员角色必须保留 system.admin 和 iam.write 权限。");
+	    }
+	    role.permissionCodes = nextPermissionCodes;
+	    role.permissions = permissionsByCode(role.permissionCodes);
     await appendAudit(env, state, { action: "更新角色权限", actor: "张三", content: `更新 ${role.name} 权限`, object: "角色权限", objectId: role.id });
     await saveState(env, state);
     return ok({ role });
   }
-  if (segments[0] === "iam" && segments[1] === "users" && segments[2] && ["roles", "status", "password"].includes(segments[3]) && method === "PUT") {
-    const body = await readJson(request);
-    const user = state.iam.users.find((item) => item.id === decodeURIComponent(segments[2]));
-    if (!user) return notFound(pathname);
-    if (segments[3] === "roles") user.roleCodes = [...new Set(body.roleCodes || [])];
-    if (segments[3] === "status") user.status = body.status || user.status;
-    if (segments[3] === "password") {
-      if (!validNewPassword(body.newPassword)) return badRequest("密码至少 12 位，并且必须同时包含字母和数字。");
-      user.passwordHash = await nativePasswordHash(body.newPassword);
-      user.mustChangePassword = true;
-    }
+	  if (segments[0] === "iam" && segments[1] === "users" && segments[2] && ["roles", "status", "password"].includes(segments[3]) && method === "PUT") {
+	    const body = await readJson(request);
+	    const user = state.iam.users.find((item) => item.id === decodeURIComponent(segments[2]));
+	    if (!user) return notFound(pathname);
+	    if (segments[3] === "roles") {
+	      if (user.id === actor.id) return badRequest("不能修改当前登录账号自己的角色，避免管理员锁死。");
+	      const normalizedRoles = normalizeRequestedRoleCodes(state, body.roleCodes, []);
+	      if (!normalizedRoles.roleCodes.length) return badRequest("账号至少需要一个角色。");
+	      if (normalizedRoles.invalid.length) return badRequest(`未知角色：${normalizedRoles.invalid.join(", ")}`);
+	      user.roleCodes = normalizedRoles.roleCodes;
+	      user.sessionVersion = Number(user.sessionVersion || 0) + 1;
+	    }
+	    if (segments[3] === "status") {
+	      const nextStatus = String(body.status || user.status);
+	      if (!["ACTIVE", "DISABLED"].includes(nextStatus)) return badRequest("账号状态只能是 ACTIVE 或 DISABLED。");
+	      if (user.id === actor.id && nextStatus !== "ACTIVE") return badRequest("不能停用当前登录账号。");
+	      user.status = nextStatus;
+	      user.sessionVersion = Number(user.sessionVersion || 0) + 1;
+	    }
+	    if (segments[3] === "password") {
+	      if (user.id === actor.id) return badRequest("不能通过管理员重置入口重置当前登录账号密码。");
+	      if (!validNewPassword(body.newPassword)) return badRequest("密码至少 12 位，并且必须同时包含字母和数字。");
+	      user.passwordHash = await nativePasswordHash(body.newPassword);
+	      user.mustChangePassword = true;
+	      user.sessionVersion = Number(user.sessionVersion || 0) + 1;
+	    }
     await appendAudit(env, state, { action: "更新账号", actor: "张三", content: `更新账号 ${user.email}`, object: "账号权限", objectId: user.id });
     await saveState(env, state);
     return ok({ user });
   }
 
-  if (pathname === "/approvals/definitions" && method === "GET") return ok({ workflowDefinitions: state.workflowDefinitions });
+  if ((pathname === "/approvals/definitions" || pathname === "/workflows/definitions") && method === "GET") return ok({ workflowDefinitions: state.workflowDefinitions });
   if (pathname === "/approvals/rules/coverage" && method === "GET") return ok({ approvalRuleCoverage: state.approvalRuleCoverage });
   if (pathname === "/approvals/rules/preview" && method === "GET") {
     const department = url.searchParams.get("department") || "行政部";
@@ -1512,7 +1834,7 @@ async function handleNativeApi(request, env) {
       ...template,
       ...body,
       amount: fieldValueLabel(template, formData),
-      applicant: body.applicant || template.owner || "张三",
+      applicant: actorName,
       approvalNodes,
       approvers: approvalNodes[1]?.decisions.map((item) => item.approver) || [],
       comments: [],
@@ -1529,7 +1851,7 @@ async function handleNativeApi(request, env) {
       steps: template.nodes,
       submittedAt: localTime(),
       timeline: [
-        { id: nextId("TL"), time: localTime(), actor: body.applicant || template.owner || "张三", action: "提交申请", node: "申请人提交" },
+        { id: nextId("TL"), time: localTime(), actor: actorName, action: "提交申请", node: "申请人提交" },
         { id: nextId("TL"), time: localTime(), actor: "系统", action: "创建审批任务", node: approvalNodes[1]?.name || template.node }
       ],
       title: body.title || template.name
@@ -1680,7 +2002,7 @@ async function handleNativeApi(request, env) {
   if (pathname === "/finance/payrolls" && method === "GET") return ok({ payrolls: state.payrolls });
   if (pathname === "/finance/requests" && method === "POST") {
     const body = await readJson(request);
-    const requestRow = { id: nextId(body.type === "PAYMENT" ? "PAY" : "EXP"), status: "待审批", workflowStatus: "PENDING", ...body };
+    const requestRow = { ...body, applicant: actorName, id: nextId(body.type === "PAYMENT" ? "PAY" : "EXP"), status: "待审批", workflowStatus: "PENDING" };
     state.financeRequests = [requestRow, ...state.financeRequests];
     await appendAudit(env, state, { action: "提交财务单据", actor: requestRow.applicant || "张三", content: requestRow.title || requestRow.typeLabel || "财务单据", object: "财务行政", objectId: requestRow.id });
     await saveState(env, state);
@@ -1719,7 +2041,7 @@ async function handleNativeApi(request, env) {
     const body = await readJson(request);
     const conflict = state.resourceBookings.some((booking) => booking.resourceName === body.resourceName && Number(booking.dayIndex) === Number(body.dayIndex) && booking.period === body.period && booking.status !== "已取消");
     if (conflict) return badRequest("该资源时间段已有预约。");
-    const booking = { id: nextId("BOOK"), applicant: "张三", status: "已预约", ...body };
+    const booking = { ...body, id: nextId("BOOK"), applicant: actorName, status: "已预约" };
     state.resourceBookings = [booking, ...state.resourceBookings];
     await appendAudit(env, state, { action: "资源预约", actor: booking.applicant, content: `${booking.resourceName} ${booking.period || ""}`, object: "资源预约", objectId: booking.id });
     await saveState(env, state);
@@ -1752,7 +2074,7 @@ async function handleNativeApi(request, env) {
       createdAt: nowIso(),
       id: nextId("FILE"),
       sizeBytes: Math.round((body.contentBase64 || "").length * 0.75),
-      uploader: { name: "张三" },
+      uploader: { name: actorName },
       visibility: "PRIVATE",
       ...body
     };
@@ -1829,9 +2151,11 @@ async function handleNativeApi(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname.startsWith("/api/")) {
-      if (request.method === "OPTIONS") return corsPreflight(request, env);
-      const useProxy = String(env.OA_API_MODE || "").toLowerCase() === "proxy" && env.API_ORIGIN;
+	    if (url.pathname.startsWith("/api/")) {
+	      if (request.method === "OPTIONS") return corsPreflight(request, env);
+	      const csrfResponse = csrfGuard(request, env);
+	      if (csrfResponse) return withCorsHeaders(csrfResponse, request, env);
+	      const useProxy = String(env.OA_API_MODE || "").toLowerCase() === "proxy" && env.API_ORIGIN;
       try {
         const response = useProxy
           ? await proxyApi(request, env)

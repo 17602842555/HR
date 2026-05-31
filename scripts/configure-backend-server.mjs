@@ -255,20 +255,19 @@ function buildOwnerInputs({
       {
         id: "security",
         gapIds: ["GAP-003"],
-        requiredInputs: [
-          "Real .env.production from the approved secret manager.",
-          "Cloudflare API token with Workers deploy and Tunnel write permissions.",
-          "Approved HTTPS API_ORIGIN for the backend Tunnel hostname.",
-          "Reviewed production secrets signoff."
-        ],
-        validationCommands: [
-          "npm run validate:production-env -- .env.production --json",
-          "npm run validate:cloudflare-backend -- --env .env.production --json",
-          `npm run configure:cloudflare -- --env .env.production --repo ${repo} --verify-token --json`,
-          `npm run configure:cloudflare-tunnel -- --env .env.production --tunnel ${tunnel || "<tunnel-uuid>"} --json`,
-          `npm run configure:release-inputs -- --ensure-github-environment --repo ${repo} --environment ${environment} --json`,
-          "npm run validate:secrets-signoff -- docs/production-secrets-signoff.json --env .env.production --json"
-        ]
+	        requiredInputs: [
+	          "Real .env.production from the approved secret manager.",
+	          "Cloudflare API token with Workers deploy permission.",
+	          "Cloudflare Workers deployment URL, account id, and D1 binding evidence for native-worker mode.",
+	          "Reviewed production secrets signoff."
+	        ],
+	        validationCommands: [
+	          "npm run validate:production-env -- .env.production --json",
+	          "npm run validate:cloudflare-backend -- --env .env.production --json",
+	          `npm run configure:cloudflare -- --env .env.production --repo ${repo} --verify-token --json`,
+	          `npm run configure:release-inputs -- --ensure-github-environment --repo ${repo} --environment ${environment} --json`,
+	          "npm run validate:secrets-signoff -- docs/production-secrets-signoff.json --env .env.production --json"
+	        ]
       },
       {
         id: "infrastructure",
@@ -365,10 +364,9 @@ function renderIndexMarkdown({ generatedAt, manifest }) {
     "",
     "```bash",
     "npm run validate:production-env -- .env.production --json",
-    "npm run validate:cloudflare-backend -- --env .env.production --json",
-    `npm run configure:cloudflare -- --env .env.production --repo ${manifest.repo} --verify-token --json`,
-    `npm run configure:cloudflare-tunnel -- --env .env.production --tunnel ${manifest.tunnel || "<tunnel-uuid>"} --json`,
-    `npm run configure:release-inputs -- --ensure-github-environment --repo ${manifest.repo} --environment ${manifest.environment} --apply --json`,
+	    "npm run validate:cloudflare-backend -- --env .env.production --json",
+	    `npm run configure:cloudflare -- --env .env.production --repo ${manifest.repo} --verify-token --json`,
+	    `npm run configure:release-inputs -- --ensure-github-environment --repo ${manifest.repo} --environment ${manifest.environment} --apply --json`,
     `gh workflow run commercial-signoff.yml --repo ${manifest.repo} -f target_environment=${manifest.environment}`,
     "EVIDENCE_RUN_E2E=1 npm run evidence:commercial -- --full --strict-readiness",
     "npm run release:gate -- reports/commercial-evidence/latest.json --json",
@@ -419,7 +417,7 @@ function renderServerRunbookMarkdown({ repo, tunnel }) {
   return [
     "# Backend Server Runbook",
     "",
-    "The backend remains Fastify + Prisma + PostgreSQL. Cloudflare Worker is the edge gateway, and Cloudflare Tunnel exposes the API without opening an inbound API port.",
+	    "The first public release uses GitHub Pages for the frontend and a Cloudflare native Worker/D1 backend for `/api`, so no custom domain, Tunnel hostname, or API_ORIGIN is required. The Fastify + Prisma + PostgreSQL backend remains available for a future self-hosted/Tunnel deployment.",
     "",
     "## 1. Fill Production Env",
     "",
@@ -436,25 +434,25 @@ function renderServerRunbookMarkdown({ repo, tunnel }) {
     `npm run configure:cloudflare -- --env .env.production --repo ${repo} --verify-token --apply --json`,
     "```",
     "",
-    "## 3. Configure Tunnel Public Hostname",
+	    "## 3. Optional Future Tunnel Public Hostname",
     "",
     "```bash",
     `npm run configure:cloudflare-tunnel -- --env .env.production --tunnel ${tunnel || "<tunnel-uuid>"} --json`,
     `npm run configure:cloudflare-tunnel -- --env .env.production --tunnel ${tunnel || "<tunnel-uuid>"} --apply --json`,
     "```",
     "",
-    "The expected Tunnel service target is `http://api:8787` with a final `http_status:404` catch-all rule.",
+	    "Skip this section for native-worker scheme C. If a future Fastify backend is exposed through Tunnel, the expected service target is `http://api:8787` with a final `http_status:404` catch-all rule.",
     "",
-    "## 4. Start Backend Server",
+	    "## 4. Optional Fastify Backend Server",
     "",
     "```bash",
     "docker compose -f docker-compose.prod.yml -f docker-compose.cloudflare.yml --env-file .env.production up -d --build postgres api cloudflared",
     "```",
     "",
-    "## 5. Verify Public Gateway",
+	    "## 5. Verify Public Gateway",
     "",
     "```bash",
-    `npm run doctor:cloudflare -- --repo ${repo} --tunnel ${tunnel || "<tunnel-uuid>"} --json`,
+	    `npm run doctor:cloudflare -- --repo ${repo} --url "$CLOUDFLARE_DEPLOYMENT_URL" --json`,
     "npm run smoke:cloudflare -- --url \"$CLOUDFLARE_DEPLOYMENT_URL\" --json",
     "```",
     ""
@@ -605,10 +603,9 @@ export function configureBackendServerPackage(options = {}) {
     releaseUse: "Configuration handoff only. Release acceptance still requires reviewed non-example signoffs, production evidence, and release:gate.",
     nextCommands: [
       "npm run validate:production-env -- .env.production --json",
-      "npm run validate:cloudflare-backend -- --env .env.production --json",
-      `npm run configure:cloudflare -- --env .env.production --repo ${repo} --verify-token --json`,
-      `npm run configure:cloudflare-tunnel -- --env .env.production --tunnel ${tunnel || "<tunnel-uuid>"} --json`,
-      `npm run configure:release-inputs -- --ensure-github-environment --repo ${repo} --environment ${environment} --apply --json`,
+	      "npm run validate:cloudflare-backend -- --env .env.production --json",
+	      `npm run configure:cloudflare -- --env .env.production --repo ${repo} --verify-token --json`,
+	      `npm run configure:release-inputs -- --ensure-github-environment --repo ${repo} --environment ${environment} --apply --json`,
       `gh workflow run commercial-signoff.yml --repo ${repo} -f target_environment=${environment}`,
       "EVIDENCE_RUN_E2E=1 npm run evidence:commercial -- --full --strict-readiness",
       "npm run release:gate -- reports/commercial-evidence/latest.json --json"

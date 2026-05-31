@@ -8,11 +8,19 @@ export function canFallbackToLocalAction(error, policy = {}) {
 }
 
 export function apiActionErrorStatus(error, policy = {}) {
+  const status = Number(error?.status || 0);
   if (canFallbackToLocalAction(error, policy)) {
     return {
       error: error?.message || "API action failed",
       mode: "degraded",
       source: "mixed"
+    };
+  }
+  if (status > 0) {
+    return {
+      error: error?.message || "API action failed",
+      mode: "degraded",
+      source: "api"
     };
   }
   return {

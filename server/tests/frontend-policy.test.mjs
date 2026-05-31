@@ -94,7 +94,7 @@ test("frontend action failure status keeps API as source for business errors", (
 
   assert.deepEqual(apiActionErrorStatus(duplicateError, { allowDemoFallback: false, requireApi: true }), {
     error: "duplicate import",
-    mode: "api_required",
+    mode: "degraded",
     source: "api"
   });
 });

@@ -60,20 +60,28 @@ function originsFromWebOrigin(value) {
     .map((item) => originOf(item) || item);
 }
 
-export function validateCloudflareBackendEnv(env = {}) {
+function normalizeBackendMode(value) {
+  const mode = String(value || "native-worker").trim().toLowerCase();
+  if (["native", "native-worker", "worker", "cloudflare-native"].includes(mode)) return "native-worker";
+  if (["tunnel", "cloudflare-tunnel", "proxy"].includes(mode)) return "tunnel";
+  throw new Error("Cloudflare backend mode must be native-worker or tunnel.");
+}
+
+export function validateCloudflareBackendEnv(env = {}, options = {}) {
   const errors = [];
   const warnings = [];
-
-  if (isPlaceholder(env.CLOUDFLARE_TUNNEL_TOKEN) || String(env.CLOUDFLARE_TUNNEL_TOKEN || "").length < 20) {
-    errors.push("CLOUDFLARE_TUNNEL_TOKEN must be a real remotely-managed Cloudflare Tunnel token.");
-  }
+  const mode = normalizeBackendMode(options.mode || env.CLOUDFLARE_BACKEND_MODE || env.OA_API_MODE);
+  const tunnelMode = mode === "tunnel";
 
   let apiOrigin = "";
   let deploymentUrl = "";
-  try {
-    apiOrigin = normalizeDeploymentUrl(env.API_ORIGIN);
-  } catch (error) {
-    errors.push(`API_ORIGIN: ${error.message}`);
+  if (tunnelMode || String(env.API_ORIGIN || "").trim()) {
+    try {
+      apiOrigin = normalizeDeploymentUrl(env.API_ORIGIN);
+    } catch (error) {
+      if (tunnelMode) errors.push(`API_ORIGIN: ${error.message}`);
+      else warnings.push(`API_ORIGIN is ignored in native-worker mode: ${error.message}`);
+    }
   }
   try {
     deploymentUrl = normalizeDeploymentUrl(env.CLOUDFLARE_DEPLOYMENT_URL);
@@ -81,11 +89,17 @@ export function validateCloudflareBackendEnv(env = {}) {
     errors.push(`CLOUDFLARE_DEPLOYMENT_URL: ${error.message}`);
   }
 
-  if (apiOrigin && deploymentUrl && originOf(apiOrigin) === originOf(deploymentUrl)) {
+  if (tunnelMode && (isPlaceholder(env.CLOUDFLARE_TUNNEL_TOKEN) || String(env.CLOUDFLARE_TUNNEL_TOKEN || "").length < 20)) {
+    errors.push("CLOUDFLARE_TUNNEL_TOKEN must be a real remotely-managed Cloudflare Tunnel token.");
+  }
+  if (tunnelMode && apiOrigin && deploymentUrl && originOf(apiOrigin) === originOf(deploymentUrl)) {
     errors.push("API_ORIGIN must be the backend tunnel origin, not the same origin as CLOUDFLARE_DEPLOYMENT_URL.");
   }
-  if (apiOrigin && isExampleComOrigin(apiOrigin)) {
+  if (tunnelMode && apiOrigin && isExampleComOrigin(apiOrigin)) {
     errors.push("API_ORIGIN must not use example.com template hosts.");
+  }
+  if (!tunnelMode && apiOrigin) {
+    warnings.push("API_ORIGIN is not required in native-worker mode and will not be used by the Cloudflare native API.");
   }
   if (deploymentUrl && isExampleComOrigin(deploymentUrl)) {
     errors.push("CLOUDFLARE_DEPLOYMENT_URL must not use example.com template hosts.");
@@ -93,8 +107,11 @@ export function validateCloudflareBackendEnv(env = {}) {
 
   const allowedOrigins = originsFromWebOrigin(env.WEB_ORIGIN);
   const deploymentOrigin = originOf(deploymentUrl);
-  if (!deploymentOrigin || !allowedOrigins.includes(deploymentOrigin)) {
+  if (tunnelMode && (!deploymentOrigin || !allowedOrigins.includes(deploymentOrigin))) {
     errors.push("WEB_ORIGIN must include the Cloudflare frontend deployment origin.");
+  }
+  if (!tunnelMode && allowedOrigins.length === 0) {
+    errors.push("WEB_ORIGIN must include the GitHub Pages or approved frontend origin for Cloudflare native Worker CORS.");
   }
   if (allowedOrigins.includes("*")) {
     errors.push("WEB_ORIGIN must not include wildcard origins.");
@@ -103,7 +120,7 @@ export function validateCloudflareBackendEnv(env = {}) {
     errors.push("WEB_ORIGIN must not use example.com template hosts.");
   }
 
-  if (String(env.TRUST_PROXY || "0").trim() !== "1") {
+  if (tunnelMode && String(env.TRUST_PROXY || "0").trim() !== "1") {
     warnings.push("Set TRUST_PROXY=1 only after the API is reachable exclusively through Cloudflare Tunnel or another trusted proxy that rewrites forwarded headers.");
   }
 
@@ -122,6 +139,7 @@ export function validateCloudflareBackendEnv(env = {}) {
     summary: {
       apiOriginConfigured: Boolean(apiOrigin),
       deploymentUrlConfigured: Boolean(deploymentUrl),
+      mode,
       tunnelTokenConfigured: !isPlaceholder(env.CLOUDFLARE_TUNNEL_TOKEN),
       webOriginCount: allowedOrigins.length
     },
@@ -132,7 +150,8 @@ export function validateCloudflareBackendEnv(env = {}) {
 export function parseCloudflareBackendArgs(argv = process.argv.slice(2)) {
   const options = {
     envPath: ".env.production",
-    json: false
+    json: false,
+    mode: "native-worker"
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -141,6 +160,9 @@ export function parseCloudflareBackendArgs(argv = process.argv.slice(2)) {
     } else if (arg === "--env") {
       options.envPath = argv[index + 1] || "";
       index += 1;
+    } else if (arg === "--mode") {
+      options.mode = normalizeBackendMode(argv[index + 1] || "");
+      index += 1;
     } else {
       throw new Error(`Unknown cloudflare backend validation argument: ${arg}`);
     }
@@ -148,7 +170,7 @@ export function parseCloudflareBackendArgs(argv = process.argv.slice(2)) {
   return options;
 }
 
-export function validateCloudflareBackendFile(envPath) {
+export function validateCloudflareBackendFile(envPath, options = {}) {
   const absolutePath = resolve(envPath || ".env.production");
   if (!existsSync(absolutePath)) {
     return {
@@ -157,6 +179,7 @@ export function validateCloudflareBackendFile(envPath) {
       summary: {
         apiOriginConfigured: false,
         deploymentUrlConfigured: false,
+        mode: options.mode || "native-worker",
         tunnelTokenConfigured: false,
         webOriginCount: 0
       },
@@ -164,7 +187,7 @@ export function validateCloudflareBackendFile(envPath) {
     };
   }
   const env = parseDotenvText(readFileSync(absolutePath, "utf8"));
-  return validateCloudflareBackendEnv(env);
+  return validateCloudflareBackendEnv(env, options);
 }
 
 function printHumanReport(report) {
@@ -176,7 +199,7 @@ function printHumanReport(report) {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const options = parseCloudflareBackendArgs();
-    const report = validateCloudflareBackendFile(options.envPath);
+    const report = validateCloudflareBackendFile(options.envPath, options);
     if (options.json) {
       console.log(JSON.stringify(report, null, 2));
     } else {
@@ -190,6 +213,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
       summary: {
         apiOriginConfigured: false,
         deploymentUrlConfigured: false,
+        mode: "native-worker",
         tunnelTokenConfigured: false,
         webOriginCount: 0
       },

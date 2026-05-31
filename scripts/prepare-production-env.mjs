@@ -136,12 +136,14 @@ function productionEnvTemplate(storageDriver) {
     renderEnvLine("VITE_REQUIRE_API", values.VITE_REQUIRE_API),
     renderEnvLine("VITE_DEMO_FALLBACK", values.VITE_DEMO_FALLBACK),
     "",
-    "# Cloudflare deployment. Keep token values in the managed secret store and GitHub repository secrets.",
+    "# Cloudflare native Worker deployment. Keep token values in the managed secret store and GitHub repository secrets.",
     renderEnvLine("CLOUDFLARE_ACCOUNT_ID", values.CLOUDFLARE_ACCOUNT_ID),
     renderEnvLine("CLOUDFLARE_API_TOKEN", values.CLOUDFLARE_API_TOKEN),
+    renderEnvLine("CLOUDFLARE_DEPLOYMENT_URL", values.CLOUDFLARE_DEPLOYMENT_URL),
+    "",
+    "# Optional future Tunnel/Fastify backend mode. Leave blank for native-worker scheme C.",
     renderEnvLine("CLOUDFLARE_TUNNEL_TOKEN", values.CLOUDFLARE_TUNNEL_TOKEN),
     renderEnvLine("API_ORIGIN", values.API_ORIGIN),
-    renderEnvLine("CLOUDFLARE_DEPLOYMENT_URL", values.CLOUDFLARE_DEPLOYMENT_URL),
     renderEnvLine("CLOUDFLARE_BACKEND_WEB_ORIGIN", values.CLOUDFLARE_BACKEND_WEB_ORIGIN),
     ""
   ].join("\n");
@@ -152,11 +154,13 @@ function secretChecklist(storageDriver, generatedAt) {
     ...requiredManagedSecrets,
     ...(storageDriver === "s3" ? ["OBJECT_STORAGE_ACCESS_KEY_ID", "OBJECT_STORAGE_SECRET_ACCESS_KEY"] : [])
   ];
-  const cloudflareRepositorySecrets = [
+  const nativeCloudflareRepositorySecrets = [
     "CLOUDFLARE_API_TOKEN",
     "CLOUDFLARE_ACCOUNT_ID",
+    "CLOUDFLARE_DEPLOYMENT_URL"
+  ];
+  const tunnelCloudflareRepositorySecrets = [
     "API_ORIGIN",
-    "CLOUDFLARE_DEPLOYMENT_URL",
     "CLOUDFLARE_TUNNEL_TOKEN",
     "CLOUDFLARE_BACKEND_WEB_ORIGIN"
   ];
@@ -181,12 +185,24 @@ function secretChecklist(storageDriver, generatedAt) {
         neverCommit: true
       }
     ],
-    cloudflareRepositorySecrets: cloudflareRepositorySecrets.map((key) => ({
+    cloudflareRepositorySecrets: [
+      ...nativeCloudflareRepositorySecrets.map((key) => ({
+        key,
+        requiredForCloudflareDeploy: true,
+        requiredForNativeWorkerDeploy: true,
+        requiredForTunnelDeploy: true,
+        writeWith: "npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --apply --json",
+        neverPrintValue: key.includes("TOKEN")
+      })),
+      ...tunnelCloudflareRepositorySecrets.map((key) => ({
       key,
-      requiredForCloudflareDeploy: true,
+      requiredForCloudflareDeploy: false,
+      requiredForNativeWorkerDeploy: false,
+      requiredForTunnelDeploy: true,
       writeWith: "npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --apply --json",
       neverPrintValue: key.includes("TOKEN")
-    })),
+      }))
+    ],
     originControls: {
       key: "WEB_ORIGIN",
       requiresHttps: true,
@@ -198,7 +214,7 @@ function secretChecklist(storageDriver, generatedAt) {
       "npm run validate:production-env -- .env.production --json",
       "npm run validate:cloudflare-backend -- --env .env.production --json",
       "npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --json",
-      "npm run configure:cloudflare-tunnel -- --env .env.production --tunnel <tunnel-uuid> --json",
+      "Optional future tunnel mode only: npm run configure:cloudflare-tunnel -- --env .env.production --tunnel <tunnel-uuid> --json",
       "npm run signoff:drafts -- --env .env.production --json",
       "npm run validate:secrets-signoff -- <production-secrets-signoff.json> --env .env.production --json"
     ]
@@ -221,10 +237,11 @@ function readmeText({ generatedAt, storageDriver, targetEnvPath }) {
     "npm run validate:production-env -- .env.production --json",
     "npm run validate:cloudflare-backend -- --env .env.production --json",
     "npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --json",
-    "npm run configure:cloudflare-tunnel -- --env .env.production --tunnel <tunnel-uuid> --json",
     "npm run signoff:drafts -- --env .env.production --json",
     "npm run validate:secrets-signoff -- <production-secrets-signoff.json> --env .env.production --json",
     "```",
+    "",
+    "Use `npm run configure:cloudflare-tunnel -- --env .env.production --tunnel <tunnel-uuid> --json` only for a future custom-domain Tunnel/Fastify backend mode. The native Worker/D1 release path does not require `API_ORIGIN` or `CLOUDFLARE_TUNNEL_TOKEN`.",
     "",
     "Do not commit completed production env files or reviewer signoff files that contain operational paths not intended for source control.",
     ""

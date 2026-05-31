@@ -56,11 +56,12 @@ test("backend server config packet writes private no-secret handoff with current
     assert.equal(ownerInputs.requiredRepositorySecrets.includes("CLOUDFLARE_API_TOKEN"), true);
     assert.equal(ownerInputs.requiredEnvironmentSecrets.includes("PRODUCTION_ENV_B64"), true);
     assert.equal(ownerInputs.safeBase64SecretCommands.every((item) => item.command.includes("gh secret set")), true);
-    assert.match(githubSecrets, /CLOUDFLARE_API_TOKEN/);
-    assert.match(githubSecrets, /base64 < \.env\.production/);
-    assert.match(readme, /Backend Server Configuration Packet/);
-    assert.match(readme, /configure:cloudflare-tunnel/);
-    assert.match(runbook, /docker compose -f docker-compose\.prod\.yml -f docker-compose\.cloudflare\.yml/);
+	    assert.match(githubSecrets, /CLOUDFLARE_API_TOKEN/);
+	    assert.match(githubSecrets, /base64 < \.env\.production/);
+	    assert.match(readme, /Backend Server Configuration Packet/);
+	    assert.doesNotMatch(readme, /configure:cloudflare-tunnel/);
+	    assert.match(runbook, /native Worker\/D1 backend/);
+	    assert.match(runbook, /Optional Future Tunnel Public Hostname/);
 
     const serialized = JSON.stringify({ manifest, ownerInputs, githubSecrets, readme, runbook });
     assert.equal(serialized.includes("real_production_pg_secret"), false);

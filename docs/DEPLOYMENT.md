@@ -124,7 +124,7 @@ npm run prepare:production-env -- --json
 npm run prepare:production-env -- --storage-driver s3 --json
 ```
 
-This writes a preparation package under `reports/commercial-evidence/production-env-prep/`, including `.env.production.template`, `secret-store-checklist.json`, `README.md`, and `manifest.json`. The template includes the durable backup fields `BACKUP_DIR` and, for local file storage, `FILE_BACKUP_DIR`. It also includes the Cloudflare backend handoff fields `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_TUNNEL_TOKEN`, `API_ORIGIN`, `CLOUDFLARE_DEPLOYMENT_URL`, and `CLOUDFLARE_BACKEND_WEB_ORIGIN`, so the same filled env file can drive `npm run validate:cloudflare-backend -- --env .env.production --json`, `npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --verify-token --json`, and `npm run configure:cloudflare-tunnel -- --env .env.production --tunnel <tunnel-uuid> --json`. The optional `--verify-token` check calls Cloudflare's `/user/tokens/verify` endpoint and records only the active/failed status, never the token value or token id. No plaintext secret values are generated. The package directory is written with private `0700` permissions and package files with `0600` permissions. This is a preparation package only: copy the field list into the approved secret manager, fill the real `.env.production` through deployment tooling, run `npm run validate:production-env -- .env.production --json`, `npm run validate:cloudflare-backend -- --env .env.production --json`, and the redacted Cloudflare dry runs, then generate and validate reviewed signoffs. Treat the generated package as a checklist, not release evidence.
+This writes a preparation package under `reports/commercial-evidence/production-env-prep/`, including `.env.production.template`, `secret-store-checklist.json`, `README.md`, and `manifest.json`. The template includes the durable backup fields `BACKUP_DIR` and, for local file storage, `FILE_BACKUP_DIR`. It also includes the native Cloudflare handoff fields `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and `CLOUDFLARE_DEPLOYMENT_URL`; `CLOUDFLARE_TUNNEL_TOKEN`, `API_ORIGIN`, and `CLOUDFLARE_BACKEND_WEB_ORIGIN` are optional future Tunnel/Fastify fields. The same filled env file can drive `npm run validate:cloudflare-backend -- --env .env.production --json` and `npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --verify-token --json`. The optional `--verify-token` check calls Cloudflare's `/user/tokens/verify` endpoint and records only the active/failed status, never the token value or token id. No plaintext secret values are generated. The package directory is written with private `0700` permissions and package files with `0600` permissions. This is a preparation package only: copy the field list into the approved secret manager, fill the real `.env.production` through deployment tooling, run the validators and redacted Cloudflare dry runs, then generate and validate reviewed signoffs. Treat the generated package as a checklist, not release evidence.
 
 Backend server configuration packet:
 
@@ -177,7 +177,7 @@ cp docs/production-secrets-signoff.example.json docs/production-secrets-signoff.
 npm run validate:secrets-signoff -- docs/production-secrets-signoff.json --env .env.production --json
 ```
 
-This validation rejects example signoffs, plaintext secret fields, stale `.env.production` SHA-256 values, failed production env validation, missing managed `POSTGRES_PASSWORD` / `JWT_SECRET` / `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_TUNNEL_TOKEN`, missing `DEFAULT_ADMIN_PASSWORD` management when production seeding is enabled, non-runtime secret injection, committed plaintext policy gaps, origin-policy mismatches against `WEB_ORIGIN`, weak rotation metadata, missing Security/Deployment approvals, and open production exceptions. Attach the passing JSON output and the reviewed signoff file to release evidence before closing GAP-003.
+This validation rejects example signoffs, plaintext secret fields, stale `.env.production` SHA-256 values, failed production env validation, missing native-worker managed `POSTGRES_PASSWORD` / `JWT_SECRET` / `CLOUDFLARE_API_TOKEN`, missing `DEFAULT_ADMIN_PASSWORD` management when production seeding is enabled, non-runtime secret injection, committed plaintext policy gaps, origin-policy mismatches against `WEB_ORIGIN`, weak rotation metadata, missing Security/Deployment approvals, and open production exceptions. `CLOUDFLARE_TUNNEL_TOKEN` is required only for explicit Tunnel mode. Attach the passing JSON output and the reviewed signoff file to release evidence before closing GAP-003.
 
 HR data signoff validation:
 
@@ -223,7 +223,7 @@ Commercial signoff validation workflow:
 # Then run: Actions -> commercial-signoff -> Run workflow.
 ```
 
-`.github/workflows/commercial-signoff.yml` validates GAP-003, GAP-004, and GAP-005 inputs without committing secret-bearing files. The workflow uses Node 24-native GitHub actions and keeps `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` as a runner-level guard, then uses `npm run prepare:release-inputs -- --json --output reports/commercial-evidence/signoff-validation/release-inputs.json` to decode and validate every base64 GitHub environment secret before writing any release input file. Only after all decoded inputs pass shape validation does it materialize `.env.production`, `docs/production-secrets-signoff.json`, `docs/hr-data-signoff.json`, and `docs/file-storage-signoff.json` with private `0600` file permissions under private directories, then write a redacted private `0600` materialization manifest. Each validator step runs with `set -euo pipefail` and `umask 077`, so validator output files also inherit private permissions. The workflow now writes `cloudflare-backend.json` beside `production-env.json`, `secrets-signoff.json`, `hr-signoff.json`, and `storage-signoff.json`, so GAP-003 owner review covers both secret/origin signoff and the backend Tunnel/API origin path. The workflow uploads only `reports/commercial-evidence/signoff-validation` as `commercial-signoff-validation`; it does not upload `.env.production` or the materialized signoff files. This is validation evidence for owner review. Release acceptance still requires the full evidence package, Docker drill evidence, zero open GAP rows, and `npm run release:gate -- reports/commercial-evidence/latest.json --json`.
+`.github/workflows/commercial-signoff.yml` validates GAP-003, GAP-004, and GAP-005 inputs without committing secret-bearing files. The workflow uses Node 24-native GitHub actions and keeps `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` as a runner-level guard, then uses `npm run prepare:release-inputs -- --json --output reports/commercial-evidence/signoff-validation/release-inputs.json` to decode and validate every base64 GitHub environment secret before writing any release input file. Only after all decoded inputs pass shape validation does it materialize `.env.production`, `docs/production-secrets-signoff.json`, `docs/hr-data-signoff.json`, and `docs/file-storage-signoff.json` with private `0600` file permissions under private directories, then write a redacted private `0600` materialization manifest. Each validator step runs with `set -euo pipefail` and `umask 077`, so validator output files also inherit private permissions. The workflow now writes `cloudflare-backend.json` beside `production-env.json`, `secrets-signoff.json`, `hr-signoff.json`, and `storage-signoff.json`, so GAP-003 owner review covers native-worker Cloudflare backend evidence and secret/origin signoff. The workflow uploads only `reports/commercial-evidence/signoff-validation` as `commercial-signoff-validation`; it does not upload `.env.production` or the materialized signoff files. This is validation evidence for owner review. Release acceptance still requires the full evidence package, Docker drill evidence, zero open GAP rows, and `npm run release:gate -- reports/commercial-evidence/latest.json --json`.
 
 To pull the latest successful GitHub signoff artifact into the local evidence workspace:
 
@@ -241,7 +241,7 @@ npm run release:github -- --json
 npm run release:github -- --apply --json
 ```
 
-The default command is a dry-run production release plan. It inspects GitHub repository secret names and the selected GitHub environment secret names only, writes `reports/commercial-evidence/github-release-orchestration/latest-manifest.json` with private `0600` permissions, and lists any missing backend or release-input secret names without reading secret values. With `--apply`, it fails closed until every required repository secret (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `API_ORIGIN`, `CLOUDFLARE_DEPLOYMENT_URL`, `CLOUDFLARE_TUNNEL_TOKEN`, `CLOUDFLARE_BACKEND_WEB_ORIGIN`) and environment secret (`PRODUCTION_ENV_B64`, `PRODUCTION_SECRETS_SIGNOFF_B64`, `HR_DATA_SIGNOFF_B64`, `FILE_STORAGE_SIGNOFF_B64`) is configured. Once ready, it triggers `commercial-signoff`, `commercial-drill`, and `cloudflare-deploy` with `require_deploy=true`, waits for those runs by default, and promotes GitHub signoff/drill artifacts back into the local evidence workspace with `--require-current-sha`. Use `--no-wait` only when an operator wants to trigger the workflows now and inspect/fetch evidence later. This orchestration is an operational wrapper; release acceptance still requires the full evidence package and `npm run release:gate -- reports/commercial-evidence/latest.json --json`.
+The default command is a dry-run production release plan. It inspects GitHub repository secret names and the selected GitHub environment secret names only, writes `reports/commercial-evidence/github-release-orchestration/latest-manifest.json` with private `0600` permissions, and lists any missing backend or release-input secret names without reading secret values. With `--apply`, native-worker mode fails closed until every required repository secret (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_DEPLOYMENT_URL`) and environment secret (`PRODUCTION_ENV_B64`, `PRODUCTION_SECRETS_SIGNOFF_B64`, `HR_DATA_SIGNOFF_B64`, `FILE_STORAGE_SIGNOFF_B64`) is configured. Tunnel-only repository secrets (`API_ORIGIN`, `CLOUDFLARE_TUNNEL_TOKEN`, `CLOUDFLARE_BACKEND_WEB_ORIGIN`) are required only for a future Tunnel mode. Once ready, it triggers `commercial-signoff`, `commercial-drill`, and `cloudflare-deploy` with `require_deploy=true`, waits for those runs by default, and promotes GitHub signoff/drill artifacts back into the local evidence workspace with `--require-current-sha`. Use `--no-wait` only when an operator wants to trigger the workflows now and inspect/fetch evidence later. This orchestration is an operational wrapper; release acceptance still requires the full evidence package and `npm run release:gate -- reports/commercial-evidence/latest.json --json`.
 
 Commercial release status:
 
@@ -416,39 +416,35 @@ Production frontend builds should set `VITE_REQUIRE_API=1` and keep `VITE_DEMO_F
 
 ## Cloudflare Worker Deployment
 
-The repository includes `wrangler.toml`, `cloudflare/worker.js`, and `.github/workflows/cloudflare-deploy.yml` so the frontend can be pushed to `17602842555/HR.git` and deployed as Cloudflare Worker static assets. The Worker serves the Vite `dist/` SPA and proxies `/api/*` to the configured backend origin through `API_ORIGIN`, while `/api/edge/health` verifies the edge gateway itself. `wrangler.toml` declares `API_ORIGIN` under `[secrets].required`, so Wrangler deploys fail before publication if the Worker secret is not configured. The Worker also validates `API_ORIGIN` at runtime and fails closed for missing values, non-HTTPS origins, local/private addresses, or same-origin proxy loops, so a manual Secret mistake cannot silently proxy production traffic to an unsafe backend.
+The repository includes `wrangler.toml`, `cloudflare/worker.js`, and `.github/workflows/cloudflare-deploy.yml` so the frontend can be published from `17602842555/HR.git` and the backend can run as a Cloudflare native Worker/D1 API. For the no-domain release path, GitHub Pages serves the SPA at `/HR/` and the Worker serves `/api/*` directly on `workers.dev`; `API_ORIGIN`, Cloudflare Tunnel, and a custom domain are not required. The Worker still supports explicit proxy/Tunnel mode for a future Fastify deployment, and that mode keeps the runtime `API_ORIGIN` guard.
 
 Current Cloudflare setup created on 2026-05-30:
 
-- Worker deployed: `deep-oa-hr` at `https://deep-oa-hr.2445776963.workers.dev`, version `9ef44b70-abd0-4d3b-a9d7-b63791120478`.
-- Edge health passes at `/api/edge/health`; `/api/*` correctly returns `api_origin_not_configured` until `API_ORIGIN` is set to the approved backend Tunnel hostname. Runtime health reports `apiOriginValid=false` without leaking the configured hostname when the Worker rejects an unsafe origin.
-- GitHub repository secrets currently configured: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_DEPLOYMENT_URL`, `CLOUDFLARE_BACKEND_WEB_ORIGIN`, and `CLOUDFLARE_TUNNEL_TOKEN`.
-- Still required for GitHub auto-deploy and production release: durable `CLOUDFLARE_API_TOKEN`, production `API_ORIGIN`, production `.env.production`, production database/file-storage signoffs, and Cloudflare smoke through the final backend origin.
+- Worker deployed: `deep-oa-hr` at `https://deep-oa-hr.2445776963.workers.dev`.
+- Native API health and smoke pass without `API_ORIGIN`; D1 is bound as `OA_DB`.
+- GitHub repository secrets required for native deploy: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_DEPLOYMENT_URL`.
+- Still required for final production release: production `.env.production`, production secret/HR/file-storage signoffs, commercial signoff artifacts, drill evidence, and a passing release gate.
 
 Check the current Cloudflare deployment state without printing secret values:
 
 ```bash
 npm run doctor:cloudflare -- \
   --repo 17602842555/HR \
-  --tunnel 399ce110-a343-43b5-81cd-333f5f86212c \
-  --account-id "$CLOUDFLARE_ACCOUNT_ID" \
-  --api-origin "$API_ORIGIN" \
   --url https://deep-oa-hr.2445776963.workers.dev \
   --json
 ```
 
-This status command fails closed until required repository secrets are present, the Tunnel is active/healthy, the remotely-managed Tunnel configuration maps the `API_ORIGIN` hostname to `http://api:8787` and ends with a final `http_status:404` catch-all rule, the Worker reports a configured and valid API origin, and `npm run smoke:cloudflare` can prove both `/api/edge/health` and the backend `/api/health` / `/api/openapi.json` path through the Worker.
+This status command fails closed until required native repository secrets are present and `npm run smoke:cloudflare` proves `/api/edge/health`, native backend health, readiness, and OpenAPI through the Worker.
 
 Required GitHub repository secrets:
 
 ```bash
 CLOUDFLARE_API_TOKEN=<Cloudflare token with Workers deploy permission>
 CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
-API_ORIGIN=https://<approved-api-origin>
 CLOUDFLARE_DEPLOYMENT_URL=https://<worker-or-custom-domain>
-CLOUDFLARE_TUNNEL_TOKEN=<remotely-managed tunnel token for backend API>
-CLOUDFLARE_BACKEND_WEB_ORIGIN=https://<worker-or-custom-domain> # optional override, defaults to deployment URL
 ```
+
+Tunnel-only repository secrets (`API_ORIGIN`, `CLOUDFLARE_TUNNEL_TOKEN`, and `CLOUDFLARE_BACKEND_WEB_ORIGIN`) are used only if a future custom-domain Tunnel/Fastify backend is selected.
 
 Prepare and validate those repository secrets without printing secret values:
 
@@ -463,28 +459,17 @@ CLOUDFLARE_API_TOKEN=<Cloudflare token with Workers deploy permission> \
 CLOUDFLARE_ACCOUNT_ID=<32-character account id> \
 npm run configure:cloudflare -- --env .env.production --repo 17602842555/HR --verify-token --apply
 
-# Configure the backend API public hostname on the remotely-managed Tunnel after API_ORIGIN is approved.
-CLOUDFLARE_API_TOKEN=<Cloudflare token with Tunnel Write permission> \
-CLOUDFLARE_ACCOUNT_ID=<32-character account id> \
-npm run configure:cloudflare-tunnel -- --env .env.production --tunnel 399ce110-a343-43b5-81cd-333f5f86212c --json
 ```
 
-`configure:cloudflare` validates the backend tunnel origin, frontend deployment origin, tunnel token, Cloudflare account id, and deploy token before it writes anything. With `--verify-token`, it calls Cloudflare's token verification API and fails closed unless the token status is active. When `--apply` is used it calls `gh secret set` with each value over stdin, so token material is not placed in shell arguments or command logs.
+`configure:cloudflare` validates the native Worker deployment URL, frontend origin, Cloudflare account id, and deploy token before it writes anything. With `--verify-token`, it calls Cloudflare's token verification API and fails closed unless the token status is active. When `--apply` is used it calls `gh secret set` with each value over stdin, so token material is not placed in shell arguments or command logs.
 
-The GitHub Actions workflow uses Node 24-native GitHub and Cloudflare actions, writes `API_ORIGIN` into a temporary private `.cloudflare-worker-secrets.env` file, deploys the Worker with `wrangler deploy --secrets-file .cloudflare-worker-secrets.env`, validates the backend Tunnel/server environment with a temporary private env file when `CLOUDFLARE_TUNNEL_TOKEN` is present, removes the temporary Worker secrets file, and runs `npm run smoke:cloudflare` against `CLOUDFLARE_DEPLOYMENT_URL` when that URL is present. Push-triggered runs remain build-only when Cloudflare secrets are missing, but manual `workflow_dispatch` runs default to `require_deploy=true` and fail if `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `API_ORIGIN`, `CLOUDFLARE_DEPLOYMENT_URL`, or `CLOUDFLARE_TUNNEL_TOKEN` are not configured. Use `require_deploy=false` only for an intentional build-only dry run. The smoke check verifies `/api/edge/health`, backend `/api/health`, and the backend OpenAPI contract through the Cloudflare gateway. For local deployment, use the same required Cloudflare Worker runtime secret:
-
-```bash
-API_ORIGIN=https://<approved-api-origin>
-```
+The GitHub Actions workflow uses Node 24-native GitHub and Cloudflare actions, deploys the Worker with native `/api`, and runs `npm run smoke:cloudflare` against `CLOUDFLARE_DEPLOYMENT_URL` when that URL is present. Push-triggered runs remain build-only when Cloudflare secrets are missing, but manual `workflow_dispatch` runs default to `require_deploy=true` and fail if `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, or `CLOUDFLARE_DEPLOYMENT_URL` are not configured. Use `require_deploy=false` only for an intentional build-only dry run.
 
 Local deployment commands:
 
 ```bash
 npm run build
-umask 077
-printf 'API_ORIGIN="%s"\n' "$API_ORIGIN" > .cloudflare-worker-secrets.env
-npx wrangler deploy --secrets-file .cloudflare-worker-secrets.env
-rm -f .cloudflare-worker-secrets.env
+npx wrangler deploy
 npm run smoke:cloudflare -- --url https://<worker-or-custom-domain> --json
 ```
 

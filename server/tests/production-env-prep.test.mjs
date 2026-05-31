@@ -49,15 +49,15 @@ test("production env prep writes a no-plaintext local storage package", async ()
     assert.deepEqual(checklist.managedSecrets.map((item) => item.key), [
       "POSTGRES_PASSWORD",
       "JWT_SECRET",
-      "CLOUDFLARE_API_TOKEN",
-      "CLOUDFLARE_TUNNEL_TOKEN"
+      "CLOUDFLARE_API_TOKEN"
     ]);
     assert.equal(checklist.conditionalSecrets[0].key, "DEFAULT_ADMIN_PASSWORD");
-    assert.equal(checklist.cloudflareRepositorySecrets.map((item) => item.key).includes("API_ORIGIN"), true);
+    assert.equal(checklist.cloudflareRepositorySecrets.find((item) => item.key === "API_ORIGIN").requiredForNativeWorkerDeploy, false);
+    assert.equal(checklist.cloudflareRepositorySecrets.find((item) => item.key === "CLOUDFLARE_TUNNEL_TOKEN").requiredForTunnelDeploy, true);
     assert.equal(checklist.cloudflareRepositorySecrets.find((item) => item.key === "CLOUDFLARE_API_TOKEN").neverPrintValue, true);
     assert.equal(checklist.nextCommands.some((command) => command.includes("validate:cloudflare-backend")), true);
     assert.equal(checklist.nextCommands.some((command) => command.includes("configure:cloudflare")), true);
-    assert.equal(checklist.nextCommands.some((command) => command.includes("configure:cloudflare-tunnel")), true);
+    assert.equal(checklist.nextCommands.some((command) => command.includes("Optional future tunnel mode only")), true);
     assert.equal(checklist.nextCommands.some((command) => command.includes("validate:secrets-signoff")), true);
 
     assert.equal(manifest.kind, "production-env-preparation");
@@ -73,7 +73,7 @@ test("production env prep writes a no-plaintext local storage package", async ()
     assert.match(readme, /not release evidence/i);
     assert.match(readme, /validate:cloudflare-backend/);
     assert.match(readme, /configure:cloudflare/);
-    assert.match(readme, /configure:cloudflare-tunnel/);
+    assert.match(readme, /native Worker\/D1 release path does not require `API_ORIGIN`/);
 
     const validation = validateProductionEnv(parseProductionEnvText(envTemplate));
     assert.equal(validation.ok, false);

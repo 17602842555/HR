@@ -67,6 +67,30 @@ const DOMAIN_LOADERS = {
 
 const ALL_DOMAINS = Object.keys(DOMAIN_LOADERS);
 
+const DOMAIN_READ_PERMISSIONS = {
+  analytics: ["analytics.read"],
+  approvals: ["workflow.read"],
+  assets: ["asset.read"],
+  attendance: ["attendance.read"],
+  audit: ["audit.read"],
+  files: ["file.read"],
+  finance: ["finance.read"],
+  iam: ["iam.read"],
+  imports: ["import.read"],
+  people: ["employee.read"],
+  resources: ["resource.read"],
+  system: ["system.admin"]
+};
+
+function domainsForUser(user) {
+  if (!Array.isArray(user?.permissions)) return ALL_DOMAINS;
+  const permissions = new Set(user.permissions);
+  if (permissions.has("system.admin")) return ALL_DOMAINS;
+  return ALL_DOMAINS.filter((domain) => (
+    (DOMAIN_READ_PERMISSIONS[domain] || []).some((permission) => permissions.has(permission))
+  ));
+}
+
 function loadersFor(domains = ALL_DOMAINS) {
   return domains.flatMap((domain) => (
     (DOMAIN_LOADERS[domain] || []).map(([key, load, options]) => ({ key, load, ...(options || {}) }))
@@ -169,7 +193,7 @@ export function useApiBackedOaSystem() {
           setApiStatus({ error: "请先完成首次登录设置", mode: "first_login_required", source: "api" });
           return;
         }
-        const domainResult = await fetchDomainState(fallback.state);
+        const domainResult = await fetchDomainState(fallback.state, domainsForUser(user));
         if (cancelled) return;
         setCurrentUser(user);
         setApiState(domainResult.state);
@@ -245,7 +269,7 @@ export function useApiBackedOaSystem() {
           setApiStatus({ error: "请先完成首次登录设置", mode: "first_login_required", source: "api" });
           return { ok: true, firstLoginRequired: true };
         }
-        const domainResult = await fetchDomainState(fallback.state);
+        const domainResult = await fetchDomainState(fallback.state, domainsForUser(user));
         setCurrentUser(user);
         setApiState(domainResult.state);
         setLocalOverrideDomains(new Set());
@@ -256,10 +280,11 @@ export function useApiBackedOaSystem() {
         });
         return { ok: true };
       } catch (error) {
+        const apiReturnedBusinessError = Number(error?.status || 0) > 0;
         setApiStatus({
           error: actionErrorMessage(error),
-          mode: isUnauthorized(error) ? "unauthenticated" : apiPolicy.requireApi ? "api_required" : "fallback",
-          source: isUnauthorized(error) || apiPolicy.requireApi ? "api" : "mock"
+          mode: isUnauthorized(error) || apiReturnedBusinessError ? "unauthenticated" : apiPolicy.requireApi ? "api_required" : "fallback",
+          source: isUnauthorized(error) || apiReturnedBusinessError || apiPolicy.requireApi ? "api" : "mock"
         });
         return { ok: false, error };
       } finally {
@@ -289,7 +314,7 @@ export function useApiBackedOaSystem() {
       try {
         const session = await authApi.completeFirstLogin(payload);
         const user = normalizeCurrentUser(session);
-        const domainResult = await fetchDomainState(fallback.state);
+        const domainResult = await fetchDomainState(fallback.state, domainsForUser(user));
         setCurrentUser(user);
         setApiState(domainResult.state);
         setLocalOverrideDomains(new Set());

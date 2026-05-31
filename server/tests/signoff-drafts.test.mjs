@@ -71,6 +71,7 @@ test("signoff draft generator writes non-release drafts from current source data
     assert.equal(hr.openExceptions.length, 1);
 
     assert.equal(secrets.draft, true);
+    assert.equal(secrets.backendMode, "native-worker");
     assert.equal(secrets.environmentFile.validationSummary.ok, true);
     assert.match(secrets.environmentFile.sha256, /^[a-f0-9]{64}$/);
     assert.deepEqual(secrets.originPolicy.approvedOrigins, ["https://oa.company.test"]);
@@ -79,8 +80,7 @@ test("signoff draft generator writes non-release drafts from current source data
     assert.deepEqual(secrets.secretStore.managedSecrets, [
       "POSTGRES_PASSWORD",
       "JWT_SECRET",
-      "CLOUDFLARE_API_TOKEN",
-      "CLOUDFLARE_TUNNEL_TOKEN"
+      "CLOUDFLARE_API_TOKEN"
     ]);
 
     assert.equal(storage.draft, true);

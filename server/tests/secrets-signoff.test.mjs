@@ -5,9 +5,11 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   loadSecretsSignoff,
+  managedSecretsForMode,
   parseSecretsSignoffArgs,
   requiredApprovalRoles,
   requiredManagedSecrets,
+  requiredTunnelManagedSecrets,
   sha256Text,
   validateSecretsSignoff
 } from "../../scripts/validate-secrets-signoff.mjs";
@@ -58,7 +60,7 @@ function validSecretsSignoff(overrides = {}, envText = validEnvText()) {
     secretStore: {
       provider: "Company Secret Manager",
       namespace: "oa/production",
-      managedSecrets: ["POSTGRES_PASSWORD", "JWT_SECRET", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_TUNNEL_TOKEN"],
+      managedSecrets: ["POSTGRES_PASSWORD", "JWT_SECRET", "CLOUDFLARE_API_TOKEN"],
       injectedAtRuntime: true,
       noPlaintextInRepo: true,
       accessRestricted: true,
@@ -111,9 +113,37 @@ test("secrets signoff validator accepts reviewed secret store and origin evidenc
   assert.equal(result.ok, true);
   assert.deepEqual(result.errors, []);
   assert.equal(result.summary.productionEnvValidated, true);
+  assert.equal(result.summary.backendMode, "native-worker");
   assert.deepEqual(result.summary.approvedOrigins, ["https://oa.company.test"]);
-  assert.deepEqual(requiredManagedSecrets, ["POSTGRES_PASSWORD", "JWT_SECRET", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_TUNNEL_TOKEN"]);
+  assert.deepEqual(requiredManagedSecrets, ["POSTGRES_PASSWORD", "JWT_SECRET", "CLOUDFLARE_API_TOKEN"]);
+  assert.deepEqual(requiredTunnelManagedSecrets, ["POSTGRES_PASSWORD", "JWT_SECRET", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_TUNNEL_TOKEN"]);
+  assert.deepEqual(managedSecretsForMode("tunnel"), requiredTunnelManagedSecrets);
   assert.deepEqual(requiredApprovalRoles, ["Security owner", "Deployment owner"]);
+});
+
+test("secrets signoff validator requires tunnel token only in tunnel mode", () => {
+  const envText = validEnvText({ CLOUDFLARE_BACKEND_MODE: "tunnel" });
+  const result = validateSecretsSignoff(validSecretsSignoff({}, envText), {
+    env: parseProductionEnvText(envText),
+    envChecksum: sha256Text(envText),
+    envPath: ".env.production"
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.summary.backendMode, "tunnel");
+  assert(result.errors.some((error) => error.includes("CLOUDFLARE_TUNNEL_TOKEN")));
+
+  const accepted = validateSecretsSignoff(validSecretsSignoff({
+    secretStore: {
+      ...validSecretsSignoff({}, envText).secretStore,
+      managedSecrets: requiredTunnelManagedSecrets
+    }
+  }, envText), {
+    env: parseProductionEnvText(envText),
+    envChecksum: sha256Text(envText),
+    envPath: ".env.production"
+  });
+  assert.equal(accepted.ok, true);
 });
 
 test("secrets signoff validator rejects example release evidence and production exceptions", () => {
@@ -175,7 +205,6 @@ test("secrets signoff validator rejects invalid env checksum origin and secret s
   assert(result.errors.some((error) => error.includes("accessRestricted")));
   assert(result.errors.some((error) => error.includes("nextRotationDueAt")));
   assert(result.errors.some((error) => error.includes("JWT_SECRET")));
-  assert(result.errors.some((error) => error.includes("CLOUDFLARE_TUNNEL_TOKEN")));
   assert(result.errors.some((error) => error.includes("approvedOrigins must match")));
   assert(result.errors.some((error) => error.includes("approvedOrigins must use https")));
 });
@@ -229,11 +258,12 @@ test("secrets signoff CLI parser reads path env and output flags", async () => {
     await writeFile(envPath, envText);
     await writeFile(signoffPath, JSON.stringify(validSecretsSignoff({}, envText), null, 2));
 
-    const parsed = parseSecretsSignoffArgs([signoffPath, "--env", envPath, "--allow-example", "--json"]);
+    const parsed = parseSecretsSignoffArgs([signoffPath, "--env", envPath, "--mode", "native-worker", "--allow-example", "--json"]);
     assert.equal(parsed.signoffPath, signoffPath);
     assert.equal(parsed.envPath, envPath);
     assert.equal(parsed.allowExample, true);
     assert.equal(parsed.json, true);
+    assert.equal(parsed.mode, "native-worker");
 
     const loaded = JSON.parse(await readFile(signoffPath, "utf8"));
     assert.equal(validateSecretsSignoff(loaded, {

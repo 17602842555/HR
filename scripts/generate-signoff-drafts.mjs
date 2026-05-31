@@ -164,6 +164,7 @@ export function buildSecretsSignoffDraft({
     draft: true,
     draftNotice: signoffNotice(),
     documentId: `PROD-SECRETS-SIGNOFF-DRAFT-${slugTimestamp(generatedAt)}`,
+    backendMode: String(env.CLOUDFLARE_BACKEND_MODE || env.OA_API_MODE || "native-worker"),
     environment: "production",
     signedAt: generatedAt,
     environmentFile: {
@@ -339,7 +340,7 @@ function buildDraftReviewItems({ drafts, files, rootDir }) {
       validatorCommand: "npm run validate:secrets-signoff -- <production-secrets-signoff.json> --env .env.production --json",
       requiredActions: [
         "Provide real production environment values through the approved secret store.",
-        "Configure Cloudflare API_ORIGIN and Tunnel evidence, then archive validate:cloudflare-backend output.",
+        "Archive `npm run validate:cloudflare-backend -- --env .env.production --json` native-worker output; configure Tunnel/API_ORIGIN evidence only if a future tunnel mode is selected.",
         "Replace pending Security/Deployment approvals and clear all production-secret exceptions."
       ]
     },
