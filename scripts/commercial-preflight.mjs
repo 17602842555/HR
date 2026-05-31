@@ -120,6 +120,7 @@ function checkPackageScripts() {
     "build",
     "candidate:commercial",
     "ci:commercial",
+    "configure:backend-server",
     "configure:cloudflare",
     "configure:cloudflare-tunnel",
     "contract:api",
@@ -212,6 +213,7 @@ function checkDeploymentArtifacts() {
     "scripts/commercial-release-dossier.mjs",
     "scripts/commercial-release-gate.mjs",
     "scripts/commercial-smoke.mjs",
+    "scripts/configure-backend-server.mjs",
     "scripts/configure-cloudflare-secrets.mjs",
     "scripts/cloudflare-smoke.mjs",
     "scripts/dev-commercial-core.mjs",
@@ -243,6 +245,7 @@ function checkDeploymentArtifacts() {
     "prisma/migrations/migration-lock.json",
     "server/src/modules/audit/audit-integrity.mjs",
     "server/tests/audit-integrity.test.mjs",
+    "server/tests/backend-server-config.test.mjs",
     "server/tests/cloudflare-secrets.test.mjs",
     "server/tests/cloudflare-worker.test.mjs",
     "server/tests/commercial-script-security.test.mjs",
@@ -722,6 +725,31 @@ function checkDeploymentArtifacts() {
     "release input materializer accepts unpadded base64 but rejects invalid utf8",
     "release input materializer parser supports json flag"
   ].forEach((needle) => assertIncludes(materializeReleaseInputsTests, needle, "server/tests/materialize-release-inputs.test.mjs"));
+
+  const backendServerConfig = readText("scripts/configure-backend-server.mjs");
+  [
+    "configureBackendServerPackage",
+    "requiredBackendRepositorySecrets",
+    "requiredReleaseEnvironmentSecrets",
+    "prepareProductionEnv",
+    "generateSignoffDrafts",
+    "prepareHrDataReview",
+    "listGithubSecrets",
+    "noPlaintextSecretValues",
+    "base64 < .env.production",
+    "configure:cloudflare-tunnel",
+    "docker compose -f docker-compose.prod.yml -f docker-compose.cloudflare.yml"
+  ].forEach((needle) => assertIncludes(backendServerConfig, needle, "scripts/configure-backend-server.mjs"));
+
+  const backendServerConfigTests = readText("server/tests/backend-server-config.test.mjs");
+  [
+    "backend server config packet writes private no-secret handoff with current blockers",
+    "backend server config can inspect GitHub secret names without values",
+    "backend server config parser reads deployment options",
+    "github secret list parser and inspector keep only secret names",
+    "CLOUDFLARE_API_TOKEN",
+    "PRODUCTION_ENV_B64"
+  ].forEach((needle) => assertIncludes(backendServerConfigTests, needle, "server/tests/backend-server-config.test.mjs"));
 
   const supplyChain = readText("scripts/validate-supply-chain.mjs");
   [
