@@ -4156,7 +4156,7 @@ function checkApprovalExportImplementation() {
   const approvalsFeature = readText("src/features/Approvals.jsx");
   assertIncludes(approvalsFeature, "actions.exportApprovals({ scope: \"审批列表\" })", "src/features/Approvals.jsx");
 
-  const seed = readText("scripts/seed.mjs") + readText("src/data/seed.js");
+  const seed = readText("scripts/seed.mjs") + readText("src/data/seed.js") + readText("src/data/demoSeed.js");
   [
     "workflow.export",
     "导出审批列表"
@@ -4205,7 +4205,7 @@ function checkAssetExportImplementation() {
   const assetsFeature = readText("src/features/Assets.jsx");
   assertIncludes(assetsFeature, "actions.exportAssets({ scope: \"资产台账\" })", "src/features/Assets.jsx");
 
-  const seed = readText("scripts/seed.mjs") + readText("src/data/seed.js");
+  const seed = readText("scripts/seed.mjs") + readText("src/data/seed.js") + readText("src/data/demoSeed.js");
   [
     "asset.export",
     "导出资产台账"
@@ -4561,7 +4561,7 @@ function checkAttendanceRecordsImplementation() {
 	    "保存考勤记录"
 	  ].forEach((needle) => assertIncludes(feature, needle, "src/features/Attendance.jsx"));
 
-  const seed = readText("scripts/seed.mjs") + readText("src/data/seed.js");
+  const seed = readText("scripts/seed.mjs") + readText("src/data/seed.js") + readText("src/data/demoSeed.js");
 	  [
 	    "attendanceRecord",
 	    "attendanceRecordSeed",
@@ -4630,7 +4630,7 @@ function checkResourceConflictAuditCoverage() {
     "导出预约台账"
   ].forEach((needle) => assertIncludes(resourcesFeature, needle, "src/features/Resources.jsx"));
 
-  const seed = readText("scripts/seed.mjs") + readText("src/data/seed.js");
+  const seed = readText("scripts/seed.mjs") + readText("src/data/seed.js") + readText("src/data/demoSeed.js");
   [
     "resource.export",
     "导出资源预约"
