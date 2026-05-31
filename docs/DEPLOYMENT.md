@@ -142,7 +142,7 @@ npm run configure:release-inputs -- --ensure-github-environment --json
 npm run configure:release-inputs -- --ensure-github-environment --apply --json
 ```
 
-Run this after the real `.env.production`, `docs/production-secrets-signoff.json`, `docs/hr-data-signoff.json`, and `docs/file-storage-signoff.json` exist. The command validates production env, Cloudflare backend env, production secrets signoff, HR data signoff, and file-storage signoff before uploading anything. In dry-run mode it writes a private manifest under `reports/commercial-evidence/release-input-upload/` and exits nonzero if any input is not release-ready. With `--apply`, it base64-encodes each validated file and writes `PRODUCTION_ENV_B64`, `PRODUCTION_SECRETS_SIGNOFF_B64`, `HR_DATA_SIGNOFF_B64`, and `FILE_STORAGE_SIGNOFF_B64` to the selected GitHub environment through `gh secret set` stdin; secret values are not placed in shell arguments, JSON output, or manifests. After upload, run `commercial-signoff` and attach the validation artifact to release evidence.
+Run this after the real `.env.production`, `docs/production-secrets-signoff.json`, `docs/hr-data-signoff.json`, and `docs/file-storage-signoff.json` exist. The command validates production env, Cloudflare backend env, production secrets signoff, HR data signoff, and file-storage signoff before uploading anything. In dry-run mode it writes a private manifest under `reports/commercial-evidence/release-input-upload/` and exits nonzero if any input is not release-ready. With `--apply`, it base64-encodes each validated file and writes `PRODUCTION_ENV_B64`, `PRODUCTION_SECRETS_SIGNOFF_B64`, `HR_DATA_SIGNOFF_B64`, and `FILE_STORAGE_SIGNOFF_B64` to the selected GitHub environment through `gh secret set` stdin; secret values are not placed in shell arguments, JSON output, or manifests. After upload, run `commercial-signoff`, then pull and promote the validation artifact with `npm run evidence:github-signoff -- --promote --require-current-sha --json`.
 
 Cloudflare deployment status can inspect the backend Tunnel through Cloudflare's API when the account id and token are provided through the environment:
 
@@ -224,6 +224,15 @@ Commercial signoff validation workflow:
 ```
 
 `.github/workflows/commercial-signoff.yml` validates GAP-003, GAP-004, and GAP-005 inputs without committing secret-bearing files. The workflow uses Node 24-native GitHub actions and keeps `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` as a runner-level guard, then uses `npm run prepare:release-inputs -- --json --output reports/commercial-evidence/signoff-validation/release-inputs.json` to decode and validate every base64 GitHub environment secret before writing any release input file. Only after all decoded inputs pass shape validation does it materialize `.env.production`, `docs/production-secrets-signoff.json`, `docs/hr-data-signoff.json`, and `docs/file-storage-signoff.json` with private `0600` file permissions under private directories, then write a redacted private `0600` materialization manifest. Each validator step runs with `set -euo pipefail` and `umask 077`, so validator output files also inherit private permissions. The workflow now writes `cloudflare-backend.json` beside `production-env.json`, `secrets-signoff.json`, `hr-signoff.json`, and `storage-signoff.json`, so GAP-003 owner review covers both secret/origin signoff and the backend Tunnel/API origin path. The workflow uploads only `reports/commercial-evidence/signoff-validation` as `commercial-signoff-validation`; it does not upload `.env.production` or the materialized signoff files. This is validation evidence for owner review. Release acceptance still requires the full evidence package, Docker drill evidence, zero open GAP rows, and `npm run release:gate -- reports/commercial-evidence/latest.json --json`.
+
+To pull the latest successful GitHub signoff artifact into the local evidence workspace:
+
+```bash
+npm run evidence:github-signoff -- --json
+npm run evidence:github-signoff -- --promote --require-current-sha --json
+```
+
+The first command downloads and validates `commercial-signoff-validation` under `reports/commercial-evidence/github-signoff-artifact/`, then writes `reports/commercial-evidence/latest-github-signoff-evidence.json`. The `--promote` form copies only the six validator JSON files into `reports/commercial-evidence/signoff-validation/` so the normal commercial evidence checks can use them. The script rejects missing JSON files, any validator result without `ok:true`, stale workflow SHAs, accidental `.env.production` uploads, and plaintext secret-like content such as `JWT_SECRET=` or bearer tokens.
 
 Local commercial development stack with port collision avoidance:
 

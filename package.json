@@ -35,6 +35,7 @@
     "doctor:cloudflare": "node scripts/cloudflare-deployment-status.mjs",
     "evidence:commercial": "node scripts/commercial-evidence.mjs",
     "evidence:github-drill": "node scripts/github-drill-evidence.mjs",
+    "evidence:github-signoff": "node scripts/github-signoff-evidence.mjs",
     "audit:readiness": "node scripts/commercial-readiness-audit.mjs",
     "dossier:commercial": "node scripts/commercial-release-dossier.mjs",
     "gap:report": "node scripts/commercial-gap-report.mjs",

@@ -15,6 +15,7 @@ const requiredEvidenceFiles = Object.freeze([
 const optionalEvidenceFiles = Object.freeze([
   "latest-candidate.json",
   "latest-dossier.md",
+  "latest-github-signoff-evidence.json",
   "production-env-prep/latest-manifest.json",
   "signoff-drafts/latest-manifest.json"
 ]);

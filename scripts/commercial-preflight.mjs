@@ -137,6 +137,7 @@ function checkPackageScripts() {
     "doctor:commercial",
     "evidence:commercial",
     "evidence:github-drill",
+    "evidence:github-signoff",
     "gap:report",
     "prepare:production-env",
     "audit:readiness",
@@ -225,6 +226,7 @@ function checkDeploymentArtifacts() {
     "scripts/generate-sbom.mjs",
     "scripts/generate-signoff-drafts.mjs",
     "scripts/github-drill-evidence.mjs",
+    "scripts/github-signoff-evidence.mjs",
     "scripts/local-postgres.mjs",
     "scripts/local-api-service.mjs",
     "scripts/materialize-release-inputs.mjs",
@@ -253,6 +255,7 @@ function checkDeploymentArtifacts() {
     "server/tests/cloudflare-worker.test.mjs",
     "server/tests/commercial-script-security.test.mjs",
     "server/tests/github-drill-evidence.test.mjs",
+    "server/tests/github-signoff-evidence.test.mjs",
     "server/tests/local-postgres.test.mjs",
     "server/tests/local-api-service.test.mjs",
     "server/tests/materialize-release-inputs.test.mjs",
@@ -1335,6 +1338,7 @@ function checkCommercialEvidenceAutomation() {
   const pkg = readJson("package.json");
   assertIncludes(pkg.scripts["evidence:commercial"], "scripts/commercial-evidence.mjs", "package.json evidence:commercial script");
   assertIncludes(pkg.scripts["evidence:github-drill"], "scripts/github-drill-evidence.mjs", "package.json evidence:github-drill script");
+  assertIncludes(pkg.scripts["evidence:github-signoff"], "scripts/github-signoff-evidence.mjs", "package.json evidence:github-signoff script");
   assertIncludes(pkg.scripts["audit:evidence-permissions"], "scripts/validate-evidence-permissions.mjs", "package.json audit:evidence-permissions script");
 
   const evidence = readText("scripts/commercial-evidence.mjs");
@@ -1367,6 +1371,7 @@ function checkCommercialEvidenceAutomation() {
     "scripts/commercial-preflight.mjs",
     "scripts/commercial-gap-report.mjs",
     "scripts/github-drill-evidence.mjs",
+    "scripts/github-signoff-evidence.mjs",
     "scripts/validate-migrations.mjs",
     "scripts/validate-supply-chain.mjs",
     "scripts/commercial-readiness-audit.mjs",
@@ -1375,6 +1380,7 @@ function checkCommercialEvidenceAutomation() {
     "scripts/generate-sbom.mjs",
     "scripts/materialize-release-inputs.mjs",
     "scripts/export-openapi.mjs",
+    "scripts/configure-release-inputs.mjs",
     "scripts/prepare-hr-data-review.mjs",
     "scripts/validate-cloudflare-backend.mjs",
     "scripts/validate-evidence-permissions.mjs",
@@ -1383,6 +1389,7 @@ function checkCommercialEvidenceAutomation() {
     "reports/commercial-evidence/sbom/latest-spdx.json",
     "reports/commercial-evidence/production-env-prep/latest-manifest.json",
     "reports/commercial-evidence/signoff-drafts/latest-manifest.json",
+    "reports/commercial-evidence/latest-github-signoff-evidence.json",
     "reports/commercial-evidence/signoff-validation/release-inputs.json",
     "reports/commercial-evidence/signoff-validation/production-env.json",
     "reports/commercial-evidence/signoff-validation/cloudflare-backend.json",
@@ -1433,12 +1440,47 @@ function checkCommercialEvidenceAutomation() {
     "commercial-evidence/latest-local-recovery-drill-summary.json"
   ].forEach((needle) => assertIncludes(evidence, needle, "scripts/commercial-evidence.mjs"));
 
+  const githubSignoffEvidence = readText("scripts/github-signoff-evidence.mjs");
+  [
+    "parseGithubSignoffEvidenceArgs",
+    "fetchGithubSignoffEvidence",
+    "validateGithubSignoffArtifact",
+    "commercial-signoff.yml",
+    "commercial-signoff-validation",
+    "requiredSignoffValidationFiles",
+    "release-inputs.json",
+    "production-env.json",
+    "cloudflare-backend.json",
+    "secrets-signoff.json",
+    "hr-signoff.json",
+    "storage-signoff.json",
+    "expectedReleaseInputPaths",
+    ".env.production",
+    "docs/production-secrets-signoff.json",
+    "docs/hr-data-signoff.json",
+    "docs/file-storage-signoff.json",
+    "unsafeSecretPatterns",
+    "--promote",
+    "--require-current-sha",
+    "latest-github-signoff-evidence.json",
+    "redactEvidenceText"
+  ].forEach((needle) => assertIncludes(githubSignoffEvidence, needle, "scripts/github-signoff-evidence.mjs"));
+
+  const githubSignoffEvidenceTests = readText("server/tests/github-signoff-evidence.test.mjs");
+  [
+    "GitHub signoff evidence parser defaults to commercial signoff workflow and artifact",
+    "GitHub signoff evidence validator accepts a complete validation artifact",
+    "GitHub signoff evidence validator rejects missing failing and unsafe artifacts",
+    "GitHub signoff evidence fetch downloads validates promotes and enforces current SHA"
+  ].forEach((needle) => assertIncludes(githubSignoffEvidenceTests, needle, "server/tests/github-signoff-evidence.test.mjs"));
+
   const evidencePermissions = readText("scripts/validate-evidence-permissions.mjs");
   [
     "auditEvidencePermissions",
     "parseEvidencePermissionArgs",
     "requiredEvidenceFiles",
     "optionalEvidenceFiles",
+    "latest-github-signoff-evidence.json",
     "latest-owner-handoff-manifest.json",
     "hr-data-review/latest-manifest.json",
     "production-env-prep/latest-manifest.json",
@@ -1485,8 +1527,10 @@ function checkCommercialEvidenceAutomation() {
   [
     "npm run evidence:commercial",
     "npm run evidence:github-drill",
+    "npm run evidence:github-signoff",
     "reports/commercial-evidence/latest.json",
     "latest-github-drill-evidence.json",
+    "latest-github-signoff-evidence.json",
     "--strict-readiness",
     "npm run audit:evidence-permissions",
     "evidence-permissions"
