@@ -135,6 +135,15 @@ npm run configure:backend-server -- --storage-driver s3 --ensure-github-environm
 
 This is the one-command backend handoff for the remaining production server inputs. It writes a private packet under `reports/commercial-evidence/backend-server-config/` with `README.md`, `manifest.json`, `owner-inputs.json`, `github-secrets.md`, and `server-runbook.md`, then refreshes `latest-manifest.json` and `latest-index.md`. The packet also generates fresh nested production-env, signoff-draft, and HR-review preparation packages so Security, Infrastructure, and Product/HR reviewers work from the same source snapshot. When `--ensure-github-environment` is supplied, it creates or refreshes the selected GitHub environment with `gh api` but writes no secret values. When `--inspect-github-secrets` is supplied, it reads GitHub repository and environment secret names only through `gh secret list`; it never reads or prints secret values. It reports whether `.env.production`, Cloudflare backend validation, repository secrets, and release environment secrets are ready, but it is not release evidence. After filling the real production env and reviewed signoff files, use the packet's safe base64 commands to set `PRODUCTION_ENV_B64`, `PRODUCTION_SECRETS_SIGNOFF_B64`, `HR_DATA_SIGNOFF_B64`, and `FILE_STORAGE_SIGNOFF_B64` in the protected GitHub environment, run `commercial-signoff`, then generate full commercial evidence and run the release gate.
 
+Release input upload:
+
+```bash
+npm run configure:release-inputs -- --ensure-github-environment --json
+npm run configure:release-inputs -- --ensure-github-environment --apply --json
+```
+
+Run this after the real `.env.production`, `docs/production-secrets-signoff.json`, `docs/hr-data-signoff.json`, and `docs/file-storage-signoff.json` exist. The command validates production env, Cloudflare backend env, production secrets signoff, HR data signoff, and file-storage signoff before uploading anything. In dry-run mode it writes a private manifest under `reports/commercial-evidence/release-input-upload/` and exits nonzero if any input is not release-ready. With `--apply`, it base64-encodes each validated file and writes `PRODUCTION_ENV_B64`, `PRODUCTION_SECRETS_SIGNOFF_B64`, `HR_DATA_SIGNOFF_B64`, and `FILE_STORAGE_SIGNOFF_B64` to the selected GitHub environment through `gh secret set` stdin; secret values are not placed in shell arguments, JSON output, or manifests. After upload, run `commercial-signoff` and attach the validation artifact to release evidence.
+
 Cloudflare deployment status can inspect the backend Tunnel through Cloudflare's API when the account id and token are provided through the environment:
 
 ```bash

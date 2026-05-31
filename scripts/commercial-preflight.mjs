@@ -123,6 +123,7 @@ function checkPackageScripts() {
     "configure:backend-server",
     "configure:cloudflare",
     "configure:cloudflare-tunnel",
+    "configure:release-inputs",
     "contract:api",
     "db:deploy",
     "db:generate",
@@ -215,6 +216,7 @@ function checkDeploymentArtifacts() {
     "scripts/commercial-smoke.mjs",
     "scripts/configure-backend-server.mjs",
     "scripts/configure-cloudflare-secrets.mjs",
+    "scripts/configure-release-inputs.mjs",
     "scripts/cloudflare-smoke.mjs",
     "scripts/dev-commercial-core.mjs",
     "scripts/dev-commercial.mjs",
@@ -247,6 +249,7 @@ function checkDeploymentArtifacts() {
     "server/tests/audit-integrity.test.mjs",
     "server/tests/backend-server-config.test.mjs",
     "server/tests/cloudflare-secrets.test.mjs",
+    "server/tests/configure-release-inputs.test.mjs",
     "server/tests/cloudflare-worker.test.mjs",
     "server/tests/commercial-script-security.test.mjs",
     "server/tests/github-drill-evidence.test.mjs",
@@ -744,6 +747,22 @@ function checkDeploymentArtifacts() {
     "docker compose -f docker-compose.prod.yml -f docker-compose.cloudflare.yml"
   ].forEach((needle) => assertIncludes(backendServerConfig, needle, "scripts/configure-backend-server.mjs"));
 
+  const configureReleaseInputs = readText("scripts/configure-release-inputs.mjs");
+  [
+    "configureReleaseInputs",
+    "uploadReleaseInputSecrets",
+    "validateProductionEnv",
+    "validateCloudflareBackendEnv",
+    "validateSecretsSignoff",
+    "validateHrDataSignoff",
+    "validateStorageSignoff",
+    "PRODUCTION_ENV_B64",
+    "\"gh\", [\"secret\", \"set\"",
+    "input: payload.base64",
+    "noPlaintextSecretValues",
+    "release-input-upload"
+  ].forEach((needle) => assertIncludes(configureReleaseInputs, needle, "scripts/configure-release-inputs.mjs"));
+
   const backendServerConfigTests = readText("server/tests/backend-server-config.test.mjs");
   [
     "backend server config packet writes private no-secret handoff with current blockers",
@@ -754,6 +773,15 @@ function checkDeploymentArtifacts() {
     "CLOUDFLARE_API_TOKEN",
     "PRODUCTION_ENV_B64"
   ].forEach((needle) => assertIncludes(backendServerConfigTests, needle, "server/tests/backend-server-config.test.mjs"));
+
+  const configureReleaseInputsTests = readText("server/tests/configure-release-inputs.test.mjs");
+  [
+    "release input configurator validates files and writes private dry-run manifest",
+    "release input configurator applies GitHub environment secrets through stdin only after validation",
+    "release input configurator blocks uploads when validation fails",
+    "release input upload helper redacts failed gh output",
+    "release input configurator parser reads file paths apply and environment flags"
+  ].forEach((needle) => assertIncludes(configureReleaseInputsTests, needle, "server/tests/configure-release-inputs.test.mjs"));
 
   const supplyChain = readText("scripts/validate-supply-chain.mjs");
   [

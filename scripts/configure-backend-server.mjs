@@ -269,6 +269,7 @@ function buildOwnerInputs({
           "npm run validate:cloudflare-backend -- --env .env.production --json",
           `npm run configure:cloudflare -- --env .env.production --repo ${repo} --verify-token --json`,
           `npm run configure:cloudflare-tunnel -- --env .env.production --tunnel ${tunnel || "<tunnel-uuid>"} --json`,
+          `npm run configure:release-inputs -- --ensure-github-environment --repo ${repo} --environment ${environment} --json`,
           "npm run validate:secrets-signoff -- docs/production-secrets-signoff.json --env .env.production --json"
         ]
       },
@@ -306,6 +307,7 @@ function buildOwnerInputs({
           "Full evidence package generated against production or approved staging."
         ],
         validationCommands: [
+          `npm run configure:release-inputs -- --ensure-github-environment --repo ${repo} --environment ${environment} --apply --json`,
           `gh workflow run commercial-signoff.yml --repo ${repo} -f target_environment=${environment}`,
           "EVIDENCE_RUN_E2E=1 npm run evidence:commercial -- --full --strict-readiness",
           "npm run release:gate -- reports/commercial-evidence/latest.json --json"
@@ -369,6 +371,7 @@ function renderIndexMarkdown({ generatedAt, manifest }) {
     "npm run validate:cloudflare-backend -- --env .env.production --json",
     `npm run configure:cloudflare -- --env .env.production --repo ${manifest.repo} --verify-token --json`,
     `npm run configure:cloudflare-tunnel -- --env .env.production --tunnel ${manifest.tunnel || "<tunnel-uuid>"} --json`,
+    `npm run configure:release-inputs -- --ensure-github-environment --repo ${manifest.repo} --environment ${manifest.environment} --apply --json`,
     `gh workflow run commercial-signoff.yml --repo ${manifest.repo} -f target_environment=${manifest.environment}`,
     "EVIDENCE_RUN_E2E=1 npm run evidence:commercial -- --full --strict-readiness",
     "npm run release:gate -- reports/commercial-evidence/latest.json --json",
@@ -608,6 +611,7 @@ export function configureBackendServerPackage(options = {}) {
       "npm run validate:cloudflare-backend -- --env .env.production --json",
       `npm run configure:cloudflare -- --env .env.production --repo ${repo} --verify-token --json`,
       `npm run configure:cloudflare-tunnel -- --env .env.production --tunnel ${tunnel || "<tunnel-uuid>"} --json`,
+      `npm run configure:release-inputs -- --ensure-github-environment --repo ${repo} --environment ${environment} --apply --json`,
       `gh workflow run commercial-signoff.yml --repo ${repo} -f target_environment=${environment}`,
       "EVIDENCE_RUN_E2E=1 npm run evidence:commercial -- --full --strict-readiness",
       "npm run release:gate -- reports/commercial-evidence/latest.json --json"

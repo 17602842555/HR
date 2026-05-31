@@ -57,6 +57,7 @@
     "prepare:hr-review": "node scripts/prepare-hr-data-review.mjs",
     "signoff:drafts": "node scripts/generate-signoff-drafts.mjs",
     "prepare:release-inputs": "node scripts/materialize-release-inputs.mjs",
+    "configure:release-inputs": "node scripts/configure-release-inputs.mjs",
     "preflight:commercial": "node scripts/commercial-preflight.mjs",
     "verify": "npm run preflight:commercial && npm run validate:migrations && npm run validate:supply-chain && npm run sbom:generate -- --check --json && npm run brand:check && npm run contract:api && npm run db:generate && npm run test:server && npm run build",
     "brand:check": "node scripts/brand-check.mjs"
