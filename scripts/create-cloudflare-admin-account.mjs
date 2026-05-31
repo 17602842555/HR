@@ -68,10 +68,8 @@ function writeRemoteState(databaseName, state, auditEvent) {
   const dir = mkdtempSync(join(tmpdir(), "oa-d1-admin-"));
   const file = join(dir, "update-state.sql");
   const sql = [
-    "BEGIN TRANSACTION;",
     `INSERT OR REPLACE INTO kv_store (key, value, updated_at) VALUES (${sqlString(STATE_KEY)}, ${sqlString(JSON.stringify(state))}, ${sqlString(nowIso())});`,
-    `INSERT INTO audit_events (id, action, actor, object_type, object_id, metadata, created_at) VALUES (${sqlString(auditEvent.id)}, ${sqlString(auditEvent.action)}, ${sqlString(auditEvent.actor)}, ${sqlString(auditEvent.object)}, ${sqlString(auditEvent.objectId)}, ${sqlString(JSON.stringify(auditEvent))}, ${sqlString(nowIso())});`,
-    "COMMIT;"
+    `INSERT INTO audit_events (id, action, actor, object_type, object_id, metadata, created_at) VALUES (${sqlString(auditEvent.id)}, ${sqlString(auditEvent.action)}, ${sqlString(auditEvent.actor)}, ${sqlString(auditEvent.object)}, ${sqlString(auditEvent.objectId)}, ${sqlString(JSON.stringify(auditEvent))}, ${sqlString(nowIso())});`
   ].join("\n");
   writeFileSync(file, sql);
   try {
