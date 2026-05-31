@@ -125,6 +125,42 @@ test("cloudflare worker serves native API without API_ORIGIN", async () => {
   assert.equal(peoplePayload.people.employees.some((employee) => String(employee.school || employee.hukou || employee.major || "").includes("***")), true);
 });
 
+test("cloudflare worker allows GitHub Pages frontend to call native API with credentials", async () => {
+  const preflightResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      headers: {
+        "Access-Control-Request-Headers": "content-type",
+        Origin: "https://17602842555.github.io"
+      },
+      method: "OPTIONS"
+    }),
+    {}
+  );
+
+  assert.equal(preflightResponse.status, 204);
+  assert.equal(preflightResponse.headers.get("access-control-allow-origin"), "https://17602842555.github.io");
+  assert.equal(preflightResponse.headers.get("access-control-allow-credentials"), "true");
+
+  const loginResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      headers: {
+        "content-type": "application/json",
+        Origin: "https://17602842555.github.io"
+      },
+      method: "POST"
+    }),
+    {}
+  );
+  const cookie = loginResponse.headers.get("set-cookie");
+
+  assert.equal(loginResponse.status, 200);
+  assert.equal(loginResponse.headers.get("access-control-allow-origin"), "https://17602842555.github.io");
+  assert.equal(loginResponse.headers.get("access-control-allow-credentials"), "true");
+  assert.match(cookie, /SameSite=None/);
+  assert.match(cookie, /Secure/);
+});
+
 test("cloudflare worker native approval decisions require every current approver before next node", async () => {
   const loginResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {

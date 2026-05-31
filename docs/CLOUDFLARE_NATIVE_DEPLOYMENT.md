@@ -1,6 +1,6 @@
 # Cloudflare Native Deployment
 
-This project now supports scheme C: one Cloudflare Worker serves the React frontend and the native `/api` backend on the same `workers.dev` URL. A custom domain, Cloudflare Tunnel, and `API_ORIGIN` are not required for the first public deployment.
+This project now supports scheme C: Cloudflare Worker runs the native `/api` backend, and the frontend can be opened either from GitHub Pages or the same `workers.dev` preview URL. A custom domain, Cloudflare Tunnel, and `API_ORIGIN` are not required for the first public deployment.
 
 ## GitHub Repository Secrets
 
@@ -14,14 +14,33 @@ Create these in `Settings -> Secrets and variables -> Actions -> Repository secr
 
 Do not add `API_ORIGIN` for scheme C. The Worker runs the API directly.
 
+## Public Frontend URL
+
+The `Deploy HR OA frontend to GitHub Pages` workflow builds the Vite frontend with:
+
+| Build variable | Value |
+| --- | --- |
+| `VITE_BASE_PATH` | `/HR/` |
+| `VITE_API_BASE_URL` | `https://deep-oa-hr.2445776963.workers.dev/api` or the configured `CLOUDFLARE_DEPLOYMENT_URL` plus `/api` |
+| `VITE_REQUIRE_API` | `1` |
+
+After GitHub Pages is enabled for Actions, the public frontend URL is:
+
+```text
+https://17602842555.github.io/HR/
+```
+
+The Worker allows credentialed API calls from `https://17602842555.github.io`, so the GitHub Pages frontend can log in and use the Cloudflare backend directly.
+
 ## First Deploy
 
 1. Push to `main`, or run the `Deploy HR OA to Cloudflare` GitHub Action manually.
-2. The workflow runs `npm run build`, deploys with `wrangler deploy`, then smokes:
+2. The Cloudflare workflow runs `npm run build`, deploys with `wrangler deploy`, then smokes:
 
 ```bash
 npm run smoke:cloudflare -- --url https://deep-oa-hr.2445776963.workers.dev --json
 ```
+3. The GitHub Pages workflow publishes the frontend artifact from `dist`.
 
 ## Optional D1 Persistence
 

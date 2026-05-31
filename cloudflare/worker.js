@@ -16,6 +16,10 @@ const LOCAL_HOSTNAMES = new Set([
   "0:0:0:0:0:0:0:1"
 ]);
 
+const DEFAULT_CORS_ORIGINS = new Set([
+  "https://17602842555.github.io"
+]);
+
 const SESSION_COOKIE = "oa_cf_session";
 const STATE_KEY = "oa_state_v1";
 const STATE_SCHEMA_VERSION = 1;
@@ -75,6 +79,64 @@ function withSecurityHeaders(response) {
     headers,
     status: response.status,
     statusText: response.statusText
+  });
+}
+
+function configuredCorsOrigins(env = {}) {
+  return [
+    ...DEFAULT_CORS_ORIGINS,
+    ...String(env.CORS_ORIGINS || "")
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+    String(env.FRONTEND_ORIGIN || "").trim()
+  ].filter(Boolean);
+}
+
+function allowedCorsOrigin(request, env) {
+  const origin = request.headers.get("origin");
+  if (!origin) return "";
+  let requestOrigin = "";
+  try {
+    requestOrigin = new URL(request.url).origin;
+    new URL(origin);
+  } catch {
+    return "";
+  }
+  if (origin === requestOrigin) return origin;
+  return configuredCorsOrigins(env).includes(origin) ? origin : "";
+}
+
+function corsHeaderEntries(request, env) {
+  const origin = allowedCorsOrigin(request, env);
+  if (!origin) return {};
+  return {
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers": request.headers.get("Access-Control-Request-Headers") || "content-type, accept",
+    "Access-Control-Allow-Methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin"
+  };
+}
+
+function withCorsHeaders(response, request, env) {
+  const headers = new Headers(response.headers);
+  Object.entries(corsHeaderEntries(request, env)).forEach(([key, value]) => headers.set(key, value));
+  return new Response(response.body, {
+    headers,
+    status: response.status,
+    statusText: response.statusText
+  });
+}
+
+function corsPreflight(request, env) {
+  return new Response(null, {
+    headers: {
+      ...SECURITY_HEADERS,
+      ...corsHeaderEntries(request, env)
+    },
+    status: 204
   });
 }
 
@@ -987,8 +1049,12 @@ function isAuthenticated(request) {
 }
 
 function sessionCookie(request, value, maxAge) {
-  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
-  return `${SESSION_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+  const url = new URL(request.url);
+  const origin = request.headers.get("origin") || "";
+  const crossOrigin = Boolean(origin) && origin !== url.origin;
+  const secure = url.protocol === "https:" ? "; Secure" : "";
+  const sameSite = crossOrigin && secure ? "None" : "Lax";
+  return `${SESSION_COOKIE}=${value}; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=${maxAge}${secure}`;
 }
 
 async function readJson(request) {
@@ -1632,16 +1698,19 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
+      if (request.method === "OPTIONS") return corsPreflight(request, env);
       const useProxy = String(env.OA_API_MODE || "").toLowerCase() === "proxy" && env.API_ORIGIN;
-      if (useProxy) return proxyApi(request, env);
       try {
-        return await handleNativeApi(request, env);
+        const response = useProxy
+          ? await proxyApi(request, env)
+          : await handleNativeApi(request, env);
+        return withCorsHeaders(response, request, env);
       } catch (error) {
-        return json({
+        return withCorsHeaders(json({
           code: "WORKER_API_ERROR",
           message: error?.message || "Cloudflare 原生 API 执行失败。",
           ok: false
-        }, { status: 500 });
+        }, { status: 500 }), request, env);
       }
     }
 
