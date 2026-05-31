@@ -43,6 +43,7 @@ export function serializeUser(user) {
     email: user.email,
     name: user.name,
     status: user.status,
+    mustChangePassword: Boolean(user.mustChangePassword),
     employee: user.employee ? {
       id: user.employee.id,
       employeeNo: user.employee.employeeNo,

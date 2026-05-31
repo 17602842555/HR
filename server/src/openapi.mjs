@@ -139,6 +139,15 @@ export const openApiDocument = {
         responses: { "200": response("Password changed", { $ref: "#/components/schemas/AuthSession" }) }
       })
     },
+    "/auth/complete-first-login": {
+      post: operation({
+        operationId: "completeFirstLogin",
+        summary: "Complete first login by changing login email, display name, and password",
+        tags: ["Auth"],
+        body: { $ref: "#/components/schemas/FirstLoginSetupRequest" },
+        responses: { "200": response("First login setup completed", { $ref: "#/components/schemas/AuthSession" }) }
+      })
+    },
     "/people": {
       get: operation({
         operationId: "getPeopleOverview",
@@ -678,6 +687,16 @@ export const openApiDocument = {
         required: ["currentPassword", "newPassword"],
         properties: {
           currentPassword: { type: "string", minLength: 1 },
+          newPassword: { type: "string", minLength: 12 }
+        }
+      },
+      FirstLoginSetupRequest: {
+        type: "object",
+        required: ["currentPassword", "email", "name", "newPassword"],
+        properties: {
+          currentPassword: { type: "string", minLength: 1 },
+          email: { type: "string", format: "email" },
+          name: { type: "string", minLength: 1 },
           newPassword: { type: "string", minLength: 12 }
         }
       },

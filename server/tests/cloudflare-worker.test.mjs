@@ -106,8 +106,8 @@ test("cloudflare worker serves native API without API_ORIGIN", async () => {
   const cookie = loginResponse.headers.get("set-cookie");
 
   assert.equal(loginResponse.status, 200);
-  assert.equal(loginPayload.user.email, undefined);
-  assert.match(cookie, /oa_cf_session=admin/);
+  assert.equal(loginPayload.user.email, "admin@oa.local");
+  assert.match(cookie, /oa_cf_session=mock-user/);
 
   const peopleResponse = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/people", {
@@ -159,6 +159,84 @@ test("cloudflare worker allows GitHub Pages frontend to call native API with cre
   assert.equal(loginResponse.headers.get("access-control-allow-credentials"), "true");
   assert.match(cookie, /SameSite=None/);
   assert.match(cookie, /Secure/);
+});
+
+test("cloudflare worker forces generated employee accounts through first login setup", async () => {
+  const adminLogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: "admin123456" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    {}
+  );
+  const adminCookie = adminLogin.headers.get("set-cookie");
+  const createdResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/iam/users", {
+      body: JSON.stringify({
+        email: `first-login-${Date.now()}@oa.local`,
+        name: "首次登录员工",
+        newPassword: "TempPass12345",
+        roleCodes: ["employee-self-service"]
+      }),
+      headers: { "content-type": "application/json", cookie: adminCookie },
+      method: "POST"
+    }),
+    {}
+  );
+  const createdPayload = await responseJson(createdResponse);
+  const loginResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: createdPayload.user.email, password: "TempPass12345" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    {}
+  );
+  const loginPayload = await responseJson(loginResponse);
+  const employeeCookie = loginResponse.headers.get("set-cookie");
+
+  assert.equal(loginResponse.status, 200);
+  assert.equal(loginPayload.user.mustChangePassword, true);
+
+  const blockedResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/people", {
+      headers: { cookie: employeeCookie }
+    }),
+    {}
+  );
+  const blockedPayload = await responseJson(blockedResponse);
+  assert.equal(blockedResponse.status, 403);
+  assert.equal(blockedPayload.error, "first_login_required");
+
+  const newEmail = `renamed-${Date.now()}@oa.local`;
+  const setupResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/complete-first-login", {
+      body: JSON.stringify({
+        currentPassword: "TempPass12345",
+        email: newEmail,
+        name: "员工自定义姓名",
+        newPassword: "NewPass123456"
+      }),
+      headers: { "content-type": "application/json", cookie: employeeCookie },
+      method: "POST"
+    }),
+    {}
+  );
+  const setupPayload = await responseJson(setupResponse);
+  assert.equal(setupResponse.status, 200);
+  assert.equal(setupPayload.user.email, newEmail);
+  assert.equal(setupPayload.user.mustChangePassword, false);
+
+  const relogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: newEmail, password: "NewPass123456" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    {}
+  );
+  assert.equal(relogin.status, 200);
 });
 
 test("cloudflare worker native approval decisions require every current approver before next node", async () => {

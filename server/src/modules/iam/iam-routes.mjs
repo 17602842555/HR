@@ -50,6 +50,7 @@ function serializeUser(user) {
   return {
     id: user.id,
     email: user.email,
+    mustChangePassword: Boolean(user.mustChangePassword),
     name: user.name,
     status: user.status,
     employee: user.employee ? {
@@ -255,6 +256,7 @@ export async function registerIamRoutes(app) {
         const user = await tx.user.create({
           data: {
             email,
+            mustChangePassword: true,
             name: employee.name,
             passwordHash,
             status: requestedStatus,
@@ -361,6 +363,7 @@ export async function registerIamRoutes(app) {
         const user = await tx.user.create({
           data: {
             email,
+            mustChangePassword: request.body?.mustChangePassword === false ? false : true,
             name,
             passwordHash,
             status: requestedStatus,
@@ -633,6 +636,7 @@ export async function registerIamRoutes(app) {
         where: { id: user.id },
         data: {
           passwordHash,
+          mustChangePassword: true,
           sessionVersion: { increment: 1 }
         },
         include: {

@@ -164,6 +164,11 @@ export function useApiBackedOaSystem() {
           setApiStatus({ error: "会话无效", mode: "unauthenticated", source: "api" });
           return;
         }
+        if (user.mustChangePassword) {
+          setCurrentUser(user);
+          setApiStatus({ error: "请先完成首次登录设置", mode: "first_login_required", source: "api" });
+          return;
+        }
         const domainResult = await fetchDomainState(fallback.state);
         if (cancelled) return;
         setCurrentUser(user);
@@ -223,7 +228,7 @@ export function useApiBackedOaSystem() {
     [apiState, fallback.state, localOverrideDomains]
   );
   const metrics = useMemo(() => calculateMetrics(state), [state]);
-  const shouldUseApi = apiStatus.source !== "mock" && !["api_required", "fallback", "unauthenticated"].includes(apiStatus.mode);
+  const shouldUseApi = apiStatus.source !== "mock" && !["api_required", "fallback", "first_login_required", "unauthenticated"].includes(apiStatus.mode);
   const currentUserName = currentUser?.name || fallbackUser().name;
 
   const auth = useMemo(() => ({
@@ -233,6 +238,13 @@ export function useApiBackedOaSystem() {
       try {
         const payload = await authApi.login(credentials);
         const user = normalizeCurrentUser(payload);
+        if (user.mustChangePassword) {
+          setCurrentUser(user);
+          setApiState(null);
+          setLocalOverrideDomains(new Set());
+          setApiStatus({ error: "请先完成首次登录设置", mode: "first_login_required", source: "api" });
+          return { ok: true, firstLoginRequired: true };
+        }
         const domainResult = await fetchDomainState(fallback.state);
         setCurrentUser(user);
         setApiState(domainResult.state);
@@ -272,10 +284,32 @@ export function useApiBackedOaSystem() {
         setAuthBusy(false);
       }
     },
+    async completeFirstLogin(payload) {
+      setAuthBusy(true);
+      try {
+        const session = await authApi.completeFirstLogin(payload);
+        const user = normalizeCurrentUser(session);
+        const domainResult = await fetchDomainState(fallback.state);
+        setCurrentUser(user);
+        setApiState(domainResult.state);
+        setLocalOverrideDomains(new Set());
+        setApiStatus({
+          error: domainResult.errors[0]?.message || "",
+          mode: domainResult.errors.length ? "degraded" : "ready",
+          source: "api"
+        });
+        return { ok: true };
+      } catch (error) {
+        setApiStatus({ error: actionErrorMessage(error), mode: "first_login_required", source: "api" });
+        return { ok: false, error };
+      } finally {
+        setAuthBusy(false);
+      }
+    },
     async logout() {
       setAuthBusy(true);
       try {
-        if (shouldUseApi) await authApi.logout();
+        if (shouldUseApi || apiStatus.mode === "first_login_required") await authApi.logout();
       } catch {
         // Logging out should clear the local session view even if the API is already unavailable.
       } finally {
@@ -286,7 +320,7 @@ export function useApiBackedOaSystem() {
         setAuthBusy(false);
       }
     }
-  }), [apiPolicy, authBusy, fallback.state, reloadDomains, shouldUseApi]);
+  }), [apiPolicy, apiStatus.mode, authBusy, fallback.state, reloadDomains, shouldUseApi]);
 
   const actions = useMemo(() => {
     const localOnly = (domains, localAction) => (...args) => {

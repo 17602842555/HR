@@ -24,6 +24,12 @@ import { registerSystemRoutes } from "./modules/system/system-routes.mjs";
 import { registerWorkflowRoutes } from "./modules/workflow/workflow-routes.mjs";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const FIRST_LOGIN_ALLOWED_PATHS = new Set([
+  "/api/auth/change-password",
+  "/api/auth/complete-first-login",
+  "/api/auth/logout",
+  "/api/auth/me"
+]);
 const SECURITY_HEADERS = Object.freeze({
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
@@ -152,10 +158,18 @@ export async function buildApp(options = {}) {
       request.user = {
         ...request.user,
         email: user.email,
+        mustChangePassword: Boolean(user.mustChangePassword),
         name: user.name,
         sessionVersion: user.sessionVersion,
         tenantId: user.tenantId
       };
+      const pathname = request.url.split("?")[0];
+      if (user.mustChangePassword && !FIRST_LOGIN_ALLOWED_PATHS.has(pathname)) {
+        return reply.code(403).send({
+          error: "first_login_required",
+          message: "首次登录必须先设置登录账号和新密码。"
+        });
+      }
     } catch {
       return reply.code(401).send({ error: "unauthorized" });
     }

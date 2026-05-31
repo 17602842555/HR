@@ -159,6 +159,36 @@ function nextId(prefix) {
   return `${prefix}-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${random}`;
 }
 
+function generatedTemporaryPassword() {
+  return `Tmp9-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+function normalizeLoginEmail(input) {
+  return String(input || "").trim().toLowerCase();
+}
+
+function validLoginEmail(input) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeLoginEmail(input));
+}
+
+function validNewPassword(input) {
+  const value = String(input || "");
+  return value.length >= 12 && /[A-Za-z]/.test(value) && /\d/.test(value);
+}
+
+async function nativePasswordHash(password, salt = crypto.randomUUID()) {
+  const encoder = new TextEncoder();
+  const bytes = await crypto.subtle.digest("SHA-256", encoder.encode(`${salt}:${password}`));
+  const digest = [...new Uint8Array(bytes)].map((value) => value.toString(16).padStart(2, "0")).join("");
+  return `sha256:${salt}:${digest}`;
+}
+
+async function verifyNativePassword(password, storedHash) {
+  const [, salt, digest] = String(storedHash || "").split(":");
+  if (!salt || !digest) return false;
+  return await nativePasswordHash(password, salt) === storedHash;
+}
+
 function normalizedHostname(hostname) {
   return String(hostname || "").trim().toLowerCase().replace(/^\[|\]$/g, "");
 }
@@ -1048,6 +1078,19 @@ function isAuthenticated(request) {
   return parseCookie(request)[SESSION_COOKIE] === "admin";
 }
 
+function adminUser(state) {
+  return state.iam.users.find((item) => item.email === "admin@oa.local") || state.iam.users[0] || null;
+}
+
+function authenticatedUser(state, request) {
+  const sessionValue = parseCookie(request)[SESSION_COOKIE];
+  if (!sessionValue) return null;
+  const user = sessionValue === "admin"
+    ? adminUser(state)
+    : state.iam.users.find((item) => item.id === sessionValue);
+  return user?.status === "ACTIVE" ? user : null;
+}
+
 function sessionCookie(request, value, maxAge) {
   const url = new URL(request.url);
   const origin = request.headers.get("origin") || "";
@@ -1095,17 +1138,18 @@ function badRequest(message) {
   return json({ code: "BAD_REQUEST", message, ok: false }, { status: 400 });
 }
 
-function currentUser(state) {
-  const user = state.iam.users.find((item) => item.email === "admin@oa.local") || state.iam.users[0];
+function currentUser(state, user = adminUser(state)) {
   return {
     user: {
       avatarUrl: "",
-      department: "行政部",
+      department: user?.employee?.department || "行政部",
+      email: user?.email || "admin@oa.local",
       id: user?.id || "mock-user",
+      mustChangePassword: Boolean(user?.mustChangePassword),
       name: user?.name || "张三",
       organization: "集团总部",
       source: "cloudflare-native",
-      title: "系统管理员"
+      title: user?.roleCodes?.includes("admin") ? "系统管理员" : user?.employee?.roleTitle || "员工"
     }
   };
 }
@@ -1218,31 +1262,93 @@ async function handleNativeApi(request, env) {
 
   if (pathname === "/auth/login" && method === "POST") {
     const body = await readJson(request);
-    if (body.email !== "admin@oa.local" || body.password !== "admin123456") {
+    const email = normalizeLoginEmail(body.email);
+    const user = state.iam.users.find((item) => normalizeLoginEmail(item.email) === email);
+    const validPassword = user?.passwordHash
+      ? await verifyNativePassword(String(body.password || ""), user.passwordHash)
+      : email === "admin@oa.local" && body.password === "admin123456";
+    if (!user || user.status !== "ACTIVE" || !validPassword) {
       return json({ code: "INVALID_CREDENTIALS", message: "账号或密码错误。", ok: false }, { status: 401 });
     }
-    await appendAudit(env, state, { action: "登录", actor: "张三", content: "Cloudflare 原生后端登录", object: "认证" });
+    user.lastLoginAt = nowIso();
+    await appendAudit(env, state, { action: "登录", actor: user.name, content: "Cloudflare 原生后端登录", object: "认证", objectId: user.id });
     await saveState(env, state);
-    return json({ ok: true, ...currentUser(state) }, {
-      headers: { "set-cookie": sessionCookie(request, "admin", 60 * 60 * 8) }
+    return json({ ok: true, ...currentUser(state, user) }, {
+      headers: { "set-cookie": sessionCookie(request, user.id, 60 * 60 * 8) }
     });
   }
 
-  if (!isAuthenticated(request)) {
+  const actor = authenticatedUser(state, request);
+  if (!actor) {
     if (pathname === "/auth/me") return unauthorized();
     if (pathname !== "/auth/logout") return unauthorized();
   }
+  const firstLoginAllowed = ["/auth/change-password", "/auth/complete-first-login", "/auth/logout", "/auth/me"];
+  if (actor?.mustChangePassword && !firstLoginAllowed.includes(pathname)) {
+    return json({
+      code: "FIRST_LOGIN_REQUIRED",
+      error: "first_login_required",
+      message: "首次登录必须先设置登录账号和新密码。",
+      ok: false
+    }, { status: 403 });
+  }
 
-  if (pathname === "/auth/me" && method === "GET") return ok(currentUser(state));
+  if (pathname === "/auth/me" && method === "GET") return ok(currentUser(state, actor));
   if (pathname === "/auth/logout" && method === "POST") {
     return json({ ok: true }, {
       headers: { "set-cookie": sessionCookie(request, "", 0) }
     });
   }
   if (pathname === "/auth/change-password" && method === "POST") {
-    await appendAudit(env, state, { action: "修改密码", actor: "张三", content: "用户修改登录密码", object: "认证" });
+    const body = await readJson(request);
+    const validCurrent = actor.passwordHash
+      ? await verifyNativePassword(String(body.currentPassword || ""), actor.passwordHash)
+      : actor.email === "admin@oa.local" && body.currentPassword === "admin123456";
+    if (!validCurrent) {
+      return json({ code: "CURRENT_PASSWORD_INVALID", message: "当前密码不正确。", ok: false }, { status: 401 });
+    }
+    if (!validNewPassword(body.newPassword)) {
+      return badRequest("密码至少 12 位，并且必须同时包含字母和数字。");
+    }
+    actor.passwordHash = await nativePasswordHash(body.newPassword);
+    actor.mustChangePassword = false;
+    await appendAudit(env, state, { action: "修改密码", actor: actor.name, content: "用户修改登录密码", object: "认证", objectId: actor.id });
     await saveState(env, state);
-    return ok(currentUser(state));
+    return ok(currentUser(state, actor));
+  }
+  if (pathname === "/auth/complete-first-login" && method === "POST") {
+    const body = await readJson(request);
+    const email = normalizeLoginEmail(body.email);
+    const name = String(body.name || "").trim();
+    if (!validLoginEmail(email) || !name || !body.currentPassword || !body.newPassword) {
+      return badRequest("登录账号、姓名、当前密码和新密码必填，登录账号需为邮箱格式。");
+    }
+    if (!validNewPassword(body.newPassword)) {
+      return badRequest("密码至少 12 位，并且必须同时包含字母和数字。");
+    }
+    if (!await verifyNativePassword(String(body.currentPassword || ""), actor.passwordHash)) {
+      return json({ code: "CURRENT_PASSWORD_INVALID", message: "当前密码不正确。", ok: false }, { status: 401 });
+    }
+    const duplicate = state.iam.users.find((item) => item.id !== actor.id && normalizeLoginEmail(item.email) === email);
+    if (duplicate) return json({ code: "USER_EMAIL_EXISTS", message: "该登录账号已被其他员工使用。", ok: false }, { status: 409 });
+    const beforeEmail = actor.email;
+    const beforeName = actor.name;
+    actor.email = email;
+    actor.name = name;
+    actor.passwordHash = await nativePasswordHash(body.newPassword);
+    actor.mustChangePassword = false;
+    await appendAudit(env, state, {
+      action: "首次登录设置",
+      actor: name,
+      content: `账号 ${beforeEmail} 完成首次登录设置`,
+      object: "认证",
+      objectId: actor.id
+    });
+    await saveState(env, state);
+    return ok({
+      ...currentUser(state, actor),
+      changed: { emailBefore: beforeEmail, emailAfter: email, nameBefore: beforeName, nameAfter: name }
+    });
   }
 
   if (pathname === "/analytics/overview" && method === "GET") return ok({ analytics: state.analytics });
@@ -1283,36 +1389,57 @@ async function handleNativeApi(request, env) {
   if (pathname === "/iam" && method === "GET") return ok({ iam: state.iam });
   if (pathname === "/iam/users" && method === "POST") {
     const body = await readJson(request);
+    const temporaryPassword = body.newPassword || generatedTemporaryPassword();
     const user = {
-      email: body.email,
+      email: normalizeLoginEmail(body.email),
       id: nextId("USER"),
+      mustChangePassword: body.mustChangePassword === false ? false : true,
       name: body.name,
+      passwordHash: await nativePasswordHash(temporaryPassword),
       roleCodes: body.roleCodes || ["employee-self-service"],
       status: "ACTIVE"
     };
+    if (!validLoginEmail(user.email) || !user.name) return badRequest("账号邮箱和姓名必填。");
+    if (state.iam.users.some((item) => normalizeLoginEmail(item.email) === user.email)) {
+      return json({ code: "USER_EMAIL_EXISTS", message: "该登录账号已存在。", ok: false }, { status: 409 });
+    }
     state.iam.users = [user, ...state.iam.users];
     await appendAudit(env, state, { action: "创建账号", actor: "张三", content: `创建账号 ${user.email}`, object: "账号权限", objectId: user.id });
     await saveState(env, state);
-    return ok({ temporaryPassword: body.newPassword ? null : "ChangeMe-2026!", user });
+    return ok({ temporaryPassword, user });
   }
   if (pathname === "/iam/accounts/sync-employees" && method === "POST") {
     const body = await readJson(request);
     const existingNames = new Set(state.iam.users.map((user) => user.name));
     const roleCodes = body.roleCodes?.length ? body.roleCodes : ["employee-self-service"];
-    const createdUsers = state.people.employees
-      .filter((employee) => !existingNames.has(employee.name))
-      .map((employee) => ({
+    const createdUsers = [];
+    const credentials = [];
+    for (const employee of state.people.employees.filter((item) => !existingNames.has(item.name))) {
+      const temporaryPassword = generatedTemporaryPassword();
+      const user = {
         email: `${String(employee.seq || employee.name).toLowerCase().replace(/[^a-z0-9]+/g, ".")}@oa.local`,
         employee: { id: employee.id, name: employee.name },
         id: nextId("USER"),
+        mustChangePassword: true,
         name: employee.name,
+        passwordHash: await nativePasswordHash(temporaryPassword),
         roleCodes,
         status: "ACTIVE"
-      }));
+      };
+      createdUsers.push(user);
+      credentials.push({
+        email: user.email,
+        employeeId: employee.id,
+        employeeNo: employee.employeeNo || employee.seq || "-",
+        name: employee.name,
+        roleCodes,
+        temporaryPassword
+      });
+    }
     state.iam.users = [...createdUsers, ...state.iam.users];
     await appendAudit(env, state, { action: "批量开户", actor: "张三", content: `为 ${createdUsers.length} 名员工生成账号`, object: "账号权限" });
     await saveState(env, state);
-    return ok({ createdCount: createdUsers.length, createdUsers: createdUsers.map((user) => ({ ...user, temporaryPassword: "ChangeMe-2026!" })) });
+    return ok({ createdCount: createdUsers.length, credentials, createdUsers });
   }
   if (segments[0] === "iam" && segments[1] === "roles" && segments[3] === "permissions" && method === "PUT") {
     const body = await readJson(request);
@@ -1330,6 +1457,11 @@ async function handleNativeApi(request, env) {
     if (!user) return notFound(pathname);
     if (segments[3] === "roles") user.roleCodes = [...new Set(body.roleCodes || [])];
     if (segments[3] === "status") user.status = body.status || user.status;
+    if (segments[3] === "password") {
+      if (!validNewPassword(body.newPassword)) return badRequest("密码至少 12 位，并且必须同时包含字母和数字。");
+      user.passwordHash = await nativePasswordHash(body.newPassword);
+      user.mustChangePassword = true;
+    }
     await appendAudit(env, state, { action: "更新账号", actor: "张三", content: `更新账号 ${user.email}`, object: "账号权限", objectId: user.id });
     await saveState(env, state);
     return ok({ user });

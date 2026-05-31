@@ -202,6 +202,69 @@ function ApiRequiredScreen({ apiStatus }) {
   );
 }
 
+function FirstLoginSetupScreen({ apiStatus, auth, currentUser }) {
+  const [form, setForm] = useState({
+    confirmPassword: "",
+    currentPassword: "",
+    email: currentUser?.email || "",
+    name: currentUser?.name || "",
+    newPassword: ""
+  });
+  const [error, setError] = useState(apiStatus.error || "");
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setError("");
+    if (form.newPassword !== form.confirmPassword) {
+      setError("两次输入的新密码不一致。");
+      return;
+    }
+    const result = await auth.completeFirstLogin({
+      currentPassword: form.currentPassword,
+      email: form.email,
+      name: form.name,
+      newPassword: form.newPassword
+    });
+    if (!result.ok) setError(result.error?.message || "首次登录设置失败。");
+  };
+
+  return (
+    <main className="login-page">
+      <section className="login-panel">
+        <div className="login-brand">
+          <img src="/assets/logo-mark.png" alt="" />
+          <div>
+            <span>集团人事行政 OA</span>
+            <strong>首次登录设置</strong>
+          </div>
+        </div>
+        <form className="login-form" onSubmit={submit}>
+          <label>登录账号
+            <input autoComplete="username" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+          </label>
+          <label>姓名
+            <input autoComplete="name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+          </label>
+          <label>临时密码
+            <input autoComplete="current-password" type="password" value={form.currentPassword} onChange={(event) => setForm({ ...form, currentPassword: event.target.value })} />
+          </label>
+          <label>新密码
+            <input autoComplete="new-password" placeholder="至少 12 位，含字母和数字" type="password" value={form.newPassword} onChange={(event) => setForm({ ...form, newPassword: event.target.value })} />
+          </label>
+          <label>确认新密码
+            <input autoComplete="new-password" type="password" value={form.confirmPassword} onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })} />
+          </label>
+          {error ? <p className="login-error">{error}</p> : <p className="login-hint">完成后临时密码失效，后续使用新的登录账号和密码进入系统。</p>}
+          <button className="primary" type="submit" disabled={auth.busy}>
+            <LockKeyhole size={16} /> {auth.busy ? "保存中" : "完成设置"}
+          </button>
+          <button type="button" onClick={auth.logout}>退出登录</button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
 function LeaveForm({ actions, onClose }) {
   const [form, setForm] = useState({ employee: "张三", type: "年假", dates: "2026-05-30 ~ 2026-05-31", days: 2 });
   const submit = () => {
@@ -341,6 +404,9 @@ function App() {
   }
   if (apiStatus.mode === "api_required") {
     return <ApiRequiredScreen apiStatus={apiStatus} />;
+  }
+  if (apiStatus.mode === "first_login_required") {
+    return <FirstLoginSetupScreen apiStatus={apiStatus} auth={auth} currentUser={currentUser} />;
   }
 
   const screen = {

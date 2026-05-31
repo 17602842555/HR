@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-05-30T04:15:32.150Z",
+  "generatedAt": "2026-05-31T09:12:59.806Z",
   "migrations": [
     {
       "name": "20260529120000_init_commercial_oa",
@@ -99,11 +99,18 @@
       "bytes": 651,
       "sha256": "5fffd311388578b572ca251682735c2fbeff10ea58ab21f9d127a7db6fa7fb8d",
       "statementCount": 5
+    },
+    {
+      "name": "20260531170000_user_first_login_setup",
+      "path": "prisma/migrations/20260531170000_user_first_login_setup/migration.sql",
+      "bytes": 86,
+      "sha256": "761fda01f97c1f73eb2222f6289d194225d981b33cef1850533cda85b2d2463f",
+      "statementCount": 1
     }
   ],
   "summary": {
-    "migrationCount": 14,
-    "stableSha256": "011480385f54e5010d467730bfdd49f1184682d7b5e2285e8d3ad2b619add87f",
-    "sha256": "011480385f54e5010d467730bfdd49f1184682d7b5e2285e8d3ad2b619add87f"
+    "migrationCount": 15,
+    "stableSha256": "6b1b99522b17ef1b18ee78b5b76695fbb087fa62cd5463c10e62b9c34ce5c376",
+    "sha256": "6b1b99522b17ef1b18ee78b5b76695fbb087fa62cd5463c10e62b9c34ce5c376"
   }
 }

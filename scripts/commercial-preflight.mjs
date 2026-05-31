@@ -86,6 +86,7 @@ function routeKey(route) {
 const authenticatedRouteIamExceptions = new Set([
   "GET /api/auth/me",
   "POST /api/auth/change-password",
+  "POST /api/auth/complete-first-login",
   "POST /api/auth/logout",
   "GET /api/protected/ping"
 ]);

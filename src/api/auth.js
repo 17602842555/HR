@@ -18,6 +18,13 @@ export function changePassword(payload) {
   });
 }
 
+export function completeFirstLogin(payload) {
+  return apiRequest("/auth/complete-first-login", {
+    body: payload,
+    method: "POST"
+  });
+}
+
 export function logout() {
   return apiRequest("/auth/logout", {
     method: "POST"

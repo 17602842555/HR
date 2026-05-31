@@ -96,6 +96,10 @@ function authenticatedUserWhere(request) {
   return { id: request.user.sub, tenantId: request.user.tenantId };
 }
 
+function normalizeEmail(input) {
+  return String(input || "").trim().toLowerCase();
+}
+
 async function auditLoginFailure(app, request, {
   action = "auth.login_failed",
   email,
@@ -293,6 +297,7 @@ export async function registerAuthRoutes(app) {
       updated = await tx.user.update({
         where: { id: user.id },
         data: {
+          mustChangePassword: false,
           passwordHash,
           sessionVersion: { increment: 1 }
         },
@@ -306,6 +311,109 @@ export async function registerAuthRoutes(app) {
         objectId: user.id,
         summary: "用户修改密码",
         metadata: { email: user.email, sessionRevoked: true },
+        ...requestAuditMeta(request)
+      });
+    });
+
+    const token = app.jwt.sign(tokenPayload(updated));
+    reply.setCookie(app.config.cookieName, token, authCookieOptions(app.config));
+    return reply.send({ token, user: serializeUser(updated) });
+  });
+
+  app.post("/api/auth/complete-first-login", { preHandler: app.authenticate }, async (request, reply) => {
+    const currentPassword = String(request.body?.currentPassword || "");
+    const newPassword = String(request.body?.newPassword || "");
+    const email = normalizeEmail(request.body?.email);
+    const name = String(request.body?.name || "").trim();
+
+    if (!currentPassword || !newPassword || !email || !name) {
+      return reply.code(400).send({
+        error: "first_login_fields_required",
+        message: "当前密码、新密码、登录账号和姓名必填。"
+      });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return reply.code(400).send({ error: "invalid_user_email", message: "登录账号需要使用有效邮箱格式。" });
+    }
+
+    const validation = validateNewPassword(newPassword);
+    if (!validation.ok) {
+      return reply.code(400).send({
+        error: "password_policy_failed",
+        message: validation.message,
+        details: { reasons: validation.reasons }
+      });
+    }
+
+    const user = await app.prisma.user.findFirst({
+      where: authenticatedUserWhere(request),
+      include: userWithAccessInclude
+    });
+    if (!user || user.status !== "ACTIVE") {
+      return reply.code(401).send({ error: "unauthorized" });
+    }
+    if (!user.mustChangePassword) {
+      return reply.code(400).send({
+        error: "first_login_not_required",
+        message: "当前账号已完成首次登录设置。"
+      });
+    }
+
+    const validCurrentPassword = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!validCurrentPassword) {
+      await appendAuditLog(app.prisma, {
+        tenantId: user.tenantId,
+        actorUserId: user.id,
+        action: "auth.first_login_denied",
+        objectType: "user",
+        objectId: user.id,
+        summary: "首次登录设置失败",
+        metadata: { email: user.email, reason: "bad_current_password" },
+        ...requestAuditMeta(request)
+      });
+      return reply.code(401).send({ error: "current_password_invalid", message: "当前密码不正确。" });
+    }
+
+    const passwordReused = await bcrypt.compare(newPassword, user.passwordHash);
+    if (passwordReused) {
+      return reply.code(400).send({ error: "password_reuse_denied", message: "新密码不能与当前临时密码相同。" });
+    }
+
+    const existing = await app.prisma.user.findUnique({
+      where: { tenantId_email: { tenantId: user.tenantId, email } }
+    });
+    if (existing && existing.id !== user.id) {
+      return reply.code(409).send({ error: "user_email_exists", message: "该登录账号已被其他员工使用。" });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, passwordHashRounds);
+    let updated;
+    await app.prisma.$transaction(async (tx) => {
+      updated = await tx.user.update({
+        where: { id: user.id },
+        data: {
+          email,
+          mustChangePassword: false,
+          name,
+          passwordHash,
+          sessionVersion: { increment: 1 }
+        },
+        include: userWithAccessInclude
+      });
+      await appendAuditLog(tx, {
+        tenantId: user.tenantId,
+        actorUserId: user.id,
+        action: "auth.first_login_complete",
+        objectType: "user",
+        objectId: user.id,
+        summary: "员工完成首次登录设置",
+        metadata: {
+          emailAfter: email,
+          emailBefore: user.email,
+          nameAfter: name,
+          nameBefore: user.name,
+          sessionRevoked: true
+        },
         ...requestAuditMeta(request)
       });
     });

@@ -109,6 +109,7 @@ model User {
   email        String
   name         String
   passwordHash String        @map("password_hash")
+  mustChangePassword Boolean  @default(false) @map("must_change_password")
   sessionVersion Int         @default(1) @map("session_version")
   status       UserStatus    @default(ACTIVE)
   employeeId   String?       @unique @map("employee_id")

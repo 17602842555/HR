@@ -67,6 +67,8 @@ export function normalizeCurrentUser(payload) {
     organization: user.organization || user.organizationName || user.company || FALLBACK_USER.organization,
     title: user.title || user.roleName || user.position || FALLBACK_USER.title,
     avatarUrl: user.avatarUrl || user.avatar || "",
+    email: user.email || user.login || "",
+    mustChangePassword: Boolean(user.mustChangePassword || user.firstLoginRequired),
     source: "api"
   };
 }
