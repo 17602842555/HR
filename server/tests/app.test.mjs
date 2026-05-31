@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import bcrypt from "bcryptjs";
 import { buildApp } from "../src/app.mjs";
+import { expectedMigrationNames } from "../src/modules/system/migration-readiness.mjs";
 
 const productionFileStorageDir = "/var/lib/oa/files";
 
@@ -1448,6 +1449,13 @@ async function makePrismaMock(options = {}) {
     },
     $queryRaw: async () => [{ "?column?": 1 }],
     $queryRawUnsafe: async (query) => {
+      if (String(query).includes("_prisma_migrations")) {
+        return (options.prismaMigrations || expectedMigrationNames().map((migrationName) => ({
+          migration_name: migrationName,
+          finished_at: new Date("2026-05-30T12:00:00.000Z"),
+          rolled_back_at: null
+        })));
+      }
       if (String(query).includes("pg_trigger")) {
         return (options.appendOnlyTriggers || [
           "audit_logs_prevent_delete",
@@ -1638,6 +1646,7 @@ test("ready endpoint verifies database connectivity", async () => {
     assert.equal(response.statusCode, 200);
     assert.equal(response.json().database, "ok");
     assert.equal(response.json().databaseIntegrity, "ok");
+    assert.equal(response.json().databaseMigrations, "ok");
     assert.equal(response.json().fileStorage, "ok");
   } finally {
     await app.close();
@@ -1674,6 +1683,7 @@ test("ready endpoint verifies configured object storage adapter", async () => {
   const response = await app.inject({ method: "GET", url: "/ready" });
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().databaseIntegrity, "ok");
+  assert.equal(response.json().databaseMigrations, "ok");
   assert.equal(response.json().fileStorage, "ok");
   assert.equal(probeCount, 1);
 
@@ -1695,6 +1705,7 @@ test("ready endpoint returns 503 when file storage is not writable", async () =>
     assert.equal(response.statusCode, 503);
     assert.equal(response.json().database, "ok");
     assert.equal(response.json().databaseIntegrity, "ok");
+    assert.equal(response.json().databaseMigrations, "ok");
     assert.equal(response.json().fileStorage, "unavailable");
   } finally {
     await app.close();
@@ -1719,6 +1730,33 @@ test("ready endpoint returns 503 when database check fails", async () => {
     assert.equal(response.statusCode, 503);
     assert.equal(response.json().database, "unavailable");
     assert.equal(response.json().databaseIntegrity, "unavailable");
+    assert.equal(response.json().databaseMigrations, "unavailable");
+    assert.equal(response.json().fileStorage, "ok");
+  } finally {
+    await app.close();
+    await rm(fileStorageDir, { recursive: true, force: true });
+  }
+});
+
+test("ready endpoint returns 503 when Prisma migrations are missing", async () => {
+  const fileStorageDir = await mkdtemp(join(tmpdir(), "deep-oa-ready-files-"));
+  const appliedMigrations = expectedMigrationNames().slice(0, -1).map((migrationName) => ({
+    migration_name: migrationName,
+    finished_at: new Date("2026-05-30T12:00:00.000Z"),
+    rolled_back_at: null
+  }));
+  const app = await buildApp({
+    logger: false,
+    prisma: await makePrismaMock({ prismaMigrations: appliedMigrations }),
+    config: { fileStorageDir, jwtSecret: "test-secret" }
+  });
+
+  try {
+    const response = await app.inject({ method: "GET", url: "/ready" });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.json().database, "ok");
+    assert.equal(response.json().databaseIntegrity, "ok");
+    assert.equal(response.json().databaseMigrations, "unavailable");
     assert.equal(response.json().fileStorage, "ok");
   } finally {
     await app.close();
@@ -1746,6 +1784,7 @@ test("ready endpoint returns 503 when append-only trigger integrity is missing",
     assert.equal(response.statusCode, 503);
     assert.equal(response.json().database, "ok");
     assert.equal(response.json().databaseIntegrity, "unavailable");
+    assert.equal(response.json().databaseMigrations, "ok");
     assert.equal(response.json().fileStorage, "ok");
   } finally {
     await app.close();
@@ -1772,6 +1811,7 @@ test("system readiness API requires admin permission and redacts runtime secrets
     const readiness = response.json().systemReadiness;
     assert.equal(readiness.dependencies.database, "ok");
     assert.equal(readiness.dependencies.databaseIntegrity, "ok");
+    assert.equal(readiness.dependencies.databaseMigrations, "ok");
     assert.equal(readiness.dependencies.fileStorage, "ok");
     assert.equal(readiness.runtime.webOriginCount, 1);
     assert.equal(readiness.runtime.fileStorageConfigured, true);

@@ -371,7 +371,7 @@ The compose stack starts:
 - `web`: nginx static frontend on `http://127.0.0.1:8080`, proxying `/api` to the API service.
 - `file-storage`: persistent local attachment volume mounted at `FILE_STORAGE_DIR` when `FILE_STORAGE_DRIVER=local`; when `FILE_STORAGE_DRIVER=s3`, Compose defaults the mount target to `/app/storage/files` if `FILE_STORAGE_DIR` is unset, but attachments and imported source artifacts are stored through the object-storage adapter.
 
-API container health uses `/ready`, which verifies the Fastify process, PostgreSQL connectivity, live append-only database triggers for audit/export/import ledgers, and file-storage readiness. `/health` remains a lightweight process liveness endpoint.
+API container health uses `/ready`, which verifies the Fastify process, PostgreSQL connectivity, Prisma migration readiness against `prisma/migrations/migration-lock.json`, live append-only database triggers for audit/export/import ledgers, and file-storage readiness. `/health` remains a lightweight process liveness endpoint.
 
 For production, set `RUN_DB_SEED=0` unless the reviewed bootstrap seed is intentionally part of the cutover. If a production bootstrap seed is explicitly approved, set both `RUN_DB_SEED=1` and `ALLOW_PRODUCTION_SEED=1`, provide a non-default `DEFAULT_ADMIN_PASSWORD` that satisfies the password policy, and configure either `FILE_STORAGE_DIR` on the approved absolute persistent-volume path or complete `OBJECT_STORAGE_*` settings for `FILE_STORAGE_DRIVER=s3`. The seed script refuses production seeding without that approval, rejects temporary local file-storage paths plus non-HTTPS or template object-storage endpoints before opening Prisma, and no longer prints the bootstrap password.
 

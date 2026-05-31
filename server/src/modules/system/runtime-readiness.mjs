@@ -1,4 +1,5 @@
 import { checkAppendOnlyDatabaseTriggers } from "./database-integrity.mjs";
+import { checkPrismaMigrationReadiness } from "./migration-readiness.mjs";
 
 export async function checkFileStorageWritable(appOrConfig) {
   if (appOrConfig?.fileStorage?.probe) {
@@ -12,6 +13,7 @@ export async function readinessPayload(app, request) {
   const status = {
     database: "ok",
     databaseIntegrity: "ok",
+    databaseMigrations: "ok",
     fileStorage: "ok",
     ok: true,
     service: "deep-oa-api"
@@ -23,12 +25,33 @@ export async function readinessPayload(app, request) {
   } catch (error) {
     status.database = "unavailable";
     status.databaseIntegrity = "unavailable";
+    status.databaseMigrations = "unavailable";
     status.ok = false;
     databaseReady = false;
     request.log.error({ error }, "database readiness check failed");
   }
 
   if (databaseReady) {
+    try {
+      const migrations = await checkPrismaMigrationReadiness(app.prisma);
+      if (!migrations.ok) {
+        status.databaseMigrations = "unavailable";
+        status.ok = false;
+        request.log.error({
+          appliedCount: migrations.appliedCount,
+          expectedCount: migrations.expectedCount,
+          latestApplied: migrations.latestApplied,
+          latestExpected: migrations.latestExpected,
+          missing: migrations.missing,
+          rolledBack: migrations.rolledBack
+        }, "database migration readiness check failed");
+      }
+    } catch (error) {
+      status.databaseMigrations = "unavailable";
+      status.ok = false;
+      request.log.error({ error }, "database migration readiness check failed");
+    }
+
     try {
       const integrity = await checkAppendOnlyDatabaseTriggers(app.prisma);
       if (!integrity.ok) {

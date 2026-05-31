@@ -668,6 +668,7 @@ function releaseGateSummary({ dependencies, gaps, gapActionReport, gapSourceAvai
 
   if (!dependencies.ok) {
     if (dependencies.database !== "ok") blockers.push("数据库不可用");
+    if (dependencies.databaseMigrations !== "ok") blockers.push("数据库迁移未应用到当前版本");
     if (dependencies.databaseIntegrity !== "ok") blockers.push("数据库审计/导入/导出不可篡改触发器未验证");
     if (dependencies.fileStorage !== "ok") blockers.push("文件存储不可写");
   }

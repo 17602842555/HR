@@ -1128,9 +1128,12 @@ function checkDeploymentArtifacts() {
     "readinessPayload",
     "checkFileStorageWritable",
     "checkAppendOnlyDatabaseTriggers",
+    "checkPrismaMigrationReadiness",
     "fileStorage: \"ok\"",
     "databaseIntegrity: \"ok\"",
+    "databaseMigrations: \"ok\"",
     "status.databaseIntegrity = \"unavailable\"",
+    "status.databaseMigrations = \"unavailable\"",
     "fileStorage = \"unavailable\""
   ].forEach((needle) => assertIncludes(readinessRuntime, needle, "server/src/modules/system/runtime-readiness.mjs"));
 
@@ -3721,10 +3724,13 @@ function checkReadinessFileStorageCoverage() {
   [
     "ready endpoint verifies database connectivity",
     "ready endpoint verifies configured object storage adapter",
+    "ready endpoint returns 503 when Prisma migrations are missing",
     "ready endpoint returns 503 when append-only trigger integrity is missing",
     "ready endpoint returns 503 when file storage is not writable",
     "databaseIntegrity, \"ok\"",
     "databaseIntegrity, \"unavailable\"",
+    "databaseMigrations, \"ok\"",
+    "databaseMigrations, \"unavailable\"",
     "fileStorage, \"ok\"",
     "fileStorage, \"unavailable\""
   ].forEach((needle) => assertIncludes(tests, needle, "server/tests/app.test.mjs"));
@@ -3732,7 +3738,7 @@ function checkReadinessFileStorageCoverage() {
   const docs = readText("docs/QA_ACCEPTANCE_CHECKLIST.md") + readText("docs/DEPLOYMENT.md");
   [
     "file-storage readiness",
-    "PostgreSQL connectivity, live append-only database triggers"
+    "PostgreSQL connectivity, Prisma migration readiness, live append-only database triggers"
   ].forEach((needle) => assertIncludes(docs, needle, "runtime readiness docs"));
 }
 
@@ -4765,8 +4771,10 @@ function checkSystemReadinessImplementation() {
   [
     "checkFileStorageWritable",
     "checkAppendOnlyDatabaseTriggers",
+    "checkPrismaMigrationReadiness",
     "app.prisma.$queryRaw",
     "status.databaseIntegrity = \"unavailable\"",
+    "status.databaseMigrations = \"unavailable\"",
     "appOrConfig.fileStorage.probe()",
     "status.fileStorage = \"unavailable\"",
     "status.database = \"unavailable\""
@@ -4805,6 +4813,7 @@ function checkSystemReadinessImplementation() {
     "最新商业证据摘要未达到 releaseCandidateReady",
     "最新商业证据缺少 E2E 检查",
     "最新商业证据摘要列出",
+    "数据库迁移未应用到当前版本",
     "最新商业证据包不是 full 模式，不能作为发布候选证据",
     "最新商业证据包不是可接受的生产发布证据",
     "HR 脱敏审阅包仅用于签收前复核",
