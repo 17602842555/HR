@@ -142,7 +142,7 @@ export const openApiDocument = {
     "/auth/complete-first-login": {
       post: operation({
         operationId: "completeFirstLogin",
-        summary: "Complete first login by changing login email, display name, and password",
+        summary: "Complete first login by changing login identifier, display name, and password",
         tags: ["Auth"],
         body: { $ref: "#/components/schemas/FirstLoginSetupRequest" },
         responses: { "200": response("First login setup completed", { $ref: "#/components/schemas/AuthSession" }) }
@@ -689,10 +689,12 @@ export const openApiDocument = {
       },
       LoginRequest: {
         type: "object",
-        required: ["email", "password"],
+        required: ["login", "password"],
         properties: {
           tenantCode: { type: "string", default: "default" },
+          login: { type: "string", description: "Preferred login identifier: mobile phone number; email remains supported for legacy accounts." },
           email: { type: "string", description: "Login identifier: email address or mobile phone number." },
+          phone: { type: "string", description: "Mobile phone login alias." },
           password: { type: "string", minLength: 1 }
         }
       },
@@ -710,22 +712,26 @@ export const openApiDocument = {
       },
       FirstLoginSetupRequest: {
         type: "object",
-        required: ["currentPassword", "email", "name", "newPassword"],
+        required: ["currentPassword", "login", "name", "newPassword"],
         properties: {
           currentPassword: { type: "string", minLength: 1 },
+          login: { type: "string", description: "Preferred new login identifier: mobile phone number; email remains supported." },
           email: { type: "string", description: "Login identifier: email address or mobile phone number." },
+          phone: { type: "string", description: "Mobile phone login alias." },
           name: { type: "string", minLength: 1 },
           newPassword: { type: "string", minLength: 12 }
         }
       },
       AccountActivationCompleteRequest: {
         type: "object",
-        required: ["activationCode", "employeeNo", "name", "email", "password"],
+        required: ["activationCode", "employeeNo", "name", "login", "password"],
         properties: {
           activationCode: { type: "string", minLength: 12 },
           employeeNo: { type: "string", minLength: 1 },
           name: { type: "string", minLength: 1 },
+          login: { type: "string", description: "Preferred new login identifier: mobile phone number; email remains supported." },
           email: { type: "string", description: "Login identifier: email address or mobile phone number." },
+          phone: { type: "string", description: "Mobile phone login alias." },
           password: { type: "string", minLength: 12 },
           tenantCode: { type: "string", default: "default" }
         }
@@ -739,9 +745,11 @@ export const openApiDocument = {
       },
       UserCreateRequest: {
         type: "object",
-        required: ["email", "name", "newPassword", "roleCodes"],
+        required: ["login", "name", "newPassword", "roleCodes"],
         properties: {
+          login: { type: "string", description: "Preferred login identifier: mobile phone number; email remains supported." },
           email: { type: "string", description: "Login identifier: email address or mobile phone number." },
+          phone: { type: "string", description: "Mobile phone login alias." },
           name: { type: "string", minLength: 1 },
           newPassword: { type: "string", minLength: 12 },
           roleCodes: { type: "array", items: { type: "string" } },

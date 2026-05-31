@@ -167,6 +167,10 @@ function normalizeEmail(input) {
   return String(input || "").trim().toLowerCase();
 }
 
+function requestLoginIdentifier(body = {}) {
+  return normalizeEmail(body.login || body.phone || body.email);
+}
+
 function validLoginIdentifier(input) {
   const value = normalizeEmail(input);
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || /^1[3-9]\d{9}$/.test(value);
@@ -429,7 +433,7 @@ export async function registerIamRoutes(app) {
 
   app.post("/api/iam/users", { preHandler: app.authenticate }, async (request, reply) => {
     await requirePermission(app, request, { module: "iam", action: "write" });
-    const email = normalizeEmail(request.body?.email);
+    const email = requestLoginIdentifier(request.body);
     const name = String(request.body?.name || "").trim();
     const newPassword = String(request.body?.newPassword || "");
     const roleCodes = normalizeRoleCodes(request.body?.roleCodes);

@@ -10,8 +10,38 @@ const approvalTabs = [
   { id: "all", label: "全部" }
 ];
 
-function visibleRows(rows, tab, currentUserName = "当前用户") {
-  if (tab === "todo") return rows.filter((item) => item.status.includes("待") || item.status.includes("超时") || item.status.includes("付款"));
+function isAdminUser(currentUser = {}) {
+  const permissionCodes = new Set(currentUser.permissions || []);
+  const roleCodes = new Set((currentUser.roles || []).flatMap((role) => [role.code, role.name]).filter(Boolean));
+  return permissionCodes.has("system.admin") || roleCodes.has("admin") || roleCodes.has("系统管理员");
+}
+
+function currentUserCanActAs(currentUser = {}, approverName = "") {
+  if (!approverName) return false;
+  if (!Array.isArray(currentUser.permissions) && currentUser.source !== "api") return true;
+  if (isAdminUser(currentUser)) return true;
+  const aliases = [
+    currentUser.name,
+    currentUser.displayName,
+    currentUser.realName,
+    currentUser.email,
+    currentUser.employee?.name
+  ].map((item) => String(item || "").trim()).filter(Boolean);
+  return aliases.includes(String(approverName).trim());
+}
+
+function pendingDecisionsForUser(approval, currentUser) {
+  if (!approval || approval.status !== "待审批") return [];
+  const currentStep = Number.isFinite(approval.currentNodeIndex) ? approval.currentNodeIndex : 0;
+  const currentNode = approval.approvalNodes?.[currentStep];
+  return (currentNode?.decisions || []).filter((decision) => (
+    decision.status === "待审批" && currentUserCanActAs(currentUser, decision.approver)
+  ));
+}
+
+function visibleRows(rows, tab, currentUser = {}) {
+  const currentUserName = currentUser?.name || "当前用户";
+  if (tab === "todo") return rows.filter((item) => pendingDecisionsForUser(item, currentUser).length > 0);
   if (tab === "mine") return rows.filter((item) => item.applicant === currentUserName);
   if (tab === "done") return rows.filter((item) => ["已通过", "已驳回", "已撤回"].includes(item.status));
   return rows;
@@ -339,7 +369,7 @@ function ApprovalRuleEditor({ actions, state, templates }) {
   );
 }
 
-function ApprovalDetail({ actions, approval }) {
+function ApprovalDetail({ actions, approval, currentUser }) {
   const [comment, setComment] = useState("");
   const [transferTarget, setTransferTarget] = useState("财务负责人");
   if (!approval) return <p className="empty">暂无审批</p>;
@@ -351,6 +381,9 @@ function ApprovalDetail({ actions, approval }) {
   const currentStep = Number.isFinite(approval.currentNodeIndex) ? approval.currentNodeIndex : 0;
   const currentNode = approval.approvalNodes?.[currentStep];
   const pendingApprovers = (currentNode?.decisions || []).filter((item) => item.status === "待审批");
+  const actionableApprovers = pendingApprovers.filter((item) => currentUserCanActAs(currentUser, item.approver));
+  const primaryApprover = actionableApprovers[0]?.approver || "";
+  const canHandleCurrentNode = approval.status === "待审批" && actionableApprovers.length > 0;
 
   return (
     <div className="approval-detail">
@@ -396,14 +429,16 @@ function ApprovalDetail({ actions, approval }) {
             <strong>{decision.approver}</strong>
             <StatusPill value={decision.status} />
             <span>{decision.time || "等待处理"}</span>
-            {decision.status === "待审批" && approval.status === "待审批" ? (
+            {decision.status === "待审批" && approval.status === "待审批" && currentUserCanActAs(currentUser, decision.approver) ? (
               <button type="button" onClick={() => actions.decideApproval(approval.id, "pass", decision.approver)}>同意：{decision.approver}</button>
-            ) : null}
+            ) : decision.status === "待审批" && approval.status === "待审批" ? <em className="muted-action">等待本人处理</em> : null}
           </div>
         ))}
       </div>
       <p className="rule-hint">
-        {pendingApprovers.length
+        {pendingApprovers.length && !canHandleCurrentNode
+          ? `当前登录账号没有此节点的审批权限，等待 ${pendingApprovers.map((item) => item.approver).join("、")} 处理。`
+          : pendingApprovers.length
           ? `当前节点还需 ${pendingApprovers.map((item) => item.approver).join("、")} 同意，系统不会进入下一流程。`
           : "当前节点已全部同意，系统会自动进入下一流程。"}
       </p>
@@ -450,12 +485,13 @@ function ApprovalDetail({ actions, approval }) {
         />
         <button
           type="button"
-          onClick={() => actions.transferApproval(approval.id, transferTarget || "财务负责人", pendingApprovers[0]?.approver)}
+          disabled={!canHandleCurrentNode}
+          onClick={() => actions.transferApproval(approval.id, transferTarget || "财务负责人", primaryApprover)}
         >
           转交
         </button>
-        <button type="button" onClick={() => actions.decideApproval(approval.id, "reject", pendingApprovers[0]?.approver || currentUserName)}>驳回</button>
-        <button className="primary" type="button" onClick={() => actions.decideApproval(approval.id, "pass", pendingApprovers[0]?.approver || currentUserName)}>同意下一个待处理人</button>
+        <button type="button" disabled={!canHandleCurrentNode} onClick={() => actions.decideApproval(approval.id, "reject", primaryApprover)}>驳回</button>
+        <button className="primary" type="button" disabled={!canHandleCurrentNode} onClick={() => actions.decideApproval(approval.id, "pass", primaryApprover)}>同意我的待办</button>
       </div>
     </div>
   );
@@ -465,8 +501,12 @@ export function Approvals({ actions, currentUser, onOpenFlow, state, workflowTem
   const templateOptions = workflowTemplates?.length ? workflowTemplates : flowTemplates;
   const [selected, setSelected] = useState(state.approvals[0]?.id || "");
   const [tab, setTab] = useState("todo");
-  const currentUserName = currentUser?.name || "当前用户";
-  const rows = useMemo(() => visibleRows(state.approvals, tab, currentUserName), [currentUserName, state.approvals, tab]);
+  const rows = useMemo(() => visibleRows(state.approvals, tab, currentUser), [currentUser, state.approvals, tab]);
+  useEffect(() => {
+    if (rows.length && !rows.some((row) => row.id === selected)) {
+      setSelected(rows[0].id);
+    }
+  }, [rows, selected]);
   const current = state.approvals.find((item) => item.id === selected) || rows[0] || state.approvals[0];
   const definitionCount = templateOptions.length;
   const columns = [
@@ -517,7 +557,7 @@ export function Approvals({ actions, currentUser, onOpenFlow, state, workflowTem
           <DataTable columns={columns} rows={rows} />
         </Panel>
         <Panel title="审批详情">
-          <ApprovalDetail actions={actions} approval={current} />
+          <ApprovalDetail actions={actions} approval={current} currentUser={currentUser} />
         </Panel>
       </div>
     </div>

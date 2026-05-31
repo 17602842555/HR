@@ -1048,7 +1048,7 @@ export function useOaSystem() {
       });
     },
     createUserAccount(payload = {}) {
-      const email = String(payload.email || "").trim().toLowerCase();
+      const email = String(payload.login || payload.phone || payload.email || "").trim().toLowerCase();
       const name = String(payload.name || "").trim();
       const roleCodes = Array.isArray(payload.roleCodes)
         ? [...new Set(payload.roleCodes.map((code) => String(code || "").trim()).filter(Boolean))]

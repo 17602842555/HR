@@ -194,6 +194,10 @@ function normalizeLoginEmail(input) {
   return String(input || "").trim().toLowerCase();
 }
 
+function requestLoginIdentifier(body = {}) {
+  return normalizeLoginEmail(body.login || body.phone || body.email);
+}
+
 function normalizeActivationCode(input) {
   return String(input || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -317,6 +321,34 @@ function publicImportRun(run = {}) {
         sizeBytes: run.sourceSizeBytes || run.metadata?.sourceArtifact?.sizeBytes || 0
       }
     }
+  };
+}
+
+function publicUserRecord(user = {}) {
+  const {
+    passwordHash,
+    sessionSecret,
+    tokenHash,
+    ...safeUser
+  } = user || {};
+  return {
+    ...safeUser,
+    employee: user?.employee ? { ...user.employee } : user?.employee
+  };
+}
+
+function publicAccountRecord(account = {}) {
+  return {
+    ...account,
+    account: account.account ? publicUserRecord(account.account) : account.account
+  };
+}
+
+function publicIamState(iam = {}) {
+  return {
+    ...iam,
+    accounts: (iam.accounts || []).map(publicAccountRecord),
+    users: (iam.users || []).map(publicUserRecord)
   };
 }
 
@@ -961,7 +993,7 @@ function buildAccountLibrary(people, iam) {
       || null;
     const roleObjects = (user?.roleCodes || []).map((code) => iam.roles.find((role) => role.code === code)).filter(Boolean);
     return {
-      account: user,
+      account: user ? publicUserRecord(user) : null,
       accountEmail: user?.email || "",
       accountId: user?.id || null,
       accountMustChangePassword: Boolean(user?.mustChangePassword),
@@ -1890,7 +1922,7 @@ async function handleNativeApi(request, env) {
 
   if (pathname === "/auth/login" && method === "POST") {
     const body = await readJson(request);
-    const email = normalizeLoginEmail(body.email);
+    const email = requestLoginIdentifier(body);
     const user = state.iam.users.find((item) => normalizeLoginEmail(item.email) === email);
     const validPassword = user?.passwordHash
       ? await verifyNativePassword(String(body.password || ""), user.passwordHash)
@@ -1910,7 +1942,7 @@ async function handleNativeApi(request, env) {
   if (pathname === "/auth/activate-account" && method === "POST") {
     const body = await readJson(request);
     const codeHash = await activationCodeHash(body.activationCode);
-    const email = normalizeLoginEmail(body.email);
+    const email = requestLoginIdentifier(body);
     const password = String(body.password || "");
     const employeeNo = String(body.employeeNo || "").trim();
     const name = String(body.name || "").trim();
@@ -2028,7 +2060,7 @@ async function handleNativeApi(request, env) {
 	  }
   if (pathname === "/auth/complete-first-login" && method === "POST") {
     const body = await readJson(request);
-    const email = normalizeLoginEmail(body.email);
+    const email = requestLoginIdentifier(body);
     const name = String(body.name || "").trim();
     if (!validLoginIdentifier(email) || !name || !body.currentPassword || !body.newPassword) {
       return badRequest("登录账号、姓名、当前密码和新密码必填，登录账号需为邮箱或手机号。");
@@ -2123,7 +2155,7 @@ async function handleNativeApi(request, env) {
     ]), filename);
   }
 
-  if (pathname === "/iam" && method === "GET") return ok({ iam: state.iam });
+  if (pathname === "/iam" && method === "GET") return ok({ iam: publicIamState(state.iam) });
 	  if (pathname === "/iam/account-activations" && method === "POST") {
 	    const body = await readJson(request);
 	    const employeeId = String(body.employeeId || "").trim();
@@ -2171,7 +2203,7 @@ async function handleNativeApi(request, env) {
 	    const normalizedRoles = normalizeRequestedRoleCodes(state, body.roleCodes);
 	    if (normalizedRoles.invalid.length) return badRequest(`未知角色：${normalizedRoles.invalid.join(", ")}`);
 	    const user = {
-	      email: normalizeLoginEmail(body.email),
+	      email: requestLoginIdentifier(body),
 	      id: nextId("USER"),
 	      mustChangePassword: body.mustChangePassword === false ? false : true,
 	      name: body.name,
@@ -2187,7 +2219,7 @@ async function handleNativeApi(request, env) {
     state.iam.users = [user, ...state.iam.users];
     await appendAudit(env, state, { action: "创建账号", actor: actorName, content: `创建账号 ${user.email}`, object: "账号权限", objectId: user.id, request });
     await saveState(env, state);
-    return ok({ temporaryPassword, user });
+    return ok({ temporaryPassword, user: publicUserRecord(user) });
   }
 	  if (pathname === "/iam/accounts/sync-employees" && method === "POST") {
 	    const body = await readJson(request);
@@ -2228,7 +2260,7 @@ async function handleNativeApi(request, env) {
     state.iam.users = [...createdUsers, ...state.iam.users];
     await appendAudit(env, state, { action: "批量开户", actor: actorName, content: `为 ${createdUsers.length} 名员工生成账号`, object: "账号权限", request });
     await saveState(env, state);
-    return ok({ createdCount: createdUsers.length, credentials, createdUsers });
+    return ok({ createdCount: createdUsers.length, credentials, createdUsers: createdUsers.map(publicUserRecord) });
   }
 	  if (segments[0] === "iam" && segments[1] === "roles" && segments[3] === "permissions" && method === "PUT") {
 	    const body = await readJson(request);
@@ -2274,7 +2306,7 @@ async function handleNativeApi(request, env) {
 	    }
     await appendAudit(env, state, { action: "更新账号", actor: actorName, content: `更新账号 ${user.email}`, object: "账号权限", objectId: user.id, request });
     await saveState(env, state);
-    return ok({ user });
+    return ok({ user: publicUserRecord(user) });
   }
 
   if ((pathname === "/approvals/definitions" || pathname === "/workflows/definitions") && method === "GET") return ok({ workflowDefinitions: state.workflowDefinitions });

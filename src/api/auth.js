@@ -5,8 +5,9 @@ export function getCurrentUser() {
 }
 
 export function login(credentials) {
+  const login = credentials?.login || credentials?.phone || credentials?.email || "";
   return apiRequest("/auth/login", {
-    body: credentials,
+    body: { ...credentials, email: login, login },
     method: "POST"
   });
 }
@@ -19,15 +20,17 @@ export function changePassword(payload) {
 }
 
 export function completeFirstLogin(payload) {
+  const login = payload?.login || payload?.phone || payload?.email || "";
   return apiRequest("/auth/complete-first-login", {
-    body: payload,
+    body: { ...payload, email: login, login },
     method: "POST"
   });
 }
 
 export function activateAccount(payload) {
+  const login = payload?.login || payload?.phone || payload?.email || "";
   return apiRequest("/auth/activate-account", {
-    body: payload,
+    body: { ...payload, email: login, login },
     method: "POST"
   });
 }

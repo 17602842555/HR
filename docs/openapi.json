@@ -540,7 +540,7 @@
     "/auth/complete-first-login": {
       "post": {
         "operationId": "completeFirstLogin",
-        "summary": "Complete first login by changing login email, display name, and password",
+        "summary": "Complete first login by changing login identifier, display name, and password",
         "tags": [
           "Auth"
         ],
@@ -5969,7 +5969,7 @@
       "LoginRequest": {
         "type": "object",
         "required": [
-          "email",
+          "login",
           "password"
         ],
         "properties": {
@@ -5977,9 +5977,17 @@
             "type": "string",
             "default": "default"
           },
+          "login": {
+            "type": "string",
+            "description": "Preferred login identifier: mobile phone number; email remains supported for legacy accounts."
+          },
           "email": {
             "type": "string",
             "description": "Login identifier: email address or mobile phone number."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Mobile phone login alias."
           },
           "password": {
             "type": "string",
@@ -6019,7 +6027,7 @@
         "type": "object",
         "required": [
           "currentPassword",
-          "email",
+          "login",
           "name",
           "newPassword"
         ],
@@ -6028,9 +6036,17 @@
             "type": "string",
             "minLength": 1
           },
+          "login": {
+            "type": "string",
+            "description": "Preferred new login identifier: mobile phone number; email remains supported."
+          },
           "email": {
             "type": "string",
             "description": "Login identifier: email address or mobile phone number."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Mobile phone login alias."
           },
           "name": {
             "type": "string",
@@ -6048,7 +6064,7 @@
           "activationCode",
           "employeeNo",
           "name",
-          "email",
+          "login",
           "password"
         ],
         "properties": {
@@ -6064,9 +6080,17 @@
             "type": "string",
             "minLength": 1
           },
+          "login": {
+            "type": "string",
+            "description": "Preferred new login identifier: mobile phone number; email remains supported."
+          },
           "email": {
             "type": "string",
             "description": "Login identifier: email address or mobile phone number."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Mobile phone login alias."
           },
           "password": {
             "type": "string",
@@ -6093,15 +6117,23 @@
       "UserCreateRequest": {
         "type": "object",
         "required": [
-          "email",
+          "login",
           "name",
           "newPassword",
           "roleCodes"
         ],
         "properties": {
+          "login": {
+            "type": "string",
+            "description": "Preferred login identifier: mobile phone number; email remains supported."
+          },
           "email": {
             "type": "string",
             "description": "Login identifier: email address or mobile phone number."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Mobile phone login alias."
           },
           "name": {
             "type": "string",

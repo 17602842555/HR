@@ -5,8 +5,9 @@ export function getIamOverview() {
 }
 
 export function createUser(payload) {
+  const login = payload?.login || payload?.phone || payload?.email || "";
   return apiRequest("/iam/users", {
-    body: payload,
+    body: { ...payload, email: login, login },
     method: "POST"
   });
 }

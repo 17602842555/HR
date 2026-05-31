@@ -256,6 +256,11 @@ button {
   padding: 0 12px;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
 .notice,
 .avatar {
   width: 34px;
@@ -1440,6 +1445,12 @@ dd {
   background: #fff;
   color: var(--blue);
   padding: 0 9px;
+}
+
+.approver-grid .muted-action {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
 }
 
 .rule-hint {

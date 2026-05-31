@@ -101,6 +101,10 @@ function normalizeLoginIdentifier(input) {
   return String(input || "").trim().toLowerCase();
 }
 
+function requestLoginIdentifier(body = {}) {
+  return normalizeLoginIdentifier(body.login || body.phone || body.email);
+}
+
 function validLoginIdentifier(input) {
   const value = normalizeLoginIdentifier(input);
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || /^1[3-9]\d{9}$/.test(value);
@@ -160,7 +164,7 @@ export async function registerAuthRoutes(app) {
 
   app.post("/api/auth/login", async (request, reply) => {
     const body = request.body || {};
-    const email = normalizeLoginIdentifier(body.email);
+    const email = requestLoginIdentifier(body);
     const password = String(body.password || "");
     const tenantCode = String(body.tenantCode || app.config.defaultTenantCode);
 
@@ -253,7 +257,7 @@ export async function registerAuthRoutes(app) {
     const body = request.body || {};
     const tenantCode = String(body.tenantCode || app.config.defaultTenantCode);
     const activationCode = String(body.activationCode || "");
-    const email = normalizeLoginIdentifier(body.email);
+    const email = requestLoginIdentifier(body);
     const password = String(body.password || "");
 
     if (!activationCode || !email || !password || !body.employeeNo || !body.name) {
@@ -477,7 +481,7 @@ export async function registerAuthRoutes(app) {
   app.post("/api/auth/complete-first-login", { preHandler: app.authenticate }, async (request, reply) => {
     const currentPassword = String(request.body?.currentPassword || "");
     const newPassword = String(request.body?.newPassword || "");
-    const email = normalizeLoginIdentifier(request.body?.email);
+    const email = requestLoginIdentifier(request.body);
     const name = String(request.body?.name || "").trim();
 
     if (!currentPassword || !newPassword || !email || !name) {

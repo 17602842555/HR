@@ -249,7 +249,7 @@ export function Audit({ actions, state }) {
   const [selectedUserId, setSelectedUserId] = useState(iam.users?.[0]?.id || "");
   const [selectedFile, setSelectedFile] = useState(null);
   const [accountDraft, setAccountDraft] = useState({
-    email: "new.user@oa.local",
+    email: "17600000000",
     mustChangePassword: true,
     name: "新账号",
     newPassword: "NewUserPass123",
@@ -887,7 +887,7 @@ export function Audit({ actions, state }) {
         <div className="account-library-toolbar">
           <div>
             <strong>批量给未开户员工生成登录账号</strong>
-            <span>默认只处理在职员工；员工首次登录必须修改登录账号和密码。</span>
+            <span>默认只处理在职员工；有手机号的员工可通过激活码自行设置手机号账号，批量生成仍兼容企业邮箱账号。</span>
           </div>
           <div className="account-role-options">
             {roles.map((role) => (
@@ -909,8 +909,8 @@ export function Audit({ actions, state }) {
         {syncCredentials.length ? (
           <div className="credential-result">
             <div>
-              <strong>本次临时密码</strong>
-              <span>交付给员工后只能用于首次登录，员工完成设置后临时密码立即失效；刷新后不会再次展示。</span>
+            <strong>本次临时密码</strong>
+              <span>交付给员工后只能用于首次登录；员工首次登录时可以把账号改成自己的手机号。</span>
             </div>
             <DataTable columns={credentialColumns} rows={syncCredentials} rowKey={(row) => row.employeeId} />
           </div>
@@ -918,8 +918,8 @@ export function Audit({ actions, state }) {
         {activationResults.length ? (
           <div className="credential-result">
             <div>
-              <strong>本次激活码</strong>
-              <span>员工在登录页选择“员工激活”，输入激活码、工号和姓名后自行设置账号密码；刷新后不会再次展示。</span>
+            <strong>本次激活码</strong>
+              <span>员工在登录页选择“员工激活”，输入激活码、工号和姓名后自行设置手机号和密码；刷新后不会再次展示。</span>
             </div>
             <DataTable columns={activationColumns} rows={activationResults} rowKey={(row) => row.id} />
           </div>
@@ -936,9 +936,11 @@ export function Audit({ actions, state }) {
             />
           </label>
           <label>
-            <span>临时登录账号（邮箱/手机号）</span>
+            <span>手机号账号</span>
             <input
               autoComplete="off"
+              inputMode="tel"
+              placeholder="17602842555，也兼容邮箱账号"
               value={accountDraft.email}
               onChange={(event) => setAccountDraft({ ...accountDraft, email: event.target.value })}
             />

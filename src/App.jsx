@@ -141,15 +141,14 @@ function LoginScreen({ apiStatus, auth }) {
   const showDemoCredentials = import.meta.env.DEV && import.meta.env.VITE_REQUIRE_API !== "1";
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({
-    tenantCode: "default",
-    email: showDemoCredentials ? "admin@oa.local" : "",
+    login: showDemoCredentials ? "admin@oa.local" : "",
     password: showDemoCredentials ? "admin123456" : ""
   });
   const [activationForm, setActivationForm] = useState({
     activationCode: "",
     confirmPassword: "",
-    email: "",
     employeeNo: "",
+    login: "",
     name: "",
     password: "",
     tenantCode: "default"
@@ -172,8 +171,8 @@ function LoginScreen({ apiStatus, auth }) {
     }
     const result = await auth.activateAccount({
       activationCode: activationForm.activationCode,
-      email: activationForm.email,
       employeeNo: activationForm.employeeNo,
+      login: activationForm.login,
       name: activationForm.name,
       password: activationForm.password,
       tenantCode: activationForm.tenantCode
@@ -197,16 +196,13 @@ function LoginScreen({ apiStatus, auth }) {
         </div>
         {mode === "login" ? (
           <form className="login-form" onSubmit={submit}>
-            <label>租户
-              <input value={form.tenantCode} onChange={(event) => setForm({ ...form, tenantCode: event.target.value })} />
+            <label>手机号登录
+              <input inputMode="tel" placeholder="17602842555，也兼容邮箱账号" value={form.login} autoComplete="username" onChange={(event) => setForm({ ...form, login: event.target.value })} />
             </label>
-          <label>登录账号（邮箱/手机号）
-            <input value={form.email} autoComplete="username" onChange={(event) => setForm({ ...form, email: event.target.value })} />
-          </label>
             <label>密码
               <input type="password" value={form.password} autoComplete="current-password" onChange={(event) => setForm({ ...form, password: event.target.value })} />
             </label>
-            {error ? <p className="login-error">{error}</p> : <p className="login-hint">{showDemoCredentials ? "本地演示账号来自 seed，生产环境不会预填账号密码。" : "请输入管理员分配的账号；生产环境不会预填默认密码。"}</p>}
+            {error ? <p className="login-error">{error}</p> : <p className="login-hint">{showDemoCredentials ? "本地演示账号来自 seed，生产环境不会预填账号密码。" : "请输入管理员分配的手机号账号；邮箱账号仍可兼容登录。"}</p>}
             <button className="primary" type="submit" disabled={auth.busy}>
               <LockKeyhole size={16} /> {auth.busy ? "登录中" : "登录系统"}
             </button>
@@ -225,8 +221,8 @@ function LoginScreen({ apiStatus, auth }) {
             <label>姓名
               <input autoComplete="name" value={activationForm.name} onChange={(event) => setActivationForm({ ...activationForm, name: event.target.value })} />
             </label>
-            <label>新登录账号（邮箱/手机号）
-              <input autoComplete="username" value={activationForm.email} onChange={(event) => setActivationForm({ ...activationForm, email: event.target.value })} />
+            <label>新手机号账号
+              <input autoComplete="username" inputMode="tel" placeholder="17602842555，也可填邮箱" value={activationForm.login} onChange={(event) => setActivationForm({ ...activationForm, login: event.target.value })} />
             </label>
             <label>新密码
               <input autoComplete="new-password" placeholder="至少 12 位，含字母和数字" type="password" value={activationForm.password} onChange={(event) => setActivationForm({ ...activationForm, password: event.target.value })} />
@@ -270,7 +266,7 @@ function FirstLoginSetupScreen({ apiStatus, auth, currentUser }) {
   const [form, setForm] = useState({
     confirmPassword: "",
     currentPassword: "",
-    email: currentUser?.email || "",
+    login: currentUser?.email || "",
     name: currentUser?.name || "",
     newPassword: ""
   });
@@ -285,7 +281,7 @@ function FirstLoginSetupScreen({ apiStatus, auth, currentUser }) {
     }
     const result = await auth.completeFirstLogin({
       currentPassword: form.currentPassword,
-      email: form.email,
+      login: form.login,
       name: form.name,
       newPassword: form.newPassword
     });
@@ -303,8 +299,8 @@ function FirstLoginSetupScreen({ apiStatus, auth, currentUser }) {
           </div>
         </div>
         <form className="login-form" onSubmit={submit}>
-          <label>新登录账号（邮箱/手机号）
-            <input autoComplete="username" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+          <label>新手机号账号
+            <input autoComplete="username" inputMode="tel" placeholder="17602842555，也可填邮箱" value={form.login} onChange={(event) => setForm({ ...form, login: event.target.value })} />
           </label>
           <label>姓名
             <input autoComplete="name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />

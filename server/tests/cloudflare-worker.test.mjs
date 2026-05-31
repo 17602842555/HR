@@ -217,9 +217,14 @@ test("cloudflare worker IAM guards prevent admin lockout and revoke target sessi
     new Request("https://deep-oa-hr.example.workers.dev/api/iam", { headers: { cookie } }),
     TEST_ENV
   );
-  const iam = (await responseJson(iamResponse)).iam;
+  const iamText = await iamResponse.text();
+  assert.equal(iamText.includes("passwordHash"), false);
+  assert.equal(iamText.includes("sessionSecret"), false);
+  const iam = JSON.parse(iamText).iam;
   const adminRole = iam.roles.find((role) => role.code === "admin");
   const adminUser = iam.users.find((user) => user.email === "admin@oa.local");
+  assert.equal(Object.hasOwn(adminUser, "passwordHash"), false);
+  assert.equal(iam.accounts.some((account) => account.account && Object.hasOwn(account.account, "passwordHash")), false);
 
   const weakenAdminRole = await worker.fetch(
     new Request(`https://deep-oa-hr.example.workers.dev/api/iam/roles/${adminRole.id}/permissions`, {
@@ -255,6 +260,7 @@ test("cloudflare worker IAM guards prevent admin lockout and revoke target sessi
     TEST_ENV
   );
   const created = await responseJson(createUser);
+  assert.equal(JSON.stringify(created).includes("passwordHash"), false);
   const employeeLogin = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
       body: JSON.stringify({ email: created.user.email, password: "TempPass12345" }),
@@ -656,7 +662,7 @@ test("cloudflare worker supports employee activation with phone-number login", a
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/activate-account", {
       body: JSON.stringify({
         activationCode: issuePayload.activation.activationCode,
-        email: phone,
+        login: phone,
         employeeNo: missingAccount.employeeNo,
         name: missingAccount.employeeName,
         password: "PhoneLoginPass123"
@@ -674,7 +680,7 @@ test("cloudflare worker supports employee activation with phone-number login", a
 
   const relogin = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
-      body: JSON.stringify({ email: phone, password: "PhoneLoginPass123" }),
+      body: JSON.stringify({ login: phone, password: "PhoneLoginPass123" }),
       headers: { "content-type": "application/json" },
       method: "POST"
     }),

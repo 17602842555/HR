@@ -4924,8 +4924,8 @@ test("employee account activation code lets only the matched employee create an 
     url: "/api/auth/activate-account",
     payload: {
       activationCode: issued.json().activation.activationCode,
-      email: "17602842555",
       employeeNo: "EMP-88",
+      login: "17602842555",
       name: "激活员工",
       password: "ActivationPass123",
       tenantCode: "default"
@@ -4956,7 +4956,7 @@ test("employee account activation code lets only the matched employee create an 
     method: "POST",
     url: "/api/auth/login",
     payload: {
-      email: "17602842555",
+      login: "17602842555",
       password: "ActivationPass123",
       tenantCode: "default"
     }
