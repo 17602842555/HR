@@ -22,6 +22,18 @@ const STATE_SCHEMA_VERSION = 1;
 
 let memoryState = null;
 
+function hasEdgeCache() {
+  return typeof caches !== "undefined" && Boolean(caches.default);
+}
+
+function fallbackStorageMode() {
+  return hasEdgeCache() ? "edge-cache" : "memory";
+}
+
+function stateCacheKey() {
+  return new Request(`https://deep-oa-state.invalid/${STATE_KEY}`);
+}
+
 function json(payload, init = {}) {
   return new Response(JSON.stringify(payload), {
     ...init,
@@ -725,11 +737,12 @@ function makeAuditIntegrity(logs) {
 
 function makeReadiness(storageMode = "memory") {
   const persistent = storageMode === "d1";
+  const previewCache = storageMode === "edge-cache";
   return {
     closurePlan: persistent ? [] : ["创建 Cloudflare D1 数据库并在 wrangler.toml 绑定 OA_DB 后，写入会持久保存。"],
     controls: [
       { id: "cloudflare-native-worker", label: "Cloudflare 原生 Worker API", ok: true, status: "通过", detail: "前端和 /api 由同一个 workers.dev 域名承载" },
-      { id: "cloudflare-d1", label: "Cloudflare D1 持久化", ok: persistent, status: persistent ? "通过" : "待绑定", detail: persistent ? "OA_DB 已绑定" : "当前使用 Worker 内存快照，适合预览，不适合正式生产数据" }
+      { id: "cloudflare-d1", label: "Cloudflare D1 持久化", ok: persistent, status: persistent ? "通过" : "待绑定", detail: persistent ? "OA_DB 已绑定" : previewCache ? "当前使用 Cloudflare Cache API 临时保存预览状态，正式生产数据仍需 D1" : "当前使用 Worker 内存快照，适合预览，不适合正式生产数据" }
     ],
     dependencies: { database: storageMode, databaseIntegrity: "pass", fileStorage: "worker-bundle", ok: true, service: "cloudflare-native-api" },
     generatedAt: nowIso(),
@@ -866,7 +879,18 @@ async function ensureD1(env) {
 
 async function loadState(env) {
   if (!env.OA_DB) {
-    if (!memoryState) memoryState = makeInitialState("memory");
+    if (hasEdgeCache()) {
+      const cached = await caches.default.match(stateCacheKey());
+      if (cached) {
+        const state = await cached.json();
+        state.systemReadiness = makeReadiness("edge-cache");
+        return state;
+      }
+      memoryState = makeInitialState("edge-cache");
+      await saveState(env, memoryState);
+      return clone(memoryState);
+    }
+    if (!memoryState) memoryState = makeInitialState(fallbackStorageMode());
     return clone(memoryState);
   }
 
@@ -893,6 +917,15 @@ async function saveState(env, state) {
   };
   if (!env.OA_DB) {
     memoryState = clone(state);
+    if (hasEdgeCache()) {
+      state.systemReadiness = makeReadiness("edge-cache");
+      await caches.default.put(stateCacheKey(), new Response(JSON.stringify(state), {
+        headers: {
+          "cache-control": "public, max-age=86400",
+          "content-type": "application/json; charset=utf-8"
+        }
+      }));
+    }
     return;
   }
   await ensureD1(env);
@@ -1076,6 +1109,7 @@ async function handleNativeApi(request, env) {
       apiOriginError: originValidation.ok ? null : originValidation.code,
       apiOriginValid: originValidation.configured ? originValidation.ok : null,
       d1Configured: Boolean(env.OA_DB),
+      previewStorage: env.OA_DB ? "d1" : fallbackStorageMode(),
       ok: true,
       service: "deep-oa-cloudflare-edge"
     });
@@ -1086,7 +1120,7 @@ async function handleNativeApi(request, env) {
       d1Configured: Boolean(env.OA_DB),
       ok: true,
       service: "deep-oa-cloudflare-api",
-      storageMode: env.OA_DB ? "d1" : "memory"
+      storageMode: env.OA_DB ? "d1" : fallbackStorageMode()
     });
   }
 
