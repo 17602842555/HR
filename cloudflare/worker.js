@@ -797,6 +797,7 @@ function ensureSeededApprovalUsers(state = {}) {
   state.iam.permissions = state.iam.permissions?.length ? state.iam.permissions : permissions;
   state.iam.roles = state.iam.roles?.length ? state.iam.roles : roles;
   state.iam.users = Array.isArray(state.iam.users) ? state.iam.users : [];
+  if (state.systemSettings?.autoSeedApprovalUsers === false) return false;
 
   const existingNames = new Set(state.iam.users.map((user) => normalizedApproverAlias(user.name)));
   const existingEmails = new Set(state.iam.users.map((user) => normalizedApproverAlias(user.email)));

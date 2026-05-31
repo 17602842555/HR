@@ -66,7 +66,7 @@ async function d1Query(databaseId, sql, params = []) {
 }
 
 async function readRemoteState(databaseId) {
-  const result = await d1Query(databaseId, "SELECT value FROM kv_store WHERE key = ?", [STATE_KEY]);
+  const result = await d1Query(databaseId, "SELECT value FROM kv_store WHERE key = ? ORDER BY updated_at DESC LIMIT 1", [STATE_KEY]);
   const value = result?.[0]?.results?.[0]?.value;
   if (!value) throw new Error(`No ${STATE_KEY} row found in D1.`);
   return JSON.parse(value);
@@ -75,7 +75,12 @@ async function readRemoteState(databaseId) {
 async function writeRemoteState(databaseId, state, auditEvent) {
   await d1Query(
     databaseId,
-    "INSERT OR REPLACE INTO kv_store (key, value, updated_at) VALUES (?, ?, ?)",
+    "UPDATE kv_store SET value = ?, updated_at = ? WHERE key = ?",
+    [JSON.stringify(state), nowIso(), STATE_KEY]
+  );
+  await d1Query(
+    databaseId,
+    "INSERT OR IGNORE INTO kv_store (key, value, updated_at) VALUES (?, ?, ?)",
     [STATE_KEY, JSON.stringify(state), nowIso()]
   );
   await d1Query(
@@ -106,6 +111,10 @@ function pruneAccounts(state, { keepLogin = "", revokePendingActivations = true 
   }
   const removedUsers = users.filter((user) => !isAdminAccount(user));
   state.iam.users = adminUsers;
+  state.systemSettings = {
+    ...(state.systemSettings || {}),
+    autoSeedApprovalUsers: false
+  };
 
   let revokedActivationCount = 0;
   if (revokePendingActivations) {
