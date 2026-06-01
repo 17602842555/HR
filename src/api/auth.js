@@ -35,6 +35,14 @@ export function activateAccount(payload) {
   });
 }
 
+export function claimAccount(payload) {
+  const login = payload?.login || payload?.phone || payload?.email || "";
+  return apiRequest("/auth/claim-account", {
+    body: { ...payload, email: login, login },
+    method: "POST"
+  });
+}
+
 export function logout() {
   return apiRequest("/auth/logout", {
     method: "POST"

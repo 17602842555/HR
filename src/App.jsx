@@ -146,8 +146,7 @@ function LoginScreen({ apiStatus, auth }) {
     password: showDemoCredentials ? "admin123456" : "",
     tenantCode: "default"
   });
-  const [activationForm, setActivationForm] = useState({
-    activationCode: "",
+  const [claimForm, setClaimForm] = useState({
     confirmPassword: "",
     employeeNo: "",
     login: "",
@@ -164,22 +163,21 @@ function LoginScreen({ apiStatus, auth }) {
     if (!result.ok) setError(result.error?.message || "登录失败");
   };
 
-  const activate = async (event) => {
+  const claim = async (event) => {
     event.preventDefault();
     setError("");
-    if (activationForm.password !== activationForm.confirmPassword) {
+    if (claimForm.password !== claimForm.confirmPassword) {
       setError("两次输入的新密码不一致。");
       return;
     }
-    const result = await auth.activateAccount({
-      activationCode: activationForm.activationCode,
-      employeeNo: activationForm.employeeNo,
-      login: activationForm.login,
-      name: activationForm.name,
-      password: activationForm.password,
-      tenantCode: activationForm.tenantCode
+    const result = await auth.claimAccount({
+      employeeNo: claimForm.employeeNo,
+      login: claimForm.login,
+      name: claimForm.name,
+      password: claimForm.password,
+      tenantCode: claimForm.tenantCode
     });
-    if (!result.ok) setError(result.error?.message || "账号激活失败。");
+    if (!result.ok) setError(result.error?.message || "账号认领失败。");
   };
 
   return (
@@ -194,7 +192,7 @@ function LoginScreen({ apiStatus, auth }) {
         </div>
         <div className="auth-tabs">
           <button className={mode === "login" ? "active" : ""} type="button" onClick={() => { setMode("login"); setError(""); }}>账号登录</button>
-          <button className={mode === "activate" ? "active" : ""} type="button" onClick={() => { setMode("activate"); setError(""); }}>员工激活</button>
+          <button className={mode === "claim" ? "active" : ""} type="button" onClick={() => { setMode("claim"); setError(""); }}>员工认领</button>
         </div>
         {mode === "login" ? (
           <form className="login-form" onSubmit={submit}>
@@ -213,31 +211,28 @@ function LoginScreen({ apiStatus, auth }) {
             </button>
           </form>
         ) : (
-          <form className="login-form" onSubmit={activate}>
+          <form className="login-form" onSubmit={claim}>
             <label>租户
-              <input value={activationForm.tenantCode} onChange={(event) => setActivationForm({ ...activationForm, tenantCode: event.target.value })} />
-            </label>
-            <label>一次性激活码
-              <input autoComplete="one-time-code" value={activationForm.activationCode} onChange={(event) => setActivationForm({ ...activationForm, activationCode: event.target.value })} />
+              <input value={claimForm.tenantCode} onChange={(event) => setClaimForm({ ...claimForm, tenantCode: event.target.value })} />
             </label>
             <label>工号
-              <input value={activationForm.employeeNo} onChange={(event) => setActivationForm({ ...activationForm, employeeNo: event.target.value })} />
+              <input value={claimForm.employeeNo} onChange={(event) => setClaimForm({ ...claimForm, employeeNo: event.target.value })} />
             </label>
             <label>姓名
-              <input autoComplete="name" value={activationForm.name} onChange={(event) => setActivationForm({ ...activationForm, name: event.target.value })} />
+              <input autoComplete="name" value={claimForm.name} onChange={(event) => setClaimForm({ ...claimForm, name: event.target.value })} />
             </label>
-            <label>新手机号账号
-              <input autoComplete="username" inputMode="tel" placeholder="17602842555" value={activationForm.login} onChange={(event) => setActivationForm({ ...activationForm, login: event.target.value })} />
+            <label>手机号账号
+              <input autoComplete="username" inputMode="tel" placeholder="17602842555" value={claimForm.login} onChange={(event) => setClaimForm({ ...claimForm, login: event.target.value })} />
             </label>
-            <label>新密码
-              <input autoComplete="new-password" placeholder="至少 12 位，含字母和数字" type="password" value={activationForm.password} onChange={(event) => setActivationForm({ ...activationForm, password: event.target.value })} />
+            <label>设置密码
+              <input autoComplete="new-password" placeholder="至少 12 位，含字母和数字" type="password" value={claimForm.password} onChange={(event) => setClaimForm({ ...claimForm, password: event.target.value })} />
             </label>
             <label>确认新密码
-              <input autoComplete="new-password" type="password" value={activationForm.confirmPassword} onChange={(event) => setActivationForm({ ...activationForm, confirmPassword: event.target.value })} />
+              <input autoComplete="new-password" type="password" value={claimForm.confirmPassword} onChange={(event) => setClaimForm({ ...claimForm, confirmPassword: event.target.value })} />
             </label>
-            {error ? <p className="login-error">{error}</p> : <p className="login-hint">激活码由管理员在员工账号库发放，只能匹配本人姓名和工号，完成后直接进入系统。</p>}
+            {error ? <p className="login-error">{error}</p> : <p className="login-hint">无需激活码；系统按人员名册校验工号和姓名，手机号作为后续登录账号。</p>}
             <button className="primary" type="submit" disabled={auth.busy}>
-              <LockKeyhole size={16} /> {auth.busy ? "激活中" : "激活并进入系统"}
+              <LockKeyhole size={16} /> {auth.busy ? "认领中" : "认领并进入系统"}
             </button>
           </form>
         )}

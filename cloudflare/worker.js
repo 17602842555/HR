@@ -228,6 +228,14 @@ function employeeLoginIdentifier(employee, domain = "oa.local") {
   return employeeFallbackLogin(employee, domain);
 }
 
+function employeePhoneForClaim(employee = {}) {
+  return normalizePhoneLogin(employee.phone || employee.mobile || employee.telephone || employee.contactPhone || employee.sensitiveInfo?.phone || employee.sensitiveInfo?.mobile);
+}
+
+function employeeNoForClaim(employee = {}) {
+  return String(employee.employeeNo || employee.seq || "-");
+}
+
 function normalizeActivationCode(input) {
   return String(input || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -838,6 +846,7 @@ const workerOpenApiPaths = [
   "/audit/sensitive-access",
   "/auth/activate-account",
   "/auth/change-password",
+  "/auth/claim-account",
   "/auth/complete-first-login",
   "/auth/login",
   "/auth/logout",
@@ -2522,6 +2531,85 @@ async function handleNativeApi(request, env) {
     state.iam.users = [user, ...state.iam.users];
     ensureSessionSecret(state);
     await appendAudit(env, state, { action: "员工激活账号", actor: user.name, content: `员工 ${employee.name} 使用激活码开户注册`, object: "账号激活", objectId: activation.id, request });
+    await saveState(env, state);
+    return json({ ok: true, ...currentUser(state, user) }, {
+      status: 201,
+      headers: { "set-cookie": await sessionCookie(request, state, user, 60 * 60 * 8) }
+    });
+  }
+
+  if (pathname === "/auth/claim-account" && method === "POST") {
+    const body = await readJson(request);
+    const employeeNo = String(body.employeeNo || "").trim();
+    const name = String(body.name || "").trim();
+    const email = requestLoginIdentifier(body);
+    const phone = normalizePhoneLogin(email);
+    const password = String(body.password || "");
+    if (!employeeNo || !name || !phone || !validNewPassword(password)) {
+      return badRequest("工号、姓名、手机号账号和新密码必填，密码至少 12 位并包含字母和数字。");
+    }
+
+    const employee = (state.people.employees || []).find((item) => employeeNoForClaim(item) === employeeNo);
+    if (!employee) {
+      return json({ code: "EMPLOYEE_NOT_FOUND", error: "employee_not_found", message: "未找到匹配工号的在职员工。", ok: false }, { status: 404 });
+    }
+    if (!["ACTIVE", "在职"].includes(String(employee.status || "在职"))) {
+      return json({ code: "EMPLOYEE_NOT_ACTIVE", error: "employee_not_active", message: "只有在职员工可以自助认领账号。", ok: false }, { status: 400 });
+    }
+    if (employee.name !== name) {
+      return json({ code: "EMPLOYEE_IDENTITY_MISMATCH", error: "employee_identity_mismatch", message: "工号和姓名不匹配。", ok: false }, { status: 403 });
+    }
+    if (state.iam.users.some((item) => item.employee?.id === employee.id || item.employeeId === employee.id)) {
+      return json({ code: "EMPLOYEE_ACCOUNT_EXISTS", error: "employee_account_exists", message: "该员工已经有关联账号。", ok: false }, { status: 409 });
+    }
+    if (state.iam.users.some((item) => normalizeLoginEmail(item.email) === phone)) {
+      return json({ code: "USER_EMAIL_EXISTS", error: "user_email_exists", message: "该手机号账号已存在。", ok: false }, { status: 409 });
+    }
+
+    const employeePhone = employeePhoneForClaim(employee);
+    if (employeePhone && employeePhone !== phone) {
+      return json({ code: "EMPLOYEE_PHONE_MISMATCH", error: "employee_phone_mismatch", message: "手机号与员工档案不匹配，请联系人事管理员。", ok: false }, { status: 403 });
+    }
+
+    const roleCodes = ["employee-self-service"];
+    const normalizedRoles = normalizeRequestedRoleCodes(state, roleCodes, roleCodes);
+    if (normalizedRoles.invalid.length) {
+      return json({ code: "CLAIM_ROLE_MISSING", error: "claim_role_missing", message: "员工自助角色不存在，请联系管理员检查权限配置。", ok: false }, { status: 409 });
+    }
+    const user = {
+      email: phone,
+      employee: {
+        department: employee.department || "",
+        employeeNo: employeeNoForClaim(employee),
+        id: employee.id,
+        name: employee.name,
+        roleTitle: employee.role || employee.roleTitle || ""
+      },
+      employeeId: employee.id,
+      id: nextId("USER"),
+      mustChangePassword: false,
+      name: employee.name,
+      passwordHash: await nativePasswordHash(password),
+      roleCodes: normalizedRoles.roleCodes,
+      sessionVersion: 0,
+      status: "ACTIVE"
+    };
+
+    state.accountActivations = (state.accountActivations || []).map((activation) => (
+      activation.employeeId === employee.id && activation.status === "PENDING"
+        ? { ...activation, status: "REVOKED", revokedAt: nowIso(), revokedReason: "员工已自助认领账号" }
+        : activation
+    ));
+    state.iam.users = [user, ...state.iam.users];
+    ensureSessionSecret(state);
+    await appendAudit(env, state, {
+      action: "员工自助认领账号",
+      actor: user.name,
+      content: `员工 ${employee.name} 自助认领账号`,
+      object: "账号权限",
+      objectId: user.id,
+      request
+    });
     await saveState(env, state);
     return json({ ok: true, ...currentUser(state, user) }, {
       status: 201,

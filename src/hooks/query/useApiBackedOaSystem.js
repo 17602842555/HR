@@ -363,6 +363,28 @@ export function useApiBackedOaSystem() {
         setAuthBusy(false);
       }
     },
+    async claimAccount(payload) {
+      setAuthBusy(true);
+      try {
+        const session = await authApi.claimAccount(payload);
+        const user = normalizeCurrentUser(session);
+        const domainResult = await fetchDomainState(baselineState, domainsForUser(user));
+        setCurrentUser(user);
+        setApiState(domainResult.state);
+        setLocalOverrideDomains(new Set());
+        setApiStatus({
+          error: domainResult.errors[0]?.message || "",
+          mode: domainResult.errors.length ? "degraded" : "ready",
+          source: "api"
+        });
+        return { ok: true };
+      } catch (error) {
+        setApiStatus({ error: actionErrorMessage(error), mode: "unauthenticated", source: "api" });
+        return { ok: false, error };
+      } finally {
+        setAuthBusy(false);
+      }
+    },
     async logout() {
       setAuthBusy(true);
       try {

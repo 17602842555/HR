@@ -801,6 +801,84 @@ test("cloudflare worker supports employee activation with phone-number login", a
   assert.equal(auditText.includes("PhoneLoginPass123"), false);
 });
 
+test("cloudflare worker supports employee self-claim without activation code", async () => {
+  const adminLogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ email: "admin@oa.local", password: ADMIN_PASSWORD }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const adminCookie = adminLogin.headers.get("set-cookie");
+  const iamResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/iam", {
+      headers: { cookie: adminCookie }
+    }),
+    TEST_ENV
+  );
+  const iam = (await responseJson(iamResponse)).iam;
+  const missingAccount = iam.accounts.find((account) => !account.accountId);
+  assert.ok(missingAccount);
+
+  const phone = `177${String(Date.now()).slice(-8)}`;
+  const claimResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/claim-account", {
+      body: JSON.stringify({
+        employeeNo: missingAccount.employeeNo,
+        login: phone,
+        name: missingAccount.employeeName,
+        password: "ClaimPhonePass123"
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const claimPayload = await responseJson(claimResponse);
+  assert.equal(claimResponse.status, 201);
+  assert.equal(claimPayload.user.email, phone);
+  assert.equal(claimPayload.user.mustChangePassword, false);
+  assert.equal(claimPayload.user.permissions.includes("resource.book"), true);
+
+  const relogin = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {
+      body: JSON.stringify({ login: phone, password: "ClaimPhonePass123" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  assert.equal(relogin.status, 200);
+
+  const duplicateClaim = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/auth/claim-account", {
+      body: JSON.stringify({
+        employeeNo: missingAccount.employeeNo,
+        login: phone,
+        name: missingAccount.employeeName,
+        password: "ClaimPhonePass123"
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    TEST_ENV
+  );
+  const duplicatePayload = await responseJson(duplicateClaim);
+  assert.equal(duplicateClaim.status, 409);
+  assert.equal(duplicatePayload.error, "employee_account_exists");
+
+  const auditResponse = await worker.fetch(
+    new Request("https://deep-oa-hr.example.workers.dev/api/audit", {
+      headers: { cookie: adminCookie }
+    }),
+    TEST_ENV
+  );
+  const auditText = await auditResponse.text();
+  assert.equal(auditText.includes("自助认领账号"), true);
+  assert.equal(auditText.includes("ClaimPhonePass123"), false);
+});
+
 test("cloudflare worker people API redacts sensitive fields and rejects sensitive PATCH", async () => {
   const adminLogin = await worker.fetch(
     new Request("https://deep-oa-hr.example.workers.dev/api/auth/login", {

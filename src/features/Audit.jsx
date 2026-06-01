@@ -279,7 +279,6 @@ export function Audit({ actions, state }) {
   });
   const [accountMessage, setAccountMessage] = useState("");
   const [syncCredentials, setSyncCredentials] = useState([]);
-  const [activationResults, setActivationResults] = useState([]);
   const [syncMessage, setSyncMessage] = useState("");
   const [syncRoleCodes, setSyncRoleCodes] = useState(["employee-self-service"]);
   const [passwordDraft, setPasswordDraft] = useState("");
@@ -423,26 +422,6 @@ export function Audit({ actions, state }) {
     setSyncMessage(`已生成 ${result?.createdCount || 0} 个账号，跳过 ${result?.skippedCount || 0} 个已有账号。`);
   };
 
-  const generateActivationCode = async (row) => {
-    setSyncMessage("");
-    if (!actions.createAccountActivation) {
-      setSyncMessage("当前运行模式不支持员工自助激活码。");
-      return;
-    }
-    const result = await actions.createAccountActivation({
-      employeeId: row.employeeId,
-      roleCodes: syncRoleCodes.length ? syncRoleCodes : ["employee-self-service"]
-    });
-    if (result?.ok === false) {
-      setSyncMessage(result.error?.message || "激活码生成失败。");
-      return;
-    }
-    if (result?.activation) {
-      setActivationResults((current) => [result.activation, ...current].slice(0, 20));
-      setSyncMessage(`已为 ${row.employeeName} 生成一次性激活码。`);
-    }
-  };
-
   const columns = [
     { key: "time", label: "操作时间" },
     { key: "operator", label: "操作人" },
@@ -501,7 +480,7 @@ export function Audit({ actions, state }) {
       label: "权限",
       render: (row) => row.accountId ? (
         <button type="button" onClick={() => setSelectedUserId(row.accountId)}>管理权限</button>
-      ) : <button type="button" onClick={() => generateActivationCode(row)}>生成激活码</button>
+      ) : <span className="soft-text">等待员工认领</span>
     }
   ];
   const credentialColumns = [
@@ -510,13 +489,6 @@ export function Audit({ actions, state }) {
     { key: "email", label: "登录账号" },
     { key: "temporaryPassword", label: "一次性临时密码" },
     { key: "roleCodes", label: "角色", render: (row) => (row.roleCodes || []).join("、") }
-  ];
-  const activationColumns = [
-    { key: "employeeNo", label: "工号", render: (row) => row.employee?.employeeNo || "-" },
-    { key: "employeeName", label: "员工", render: (row) => row.employee?.employeeName || "-" },
-    { key: "activationCode", label: "一次性激活码" },
-    { key: "expiresAt", label: "过期时间", render: (row) => readinessTime(row.expiresAt) },
-    { key: "roleCodes", label: "默认角色", render: (row) => (row.roleCodes || []).join("、") }
   ];
   const dependencyColumns = [
     { key: "name", label: "检查项" },
@@ -907,8 +879,8 @@ export function Audit({ actions, state }) {
       >
         <div className="account-library-toolbar">
           <div>
-            <strong>批量给未开户员工生成手机号优先账号</strong>
-            <span>默认只处理在职员工；员工档案已有手机号时直接作为登录账号，没有手机号时生成临时账号并要求首次登录改为手机号。</span>
+            <strong>员工自助认领与批量开户</strong>
+            <span>员工可在登录页用工号、姓名、手机号自行认领账号；管理员也可批量生成临时账号作为备用方案。</span>
           </div>
           <div className="account-role-options">
             {roles.map((role) => (
@@ -923,7 +895,7 @@ export function Audit({ actions, state }) {
             ))}
           </div>
           <button className="primary" disabled={!syncRoleCodes.length || !(accountStats.missingAccounts > 0)} type="button" onClick={syncEmployeeAccounts}>
-            生成缺失账号
+            批量生成临时账号
           </button>
         </div>
         {syncMessage ? <p className="account-sync-message">{syncMessage}</p> : null}
@@ -934,15 +906,6 @@ export function Audit({ actions, state }) {
               <span>交付给员工后只能用于首次登录；没有手机号档案的员工首次登录时必须把账号改成自己的手机号。</span>
             </div>
             <DataTable columns={credentialColumns} rows={syncCredentials} rowKey={(row) => row.employeeId} />
-          </div>
-        ) : null}
-        {activationResults.length ? (
-          <div className="credential-result">
-            <div>
-            <strong>本次激活码</strong>
-              <span>员工在登录页选择“员工激活”，输入激活码、工号和姓名后自行设置手机号和密码；刷新后不会再次展示。</span>
-            </div>
-            <DataTable columns={activationColumns} rows={activationResults} rowKey={(row) => row.id} />
           </div>
         ) : null}
         <DataTable columns={accountColumns} empty="暂无已开通员工账号" rows={assignedAccountRows} rowKey={(row) => row.employeeId} />

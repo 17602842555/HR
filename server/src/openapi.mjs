@@ -157,6 +157,15 @@ export const openApiDocument = {
         responses: { "201": response("Activated account session", { $ref: "#/components/schemas/AuthSession" }) }
       })
     },
+    "/auth/claim-account": {
+      post: operation({
+        operationId: "claimEmployeeAccount",
+        summary: "Employee self-service account claim using roster identity",
+        tags: ["Auth"],
+        body: { $ref: "#/components/schemas/AccountClaimRequest" },
+        responses: { "201": response("Claimed account session", { $ref: "#/components/schemas/AuthSession" }) }
+      })
+    },
     "/people": {
       get: operation({
         operationId: "getPeopleOverview",
@@ -731,6 +740,18 @@ export const openApiDocument = {
           name: { type: "string", minLength: 1 },
           login: { type: "string", description: "Primary new login identifier: mobile phone number. Legacy email accounts remain supported." },
           email: { type: "string", description: "Legacy alias for the login identifier." },
+          phone: { type: "string", description: "Mobile phone login alias." },
+          password: { type: "string", minLength: 12 },
+          tenantCode: { type: "string", default: "default" }
+        }
+      },
+      AccountClaimRequest: {
+        type: "object",
+        required: ["employeeNo", "name", "login", "password"],
+        properties: {
+          employeeNo: { type: "string", minLength: 1 },
+          name: { type: "string", minLength: 1 },
+          login: { type: "string", description: "Mobile phone login identifier used for future sign-in." },
           phone: { type: "string", description: "Mobile phone login alias." },
           password: { type: "string", minLength: 12 },
           tenantCode: { type: "string", default: "default" }

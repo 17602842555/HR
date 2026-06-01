@@ -685,6 +685,85 @@
         }
       }
     },
+    "/auth/claim-account": {
+      "post": {
+        "operationId": "claimEmployeeAccount",
+        "summary": "Employee self-service account claim using roster identity",
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Claimed account session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/people": {
       "get": {
         "operationId": "getPeopleOverview",
@@ -6087,6 +6166,41 @@
           "email": {
             "type": "string",
             "description": "Legacy alias for the login identifier."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Mobile phone login alias."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12
+          },
+          "tenantCode": {
+            "type": "string",
+            "default": "default"
+          }
+        }
+      },
+      "AccountClaimRequest": {
+        "type": "object",
+        "required": [
+          "employeeNo",
+          "name",
+          "login",
+          "password"
+        ],
+        "properties": {
+          "employeeNo": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "login": {
+            "type": "string",
+            "description": "Mobile phone login identifier used for future sign-in."
           },
           "phone": {
             "type": "string",

@@ -952,7 +952,9 @@ async function makePrismaMock(options = {}) {
         matchesScalarOrIn(employee.id, where?.id)
         && (!where?.tenantId || employee.tenantId === where.tenantId)
         && matchesScalarOrIn(employee.departmentId, where?.departmentId)
+        && (!where?.employeeNo || employee.employeeNo === where.employeeNo)
         && (!where?.name || employee.name === where.name)
+        && (!where?.status || employee.status === where.status)
       )) || null),
       count: async ({ where } = {}) => [...employees.values()].filter((employee) => (
         (!where?.tenantId || employee.tenantId === where.tenantId)
@@ -5184,6 +5186,96 @@ test("employee account activation code lets only the matched employee create an 
   assert.equal(audit.json().auditLogs.some((item) => item.content.includes("使用激活码开户注册")), true);
   assert.equal(JSON.stringify(audit.json()).includes(issued.json().activation.activationCode), false);
   assert.equal(JSON.stringify(audit.json()).includes("ActivationPass123"), false);
+
+  await app.close();
+});
+
+test("employee account self-claim creates a phone login without activation code", async () => {
+  const prisma = await makePrismaMock({
+    employees: [
+      {
+        id: "emp-claim",
+        employeeNo: "EMP-CLAIM",
+        name: "自助员工",
+        phone: "17600008888",
+        departmentId: "dept-admin",
+        roleTitle: "运营专员",
+        status: "ACTIVE"
+      }
+    ],
+    permissionCodes: ["system.admin", "iam.read", "audit.read"]
+  });
+  const app = await buildApp({
+    logger: false,
+    prisma,
+    config: { jwtSecret: "test-secret" }
+  });
+  const headers = await loginHeaders(app);
+
+  const wrongPhone = await app.inject({
+    method: "POST",
+    url: "/api/auth/claim-account",
+    payload: {
+      employeeNo: "EMP-CLAIM",
+      login: "17600009999",
+      name: "自助员工",
+      password: "ClaimAccountPass123",
+      tenantCode: "default"
+    }
+  });
+  assert.equal(wrongPhone.statusCode, 403);
+  assert.equal(wrongPhone.json().error, "employee_phone_mismatch");
+
+  const claimed = await app.inject({
+    method: "POST",
+    url: "/api/auth/claim-account",
+    payload: {
+      employeeNo: "EMP-CLAIM",
+      login: "17600008888",
+      name: "自助员工",
+      password: "ClaimAccountPass123",
+      tenantCode: "default"
+    }
+  });
+  assert.equal(claimed.statusCode, 201);
+  assert.equal(claimed.json().user.email, "17600008888");
+  assert.equal(claimed.json().user.mustChangePassword, false);
+  assert.deepEqual(claimed.json().user.roleCodes, ["employee-self-service"]);
+  assert.match(claimed.headers["set-cookie"], /oa_session=/);
+
+  const relogin = await app.inject({
+    method: "POST",
+    url: "/api/auth/login",
+    payload: {
+      login: "17600008888",
+      password: "ClaimAccountPass123",
+      tenantCode: "default"
+    }
+  });
+  assert.equal(relogin.statusCode, 200);
+
+  const duplicateClaim = await app.inject({
+    method: "POST",
+    url: "/api/auth/claim-account",
+    payload: {
+      employeeNo: "EMP-CLAIM",
+      login: "17600008888",
+      name: "自助员工",
+      password: "ClaimAccountPass123",
+      tenantCode: "default"
+    }
+  });
+  assert.equal(duplicateClaim.statusCode, 409);
+  assert.equal(duplicateClaim.json().error, "employee_account_exists");
+
+  const overview = await app.inject({ method: "GET", url: "/api/iam", headers });
+  const account = overview.json().accounts.find((item) => item.employeeNo === "EMP-CLAIM");
+  assert.equal(account.accountEmail, "17600008888");
+  assert.deepEqual(account.roleCodes, ["employee-self-service"]);
+
+  const audit = await app.inject({ method: "GET", url: "/api/audit", headers });
+  assert.equal(audit.json().auditLogs.some((item) => item.content.includes("自助认领账号")), true);
+  assert.equal(JSON.stringify(audit.json()).includes("ClaimAccountPass123"), false);
 
   await app.close();
 });

@@ -110,6 +110,15 @@ function validLoginIdentifier(input) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || /^1[3-9]\d{9}$/.test(value);
 }
 
+function normalizePhoneLogin(input) {
+  const value = String(input || "").replace(/\D+/g, "");
+  return /^1[3-9]\d{9}$/.test(value) ? value : "";
+}
+
+function employeePhoneForClaim(employee = {}) {
+  return normalizePhoneLogin(employee.phone || employee.mobile || employee.telephone || employee.contactPhone || employee.sensitiveInfo?.phone || employee.sensitiveInfo?.mobile);
+}
+
 function normalizeActivationCode(input) {
   return String(input || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -128,6 +137,10 @@ function employeeIdentityMatches(employee, body = {}) {
   const employeeNo = String(body.employeeNo || "").trim();
   const name = String(body.name || "").trim();
   return employeeNo && name && employee.employeeNo === employeeNo && employee.name === name;
+}
+
+function employeeNoFromClaimBody(body = {}) {
+  return String(body.employeeNo || "").trim();
 }
 
 async function auditLoginFailure(app, request, {
@@ -366,6 +379,134 @@ export async function registerAuthRoutes(app) {
           employeeId: activation.employeeId,
           employeeNo: activation.employee.employeeNo,
           roleCodes: roleCodes.sort()
+        },
+        ...requestAuditMeta(request)
+      });
+    });
+
+    const user = await app.prisma.user.findFirst({
+      where: { id: createdUser.id, tenantId: tenant.id },
+      include: userWithAccessInclude
+    });
+    const token = app.jwt.sign(tokenPayload(user));
+    reply.setCookie(app.config.cookieName, token, authCookieOptions(app.config));
+
+    return reply.code(201).send({ token, user: serializeUser(user) });
+  });
+
+  app.post("/api/auth/claim-account", async (request, reply) => {
+    const body = request.body || {};
+    const tenantCode = String(body.tenantCode || app.config.defaultTenantCode);
+    const employeeNo = employeeNoFromClaimBody(body);
+    const name = String(body.name || "").trim();
+    const email = requestLoginIdentifier(body);
+    const phone = normalizePhoneLogin(email);
+    const password = String(body.password || "");
+
+    if (!employeeNo || !name || !phone || !password) {
+      return reply.code(400).send({
+        error: "claim_fields_required",
+        message: "工号、姓名、手机号账号和密码必填。"
+      });
+    }
+    const validation = validateNewPassword(password);
+    if (!validation.ok) {
+      return reply.code(400).send({
+        error: "password_policy_failed",
+        message: validation.message,
+        details: { reasons: validation.reasons }
+      });
+    }
+
+    const tenant = await app.prisma.tenant.findUnique({ where: { code: tenantCode } });
+    if (!tenant) return reply.code(404).send({ error: "tenant_not_found", message: "租户不存在。" });
+
+    const employee = await app.prisma.employee.findFirst({
+      where: {
+        tenantId: tenant.id,
+        employeeNo
+      },
+      include: {
+        department: true,
+        user: true
+      }
+    });
+    if (!employee) return reply.code(404).send({ error: "employee_not_found", message: "未找到匹配工号的在职员工。" });
+    if (employee.status !== "ACTIVE") {
+      return reply.code(400).send({ error: "employee_not_active", message: "只有在职员工可以自助认领账号。" });
+    }
+    if (employee.name !== name) {
+      return reply.code(403).send({ error: "employee_identity_mismatch", message: "工号和姓名不匹配。" });
+    }
+    if (employee.user) {
+      return reply.code(409).send({ error: "employee_account_exists", message: "该员工已经有关联账号。" });
+    }
+
+    const employeePhone = employeePhoneForClaim(employee);
+    if (employeePhone && employeePhone !== phone) {
+      return reply.code(403).send({ error: "employee_phone_mismatch", message: "手机号与员工档案不匹配，请联系人事管理员。" });
+    }
+
+    const existing = await app.prisma.user.findUnique({
+      where: { tenantId_email: { tenantId: tenant.id, email: phone } }
+    });
+    if (existing) {
+      return reply.code(409).send({ error: "user_email_exists", message: "该手机号账号已存在。" });
+    }
+
+    const roleCodes = ["employee-self-service"];
+    const roles = await app.prisma.role.findMany({
+      where: {
+        tenantId: tenant.id,
+        code: { in: roleCodes }
+      }
+    });
+    if (!roles.length) {
+      return reply.code(409).send({ error: "claim_role_missing", message: "员工自助角色不存在，请联系管理员检查权限配置。" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, passwordHashRounds);
+    let createdUser;
+    await app.prisma.$transaction(async (tx) => {
+      createdUser = await tx.user.create({
+        data: {
+          email: phone,
+          employeeId: employee.id,
+          mustChangePassword: false,
+          name: employee.name,
+          passwordHash,
+          status: "ACTIVE",
+          tenantId: tenant.id
+        }
+      });
+      await tx.userRole.createMany({
+        data: roles.map((role) => ({
+          tenantId: tenant.id,
+          userId: createdUser.id,
+          roleId: role.id
+        })),
+        skipDuplicates: true
+      });
+      await tx.accountActivation.updateMany({
+        where: {
+          employeeId: employee.id,
+          status: "PENDING",
+          tenantId: tenant.id
+        },
+        data: { status: "REVOKED" }
+      });
+      await appendAuditLog(tx, {
+        tenantId: tenant.id,
+        actorUserId: createdUser.id,
+        action: "auth.account_claim.complete",
+        objectType: "user",
+        objectId: createdUser.id,
+        summary: `员工 ${employee.name} 自助认领账号`,
+        metadata: {
+          employeeId: employee.id,
+          employeeNo: employee.employeeNo,
+          phoneVerified: Boolean(employeePhone),
+          roleCodes
         },
         ...requestAuditMeta(request)
       });
